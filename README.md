@@ -1,8 +1,8 @@
 # ModelArk Seed Multimodal MCP Server
 
-A TypeScript [Model Context Protocol](https://modelcontextprotocol.io) server
-that exposes BytePlus multimodal generation through a small, typed, safe tool
-surface.
+A Python [Model Context Protocol](https://modelcontextprotocol.io) server built
+on [FastMCP](https://gofastmcp.com) that exposes BytePlus multimodal generation
+through a small, typed, safe tool surface.
 
 ## Capabilities
 
@@ -14,7 +14,7 @@ surface.
   remain usable after the provider URLs expire (2h for audio, 24h for
   image/video).
 - **Transports** — local `stdio` by default, with protected Streamable HTTP for
-  remote deployment.
+  remote deployment (both natively supported by FastMCP).
 
 Seedance and Seedream use the ModelArk data-plane host with Bearer
 authentication. Seed Audio uses the Seed Speech host with `X-Api-Key`. The

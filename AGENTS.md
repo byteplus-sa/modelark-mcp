@@ -2,8 +2,9 @@
 
 ## Project
 
-ModelArk Seed Multimodal MCP Server — a TypeScript MCP server that exposes
-BytePlus multimodal generation through a small, typed, safe tool surface:
+ModelArk Seed Multimodal MCP Server — a Python MCP server (FastMCP on uv)
+that exposes BytePlus multimodal generation through a small, typed, safe tool
+surface:
 
 - **Seed Audio** — full-scene audio generation through Seed Speech.
 - **Seedream** — image generation and editing through ModelArk.
@@ -12,7 +13,7 @@ BytePlus multimodal generation through a small, typed, safe tool surface:
 - **Durable artifacts** — MCP resources for generated media whose provider URLs
   expire (2h for audio, 24h for image/video).
 - **Transports** — local `stdio` first, with protected Streamable HTTP as a
-  deployable option.
+  deployable option (both natively supported by FastMCP).
 
 Seedance and Seedream share the ModelArk data-plane host and Bearer
 authentication, while Seed Audio is hosted by Seed Speech and uses `X-Api-Key`.
@@ -26,12 +27,15 @@ modelark-mcp/
 ├── AGENTS.md          # project conventions for agents (this file)
 ├── CLAUDE.md          # redirects to AGENTS.md
 ├── README.md          # project overview and quickstart
-├── Makefile           # task runner
+├── Makefile           # task runner (wraps uv + fastmcp CLI)
+├── pyproject.toml     # project metadata and dependencies (uv)
+├── uv.lock            # locked dependencies for reproducible installs
+├── fastmcp.json       # declarative FastMCP server configuration
 ├── plans/             # implementation plans for features
 ├── specs/             # future-looking specs and design docs
 ├── docs/              # project documentation
-├── src/               # server source (planned)
-└── tests/             # tests (planned)
+├── src/modelark_mcp/  # server source (Python package)
+└── tests/             # tests (pytest)
 ```
 
 ## Documentation Standard

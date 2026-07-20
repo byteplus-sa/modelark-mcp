@@ -67,6 +67,17 @@ nosetests.xml
 *.pem
 *.key
 
+# Python (uv manages venv automatically; lockfile is committed)
+*.tsbuildinfo
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
 # Artifacts
 .artifacts/
 artifacts/

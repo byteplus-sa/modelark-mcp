@@ -8,6 +8,9 @@ tags:
   - byteplus
   - modelark
   - mcp
+  - fastmcp
+  - python
+  - uv
   - seedance
   - seedream
   - seed-audio
@@ -17,6 +20,13 @@ source:
   - https://docs.byteplus.com/en/docs/ModelArk/1541523
   - https://docs.byteplus.com/en/docs/byteplusvoice/seedaudio-01
   - https://modelcontextprotocol.io/specification/2025-11-25/server/tools
+  - https://gofastmcp.com/getting-started/installation
+  - https://gofastmcp.com/getting-started/quickstart
+  - https://gofastmcp.com/deployment/running-server
+  - https://gofastmcp.com/deployment/server-configuration
+  - https://gofastmcp.com/servers/server
+  - https://gofastmcp.com/servers/tools
+  - https://gofastmcp.com/servers/resources
 related:
   - "[[40 Technology/BytePlus Products/2026-07-14 - Seed Speech vs Seed Audio]]"
   - "[[50 Research/2026-07-13 - Seed Audio Cookbooks and Docs]]"
@@ -32,13 +42,14 @@ related:
 
 ## Outcome
 
-Build a TypeScript MCP server that exposes BytePlus multimodal generation through a small, typed, safe tool surface:
+Build a Python MCP server (FastMCP on uv) that exposes BytePlus multimodal generation through a small, typed, safe tool surface:
 
 - Seed Audio full-scene audio generation through Seed Speech;
 - Seedream image generation and editing through ModelArk;
 - Seedance asynchronous video generation and task management through ModelArk;
 - durable MCP resources for generated media whose provider URLs expire;
-- local `stdio` first, with protected Streamable HTTP as a deployable option.
+- local `stdio` first, with protected Streamable HTTP as a deployable option
+  (both natively supported by FastMCP).
 
 The most important research result is that this is **not one upstream API**. Seedance and Seedream share the ModelArk data-plane host and Bearer authentication, while Seed Audio is hosted by Seed Speech and uses `X-Api-Key`. The MCP server needs two provider gateways behind one normalized domain layer.
 
@@ -143,22 +154,22 @@ The MCP tool must not present this as a generic safe “cancel.” It will requi
 
 ## Architecture Decisions
 
-1. **TypeScript on Node.js 24 LTS.** Node.js 24 is the current LTS line as of 2026-07-20; this choice also provides native `fetch`, `AbortSignal`, and modern test tooling. See the [official Node.js release table](https://nodejs.org/en/about/previous-releases).
-2. **Use the stable MCP TypeScript SDK v1.x.** As of 2026-07-20 the official repository says v2 is pre-alpha and v1.x remains recommended for production. Install with `npm install @modelcontextprotocol/sdk zod`; do not copy v2 imports from `main`. See [MCP TypeScript SDK v1](https://ts.sdk.modelcontextprotocol.io/).
-3. **Use direct HTTPS adapters, not one vendor SDK abstraction.** The two upstream hosts, authentication schemes, error shapes, and execution styles differ. A small `fetch`-based gateway keeps those differences explicit.
-4. **Start with `stdio`; add stateless Streamable HTTP.** `stdio` minimizes local deployment risk. Streamable HTTP is the current remote transport, while legacy HTTP+SSE is deprecated. See [MCP transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).
-5. **Do not make experimental MCP Tasks an MVP dependency.** MCP Tasks are explicitly experimental in protocol revision `2025-11-25`, and client support varies. Seedance already exposes a durable provider task ID, so explicit create/get/list/cancel tools work everywhere. Add a task adapter only after the post-2026-07-28 specification and client ecosystem stabilize.
-6. **Return structured content and artifact resources.** Each tool returns schema-validated `structuredContent` and a serialized text block for compatibility. Small images/audio may also be embedded as MCP image/audio content; video and large media use resource links. See [MCP tool result content](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
+1. **Python 3.12+ on uv.** Python 3.12 is the current stable line; uv is the modern, fast Python package manager and project runner. This choice provides native `asyncio`, `httpx` for async HTTP, and FastMCP's decorator-based tool/resource model. See [FastMCP installation](https://gofastmcp.com/getting-started/installation).
+2. **Use the standalone FastMCP framework.** FastMCP (by the Prefect team) is the high-level Python framework for MCP servers. It auto-generates tool `inputSchema`/`outputSchema` from type hints and docstrings, supports `@mcp.tool` / `@mcp.resource` decorators, and ships a CLI with `uv` integration. Install with `uv add fastmcp`; do not use the low-level `mcp` SDK directly. See [FastMCP server](https://gofastmcp.com/servers/server) and [FastMCP tools](https://gofastmcp.com/servers/tools).
+3. **Use `httpx` async adapters, not one vendor SDK abstraction.** The two upstream hosts, authentication schemes, error shapes, and execution styles differ. A small `httpx.AsyncClient`-based gateway keeps those differences explicit and stays within the async ecosystem FastMCP expects.
+4. **Start with `stdio`; add Streamable HTTP via FastMCP.** `mcp.run()` defaults to `stdio` for local deployment. `mcp.run(transport="http", host="127.0.0.1", port=3000)` enables the current Streamable HTTP transport; legacy SSE is deprecated. See [FastMCP running](https://gofastmcp.com/deployment/running-server) and [MCP transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).
+5. **Do not make experimental MCP Tasks an MVP dependency.** MCP Tasks are explicitly experimental in protocol revision `2025-11-25`, and client support varies. Seedance already exposes a durable provider task ID, so explicit create/get/list/cancel tools work everywhere. FastMCP's background tasks extra (`fastmcp[tasks]`) can be revisited after the specification stabilizes.
+6. **Return structured content and artifact resources.** FastMCP auto-generates `outputSchema` from return type hints. Each tool returns a Pydantic model as structured content and a serialized text block for compatibility. Small images/audio may also be embedded as MCP image/audio content; video and large media use resource links. See [FastMCP tools](https://gofastmcp.com/servers/tools) and [MCP tool result content](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
 7. **Persist generated media immediately by default.** Provider URLs live for two hours or 24 hours. `ArtifactStore` copies outputs into local storage for `stdio` or an object store for remote deployments and returns `seed-media://artifacts/{id}`.
 8. **Use a model capability registry.** Logical model families map to operator-configured model IDs and supported parameters. The server validates combinations before spending quota and can be updated without rewriting tool handlers.
-9. **No arbitrary provider JSON pass-through.** Typed inputs prevent unsupported combinations, secret injection, and accidental exposure of newly added high-cost options.
+9. **No arbitrary provider JSON pass-through.** Typed Pydantic inputs prevent unsupported combinations, secret injection, and accidental exposure of newly added high-cost options.
 
 ## Component Design
 
 ```mermaid
 flowchart LR
     Client["MCP client"] --> Transport["stdio or Streamable HTTP"]
-    Transport --> Server["McpServer and tool registry"]
+    Transport --> Server["FastMCP server + @mcp.tool registry"]
     Server --> Tools["Typed tool handlers"]
     Tools --> Policy["Input policy and capability validation"]
     Tools --> AudioService["Seed Audio service"]
@@ -172,306 +183,396 @@ flowchart LR
     AudioService --> ArtifactStore["ArtifactStore"]
     ImageService --> ArtifactStore
     VideoService --> ArtifactStore
-    Server --> Resource["seed-media:// resource template"]
+    Server --> Resource["@mcp.resource seed-media://artifacts/{id}"]
     Resource --> ArtifactStore
 ```
 
 ### Core interfaces
 
-```ts
-interface SeedAudioGateway {
-  generate(input: SeedAudioProviderRequest, signal: AbortSignal): Promise<SeedAudioProviderResponse>;
-}
+```python
+from typing import Protocol
+from datetime import datetime
 
-interface SeedreamGateway {
-  generate(input: SeedreamProviderRequest, signal: AbortSignal): Promise<SeedreamProviderResponse>;
-}
+class SeedAudioGateway(Protocol):
+    async def generate(
+        self, request: SeedAudioProviderRequest
+    ) -> SeedAudioProviderResponse: ...
 
-interface SeedanceGateway {
-  create(input: SeedanceCreateProviderRequest, signal: AbortSignal): Promise<{ id: string }>;
-  get(id: string, signal: AbortSignal): Promise<SeedanceTask>;
-  list(query: SeedanceListQuery, signal: AbortSignal): Promise<SeedanceTaskPage>;
-  remove(id: string, signal: AbortSignal): Promise<void>;
-}
+class SeedreamGateway(Protocol):
+    async def generate(
+        self, request: SeedreamProviderRequest
+    ) -> SeedreamProviderResponse: ...
 
-interface ArtifactStore {
-  putBase64(input: Base64ArtifactInput): Promise<ArtifactRef>;
-  copyFromTrustedUrl(input: TrustedUrlArtifactInput): Promise<ArtifactRef>;
-  get(id: string, auth: AuthContext): Promise<StoredArtifact>;
-  deleteExpired(now: Date): Promise<number>;
-}
+class SeedanceGateway(Protocol):
+    async def create(self, request: SeedanceCreateProviderRequest) -> str: ...
+    async def get(self, task_id: str) -> SeedanceTask: ...
+    async def list(self, query: SeedanceListQuery) -> SeedanceTaskPage: ...
+    async def remove(self, task_id: str) -> None: ...
+
+class ArtifactStore(Protocol):
+    async def put_base64(self, input: Base64ArtifactInput) -> ArtifactRef: ...
+    async def copy_from_trusted_url(
+        self, input: TrustedUrlArtifactInput
+    ) -> ArtifactRef: ...
+    async def get(self, artifact_id: str, auth: AuthContext) -> StoredArtifact: ...
+    async def delete_expired(self, now: datetime) -> int: ...
 ```
 
-Provider DTOs live only inside provider modules. Tool inputs and domain outputs are separate types so vendor field changes do not leak through the entire server.
+Provider DTOs live only inside provider modules. Tool inputs and domain outputs are separate Pydantic models so vendor field changes do not leak through the entire server. FastMCP auto-generates the MCP `inputSchema` from each tool function's type hints and docstring.
 
 ## MCP Tool Contracts
 
-### 1. `seed_audio_generate`
+All six tools use FastMCP's `@mcp.tool` decorator. Every handler accepts a
+`ctx: Context` parameter (from `fastmcp import Context`) for progress reporting
+(`ctx.report_progress`), structured logging (`ctx.info` / `ctx.log`), and
+client-initiated cancellation observation. The input model is passed as the
+first argument; `ctx` as the second.
 
-```ts
-type MediaSource =
-  | { kind: "url"; url: string }
-  | { kind: "base64"; data: string; mimeType: string };
+```python
+from fastmcp import FastMCP, Context
+from fastmcp.types import ToolAnnotations
 
-type AudioReference =
-  | { kind: "speaker"; speakerId: string }
-  | { kind: "url"; url: string }
-  | { kind: "base64"; data: string; mimeType: string };
-
-interface SeedAudioGenerateInput {
-  textPrompt: string;                 // 1..3000 characters
-  audioReferences?: AudioReference[]; // 0..3
-  imageReference?: MediaSource;       // mutually exclusive with audioReferences
-  output?: {
-    format?: "wav" | "mp3" | "pcm" | "ogg_opus";
-    sampleRate?: 8000 | 16000 | 24000 | 32000 | 44100 | 48000;
-    speechRate?: number;              // -50..100
-    loudnessRate?: number;            // -50..100
-    pitchRate?: number;               // -12..12
-    subtitles?: boolean;
-  };
-  watermark?: {
-    audible?: boolean;
-    metadata?: boolean;
-    contentProducer?: string;
-    produceId?: string;
-    contentPropagator?: string;
-    propagateId?: string;
-  };
-  persist?: boolean;                  // default true
-}
-
-interface SeedAudioGenerateOutput {
-  provider: "byteplus-seed-speech";
-  model: "seed-audio-1.0";
-  durationSeconds: number;
-  billingDurationSeconds: number;
-  artifact: ArtifactRef;
-  subtitle?: Subtitle;
-  requestId: string;
-  providerLogId?: string;
-}
+mcp = FastMCP("ModelArk Seed Multimodal")
 ```
 
-Validation uses a Zod `.superRefine()` to reject image+audio mixing, more than three references, invalid MIME types, and out-of-range controls. The adapter maps discriminated unions to the provider's `speaker`, `audio_url`, `audio_data`, `image_url`, or `image_data` fields.
+### 1. `seed_audio_generate`
+
+```python
+from pydantic import BaseModel, Field
+from enum import Enum
+
+class MediaSourceKind(str, Enum):
+    url = "url"
+    base64 = "base64"
+
+class MediaSource(BaseModel):
+    kind: MediaSourceKind
+    url: str | None = None
+    data: str | None = None          # base64
+    mime_type: str | None = None
+
+class AudioReference(BaseModel):
+    kind: Literal["speaker", "url", "base64"]
+    speaker_id: str | None = None
+    url: str | None = None
+    data: str | None = None          # base64
+    mime_type: str | None = None
+
+class SeedAudioGenerateInput(BaseModel):
+    text_prompt: str = Field(..., min_length=1, max_length=3000)
+    audio_references: list[AudioReference] = Field(default_factory=list, max_length=3)
+    image_reference: MediaSource | None = None   # mutually exclusive with audio_references
+    output: AudioOutputOptions | None = None
+    watermark: AudioWatermarkOptions | None = None
+    persist: bool = True
+
+class SeedAudioGenerateOutput(BaseModel):
+    provider: Literal["byteplus-seed-speech"] = "byteplus-seed-speech"
+    model: Literal["seed-audio-1.0"] = "seed-audio-1.0"
+    duration_seconds: float
+    billing_duration_seconds: float
+    artifact: ArtifactRef
+    subtitle: Subtitle | None = None
+    request_id: str
+    provider_log_id: str | None = None
+```
+
+Validation uses a Pydantic model validator to reject image+audio mixing, more than three references, invalid MIME types, and out-of-range controls. The adapter maps discriminated unions to the provider's `speaker`, `audio_url`, `audio_data`, `image_url`, or `image_data` fields.
+
+```python
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=False, openWorldHint=True))
+async def seed_audio_generate(
+    input: SeedAudioGenerateInput, ctx: Context
+) -> SeedAudioGenerateOutput:
+    """Generate full-scene audio through Seed Speech."""
+    ...
+```
 
 ### 2. `seedream_generate_image`
 
-```ts
-interface SeedreamGenerateInput {
-  prompt: string;
-  images?: MediaSource[];
-  model?: string;                     // must be present in configured capability registry
-  size?: string;                      // validated against selected model
-  maxImages?: number;                 // 1..15; only batch-capable models
-  outputFormat?: "png" | "jpeg";
-  responseFormat?: "url" | "b64_json";
-  watermark?: boolean;                // preserve provider default true unless explicitly set
-  promptOptimization?: "standard" | "fast";
-  persist?: boolean;                  // default true
-}
+```python
+class SeedreamGenerateInput(BaseModel):
+    prompt: str
+    images: list[MediaSource] | None = None
+    model: str | None = None          # must be present in configured capability registry
+    size: str | None = None           # validated against selected model
+    max_images: int | None = Field(None, ge=1, le=15)  # only batch-capable models
+    output_format: Literal["png", "jpeg"] | None = None
+    response_format: Literal["url", "b64_json"] | None = None
+    watermark: bool | None = None     # preserve provider default true unless explicitly set
+    prompt_optimization: Literal["standard", "fast"] | None = None
+    persist: bool = True
 
-interface SeedreamGenerateOutput {
-  provider: "byteplus-modelark";
-  model: string;
-  createdAt: string;
-  artifacts: ArtifactRef[];
-  itemErrors: Array<{ index: number; code: string; message: string }>;
-  usage: {
-    generatedImages: number;
-    inputImages?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-  };
-}
+class SeedreamGenerateOutput(BaseModel):
+    provider: Literal["byteplus-modelark"] = "byteplus-modelark"
+    model: str
+    created_at: str
+    artifacts: list[ArtifactRef]
+    item_errors: list[SeedreamItemError]
+    usage: SeedreamUsage
 ```
 
-The handler derives `sequential_image_generation` from `maxImages`, forces `stream: false` for MVP, and validates model-specific features. For example, Pro rejects batch/streaming fields, and 4.x rejects `outputFormat` until the API-reference/tutorial conflict is resolved.
+The handler derives `sequential_image_generation` from `max_images`, forces `stream: false` for MVP, and validates model-specific features. For example, Pro rejects batch/streaming fields, and 4.x rejects `output_format` until the API-reference/tutorial conflict is resolved.
+
+```python
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=False, openWorldHint=True))
+async def seedream_generate_image(
+    input: SeedreamGenerateInput, ctx: Context
+) -> SeedreamGenerateOutput:
+    """Generate or edit an image through ModelArk Seedream."""
+    ...
+```
 
 ### 3. `seedance_create_task`
 
-```ts
-type SeedanceImageInput = MediaSource & {
-  role?: "first_frame" | "last_frame" | "reference_image";
-};
+```python
+class SeedanceImageInput(MediaSource):
+    role: Literal["first_frame", "last_frame", "reference_image"] | None = None
 
-type SeedanceVideoInput = Extract<MediaSource, { kind: "url" }> & {
-  role: "reference_video";
-};
+class SeedanceVideoInput(BaseModel):
+    kind: Literal["url"] = "url"
+    url: str
+    role: Literal["reference_video"] = "reference_video"
 
-type SeedanceAudioInput = MediaSource & {
-  role: "reference_audio";
-};
+class SeedanceAudioInput(MediaSource):
+    role: Literal["reference_audio"] = "reference_audio"
 
-interface SeedanceCreateTaskInput {
-  prompt?: string;
-  images?: SeedanceImageInput[];
-  videos?: SeedanceVideoInput[];
-  audios?: SeedanceAudioInput[];
-  model?: string;
-  resolution?: "480p" | "720p" | "1080p" | "4k";
-  ratio?: string;
-  duration?: -1 | number;              // -1 or 4..15 for Seedance 2.0
-  generateAudio?: boolean;
-  watermark?: boolean;
-  returnLastFrame?: boolean;
-  executionExpiresAfter?: number;      // 3600..259200
-  priority?: number;                   // 0..9
-  safetyIdentifier?: string;           // <=64 English characters
-}
+class SeedanceCreateTaskInput(BaseModel):
+    prompt: str | None = None
+    images: list[SeedanceImageInput] | None = None
+    videos: list[SeedanceVideoInput] | None = None
+    audios: list[SeedanceAudioInput] | None = None
+    model: str | None = None
+    resolution: Literal["480p", "720p", "1080p", "4k"] | None = None
+    ratio: str | None = None
+    duration: int | None = Field(None, ge=-1, le=15)  # -1 or 4..15 for Seedance 2.0
+    generate_audio: bool | None = None
+    watermark: bool | None = None
+    return_last_frame: bool | None = None
+    execution_expires_after: int | None = Field(None, ge=3600, le=259200)
+    priority: int | None = Field(None, ge=0, le=9)
+    safety_identifier: str | None = Field(None, max_length=64)
 
-interface SeedanceCreateTaskOutput {
-  taskId: string;
-  status: "queued";
-  recommendedPollAfterMs: number;
-}
+class SeedanceCreateTaskOutput(BaseModel):
+    task_id: str
+    status: Literal["queued"] = "queued"
+    recommended_poll_after_ms: int
 ```
 
-The capability registry validates whether the selected model supports a field or resolution. Zod cross-field rules enforce Seedance 2.0 duration bounds, reference roles, media counts, and the rule that audio cannot be the sole media input. Draft/sample promotion and legacy Seedance 1.x prompt-suffix parameters are outside MVP.
+The capability registry validates whether the selected model supports a field or resolution. Pydantic cross-field validators enforce Seedance 2.0 duration bounds, reference roles, media counts, and the rule that audio cannot be the sole media input. Draft/sample promotion and legacy Seedance 1.x prompt-suffix parameters are outside MVP.
+
+```python
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=False, openWorldHint=True))
+async def seedance_create_task(
+    input: SeedanceCreateTaskInput, ctx: Context
+) -> SeedanceCreateTaskOutput:
+    """Create an asynchronous Seedance video generation task."""
+    ...
+```
 
 ### 4. `seedance_get_task`
 
-```ts
-interface SeedanceGetTaskInput {
-  taskId: string;
-  persistOutput?: boolean; // default true on success
-}
+```python
+class SeedanceGetTaskInput(BaseModel):
+    task_id: str
+    persist_output: bool = True  # default true on success
 
-type SeedanceTaskStatus =
-  | "queued"
-  | "running"
-  | "cancelled"
-  | "succeeded"
-  | "failed"
-  | "expired";
+SeedanceTaskStatus = Literal[
+    "queued", "running", "cancelled",
+    "succeeded", "failed", "expired",
+]
 
-interface SeedanceTaskOutput {
-  taskId: string;
-  model: string;
-  status: SeedanceTaskStatus;
-  createdAt: string;
-  updatedAt: string;
-  error?: NormalizedProviderError;
-  video?: ArtifactRef;
-  lastFrame?: ArtifactRef;
-  usage?: { completionTokens?: number; totalTokens?: number };
-  settings: Record<string, unknown>;
-}
+class SeedanceTaskOutput(BaseModel):
+    task_id: str
+    model: str
+    status: SeedanceTaskStatus
+    created_at: str
+    updated_at: str
+    error: NormalizedProviderError | None = None
+    video: ArtifactRef | None = None
+    last_frame: ArtifactRef | None = None
+    usage: SeedanceTaskUsage | None = None
+    settings: dict[str, Any]
 ```
 
 On first successful retrieval, copy 24-hour output URLs into `ArtifactStore`. Cache the mapping by provider task ID so repeated status checks do not download twice.
 
-### 5. `seedance_list_tasks`
-
-```ts
-interface SeedanceListTasksInput {
-  page?: number;       // 1..500
-  pageSize?: number;   // 1..500, server default 20 and maximum policy 100
-  status?: SeedanceTaskStatus;
-  taskIds?: string[];
-  model?: string;
-  serviceTier?: "default" | "flex";
-}
+```python
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
+async def seedance_get_task(
+    input: SeedanceGetTaskInput, ctx: Context
+) -> SeedanceTaskOutput:
+    """Retrieve the status and output of a Seedance video generation task."""
+    ...
 ```
 
-Return normalized task summaries and `total`. The server policy caps `pageSize` at 100 even though the provider accepts 500, avoiding oversized model context.
+### 5. `seedance_list_tasks`
+
+```python
+class SeedanceListTasksInput(BaseModel):
+    page: int | None = Field(None, ge=1, le=500)
+    page_size: int | None = Field(None, ge=1, le=100)  # server policy caps at 100
+    status: SeedanceTaskStatus | None = None
+    task_ids: list[str] | None = None
+    model: str | None = None
+    service_tier: Literal["default", "flex"] | None = None
+```
+
+Return normalized task summaries and `total`. The server policy caps `page_size` at 100 even though the provider accepts 500, avoiding oversized model context.
+
+```python
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
+async def seedance_list_tasks(
+    input: SeedanceListTasksInput, ctx: Context
+) -> SeedanceTaskPage:
+    """List recent Seedance video generation tasks."""
+    ...
+```
 
 ### 6. `seedance_cancel_or_delete_task`
 
-```ts
-interface SeedanceCancelOrDeleteInput {
-  taskId: string;
-  mode: "cancel" | "delete";
-  expectedStatus: "queued" | "succeeded" | "failed" | "expired";
-  confirm: true;
-}
+```python
+class SeedanceCancelOrDeleteInput(BaseModel):
+    task_id: str
+    mode: Literal["cancel", "delete"]
+    expected_status: Literal["queued", "succeeded", "failed", "expired"]
+    confirm: Literal[True] = True
 ```
 
-The handler first retrieves the task, compares current and expected status, enforces cancel-only-for-queued and delete-only-for-terminal states, then calls DELETE. Register it with `destructiveHint: true` and clear tool text describing the record-deletion behavior.
+The handler first retrieves the task, compares current and expected status, enforces cancel-only-for-queued and delete-only-for-terminal states, then calls DELETE. Register it with `ToolAnnotations(destructiveHint=True, openWorldHint=True)` and clear tool text describing the record-deletion behavior.
+
+```python
+@mcp.tool(annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True))
+async def seedance_cancel_or_delete_task(
+    input: SeedanceCancelOrDeleteInput, ctx: Context
+) -> None:
+    """Cancel (queued) or delete (terminal) a Seedance video generation task."""
+    ...
+```
+
+### Tool annotations summary
+
+Each tool declares FastMCP `ToolAnnotations` (camelCase field names per the MCP specification) to communicate behavior hints to clients:
+
+| Tool | `readOnlyHint` | `destructiveHint` | `idempotentHint` | `openWorldHint` |
+|---|---|---|---|---|
+| `seed_audio_generate` | `False` | `False` | `False` | `True` |
+| `seedream_generate_image` | `False` | `False` | `False` | `True` |
+| `seedance_create_task` | `False` | `False` | `False` | `True` |
+| `seedance_get_task` | `True` | `False` | `True` | `False` |
+| `seedance_list_tasks` | `True` | `False` | `True` | `False` |
+| `seedance_cancel_or_delete_task` | `False` | `True` | `False` | `True` |
 
 ## MCP Resources and Results
 
 Register a resource template:
 
-```text
-seed-media://artifacts/{artifactId}
+```python
+from fastmcp import Context
+from fastmcp.resources import ResourceResult, ResourceContent
+
+@mcp.resource("seed-media://artifacts/{artifact_id}")
+async def get_artifact(artifact_id: str, ctx: Context) -> ResourceResult:
+    """Return persisted media by artifact ID with the correct MIME type."""
+    auth = derive_auth_from_context(ctx)
+    artifact = await artifact_store.get(artifact_id, auth=auth)
+    return ResourceResult(
+        contents=[
+            ResourceContent(
+                content=artifact.data,       # bytes
+                mime_type=artifact.mime_type,  # e.g. image/png, audio/wav, video/mp4
+            )
+        ],
+        meta={"artifact_id": artifact_id, "media_type": artifact.media_type},
+    )
 ```
+
+The handler must set the correct MIME (e.g. `image/png`, `audio/wav`,
+`video/mp4`) from stored artifact metadata so the returned blob does not
+default to `application/octet-stream`.
 
 `ArtifactRef` is the stable cross-tool contract:
 
-```ts
-interface ArtifactRef {
-  id: string;
-  uri: string;
-  mediaType: "image" | "audio" | "video";
-  mimeType: string;
-  bytes?: number;
-  sha256?: string;
-  createdAt: string;
-  expiresAt?: string;
-  sourceExpiresAt?: string;
-}
+```python
+class ArtifactRef(BaseModel):
+    id: str
+    uri: str
+    media_type: Literal["image", "audio", "video"]
+    mime_type: str
+    bytes: int | None = None
+    sha256: str | None = None
+    created_at: str
+    expires_at: str | None = None
+    source_expires_at: str | None = None
 ```
 
 Every successful tool result returns:
 
 1. `structuredContent` conforming to its output schema;
 2. a concise serialized JSON text block for older MCP clients;
-3. an MCP image or audio content block only when below `MCP_INLINE_MEDIA_MAX_BYTES`;
+3. an MCP image or audio content block only when below `MCP_INLINE_MEDIA_MAX_BYTES`, using FastMCP's `Image` and `Audio` helpers from `fastmcp.utilities.types` to auto-serialize to `ImageContent` / `AudioContent`;
 4. a `resource_link` for all persisted artifacts, especially video.
 
 ## Repository Structure
 
 ```text
-modelark-seed-mcp/
-├── package.json
-├── package-lock.json
-├── tsconfig.json
-├── eslint.config.js
+modelark-mcp/
+├── pyproject.toml
+├── uv.lock
+├── fastmcp.json
 ├── .env.example
+├── Makefile
 ├── src/
-│   ├── index.ts
-│   ├── config/
-│   │   ├── env.ts
-│   │   └── model-capabilities.ts
-│   ├── server/
-│   │   ├── build-server.ts
-│   │   ├── stdio.ts
-│   │   ├── http.ts
-│   │   ├── results.ts
-│   │   └── tools/
-│   │       ├── seed-audio-generate.ts
-│   │       ├── seedream-generate-image.ts
-│   │       ├── seedance-create-task.ts
-│   │       ├── seedance-get-task.ts
-│   │       ├── seedance-list-tasks.ts
-│   │       └── seedance-cancel-or-delete-task.ts
-│   ├── domain/
-│   │   ├── artifacts.ts
-│   │   ├── errors.ts
-│   │   ├── media.ts
-│   │   └── models.ts
-│   ├── providers/
-│   │   ├── modelark/
-│   │   │   ├── http-client.ts
-│   │   │   ├── seedream.ts
-│   │   │   ├── seedance.ts
-│   │   │   └── schemas.ts
-│   │   └── seed-speech/
-│   │       ├── http-client.ts
-│   │       ├── seed-audio.ts
-│   │       └── schemas.ts
-│   ├── artifacts/
-│   │   ├── store.ts
-│   │   ├── filesystem-store.ts
-│   │   └── object-store.ts
-│   ├── security/
-│   │   ├── media-policy.ts
-│   │   ├── url-policy.ts
-│   │   └── auth-context.ts
-│   └── observability/
-│       └── logger.ts
+│   └── modelark_mcp/
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── server.py
+│       ├── config/
+│       │   ├── __init__.py
+│       │   ├── env.py
+│       │   └── model_capabilities.py
+│       ├── tools/
+│       │   ├── __init__.py
+│       │   ├── seed_audio_generate.py
+│       │   ├── seedream_generate_image.py
+│       │   ├── seedance_create_task.py
+│       │   ├── seedance_get_task.py
+│       │   ├── seedance_list_tasks.py
+│       │   └── seedance_cancel_or_delete_task.py
+│       ├── domain/
+│       │   ├── __init__.py
+│       │   ├── artifacts.py
+│       │   ├── errors.py
+│       │   ├── media.py
+│       │   └── models.py
+│       ├── providers/
+│       │   ├── __init__.py
+│       │   ├── modelark/
+│       │   │   ├── __init__.py
+│       │   │   ├── client.py
+│       │   │   ├── seedream.py
+│       │   │   ├── seedance.py
+│       │   │   └── schemas.py
+│       │   └── seed_speech/
+│       │       ├── __init__.py
+│       │       ├── client.py
+│       │       ├── seed_audio.py
+│       │       └── schemas.py
+│       ├── artifacts/
+│       │   ├── __init__.py
+│       │   ├── store.py
+│       │   ├── filesystem_store.py
+│       │   └── object_store.py
+│       ├── security/
+│       │   ├── __init__.py
+│       │   ├── media_policy.py
+│       │   ├── url_policy.py
+│       │   └── auth_context.py
+│       └── observability/
+│           ├── __init__.py
+│           └── logger.py
 └── tests/
+    ├── __init__.py
     ├── unit/
     ├── contract/
     ├── integration/
@@ -479,9 +580,36 @@ modelark-seed-mcp/
     └── fixtures/
 ```
 
-This keeps MCP protocol code, application behavior, provider DTOs, persistence, and security policy in separate layers with explicit interfaces.
+This keeps MCP protocol code, application behavior, provider DTOs, persistence, and security policy in separate layers with explicit interfaces. The `fastmcp.json` file declares the entrypoint, environment, and transport for portable runs.
 
 ## Configuration Contract
+
+### `fastmcp.json`
+
+Declarative server configuration (portable across environments). See
+[Project configuration](https://gofastmcp.com/deployment/server-configuration).
+
+```json
+{
+  "$schema": "https://gofastmcp.com/public/schemas/fastmcp.json/v1.json",
+  "source": {
+    "type": "filesystem",
+    "path": "src/modelark_mcp/server.py",
+    "entrypoint": "mcp"
+  },
+  "environment": {
+    "type": "uv",
+    "python": ">=3.12",
+    "dependencies": ["fastmcp", "httpx", "pydantic"]
+  },
+  "deployment": {
+    "transport": "stdio",
+    "log_level": "INFO"
+  }
+}
+```
+
+### `.env`
 
 ```dotenv
 BYTEPLUS_MODELARK_API_KEY=
@@ -506,7 +634,7 @@ BYTEPLUS_CONNECT_TIMEOUT_MS=10000
 BYTEPLUS_REQUEST_TIMEOUT_MS=300000
 ```
 
-Provider credentials are startup configuration only and never tool arguments. If a credential is absent, do not register that product's tool set. Validate host URLs, model bindings, writable artifact storage, and incompatible configuration before accepting MCP requests.
+Provider credentials are startup configuration only and never tool arguments. If a credential is absent, do not register that product's tool set. Validate host URLs, model bindings, writable artifact storage, and incompatible configuration before accepting MCP requests. FastMCP's built-in settings system reads `.env` for its own keys (transport, host, port, log level); see [FastMCP settings](https://gofastmcp.com/more/settings). The project's custom keys (`BYTEPLUS_*`, `SEEDREAM_DEFAULT_MODEL`, `ARTIFACT_*`, `MCP_INLINE_MEDIA_MAX_BYTES`, etc.) are **not** FastMCP settings and must be loaded explicitly — load them via a Pydantic Settings model in `config/env.py`, then pass transport options to `mcp.run(transport=..., host=..., port=...)` at startup.
 
 ## Security and Compliance
 
@@ -522,25 +650,24 @@ Provider credentials are startup configuration only and never tool arguments. If
 
 ## Errors, Timeouts, and Retries
 
-```ts
-interface NormalizedProviderError {
-  provider: "modelark" | "seed-speech";
-  operation: string;
-  httpStatus?: number;
-  code?: string;
-  message: string;
-  requestId?: string;
-  retryable: boolean;
-  ambiguousCompletion?: boolean;
-}
+```python
+class NormalizedProviderError(BaseModel):
+    provider: Literal["modelark", "seed-speech"]
+    operation: str
+    http_status: int | None = None
+    code: str | None = None
+    message: str
+    request_id: str | None = None
+    retryable: bool
+    ambiguous_completion: bool | None = None
 ```
 
 - Invalid MCP JSON or schema shape is a protocol error.
 - Provider validation, moderation, access, quota, and execution failures are tool results with `isError: true`, structured content, and a concise correction path.
 - Retry GET task retrieval/list on 429 and transient 5xx with jittered exponential backoff, respecting `Retry-After` when present.
 - Do not automatically replay Seed Audio, Seedream, Seedance create, or DELETE calls. Provider idempotency is undocumented, and a network timeout may mean the billable operation succeeded.
-- Set `ambiguousCompletion: true` when a mutation times out after request dispatch. Include the Seed Audio `X-Api-Request-Id` or Seedance task ID when known so an operator can reconcile.
-- Wire MCP cancellation through `AbortSignal`. Cancelling the local request does not imply upstream Seedance task cancellation; that requires the explicit cancel tool.
+- Set `ambiguous_completion=True` when a mutation times out after request dispatch. Include the Seed Audio `X-Api-Request-Id` or Seedance task ID when known so an operator can reconcile.
+- Wire MCP cancellation through `ctx: Context` and `asyncio.CancelledError`. Cancelling the local request does not imply upstream Seedance task cancellation; that requires the explicit cancel tool. Translate client cancellation into `httpx` request abort by cancelling the awaiting task.
 
 ## Observability
 
@@ -569,35 +696,35 @@ Acceptance: three redacted golden fixtures, model bindings recorded in environme
 
 ### Phase 1 - Project scaffold and MCP skeleton
 
-Create the project, then add dependencies through package-manager commands rather than editing dependency declarations by hand:
+Create the project with `uv`, then add dependencies through `uv add` rather than editing `pyproject.toml` by hand:
 
 ```bash
-npm init -y
-npm install @modelcontextprotocol/sdk zod
-npm install -D typescript tsx vitest @types/node eslint typescript-eslint
+uv init --lib modelark-mcp
+uv add fastmcp httpx pydantic
+uv add --dev ruff mypy pytest pytest-asyncio respx
 ```
 
-Configure strict TypeScript, ESM, build/start/test/lint/typecheck scripts, environment validation, and an MCP `health` resource. Register placeholder tools with input/output schemas, then verify discovery with MCP Inspector over `stdio`.
+Configure strict `mypy`, ruff lint/format, build/start/test/lint/typecheck scripts in `pyproject.toml`, environment validation, and an MCP `health` resource. Register placeholder tools with Pydantic input/output models, then verify discovery with `fastmcp inspect` or MCP Inspector over `stdio`. `respx` is installed as a dev dependency for `httpx` request mocking in contract tests (Phase 2).
 
-Acceptance: build, typecheck, lint, and a tool-list smoke test pass without provider credentials leaking.
+Acceptance: `uv run` build/typecheck/lint and a tool-list smoke test pass without provider credentials leaking.
 
 ### Phase 2 - Provider gateways
 
-Implement the two authenticated HTTP clients and three product adapters. Validate provider responses with Zod before mapping them to domain models. Capture ModelArk request IDs and Seed Speech `X-Tt-Logid`.
+Implement the two authenticated `httpx.AsyncClient`-based gateways and three product adapters. Validate provider responses with Pydantic models before mapping them to domain models. Capture ModelArk request IDs and Seed Speech `X-Tt-Logid`.
 
-Use `undici`/native fetch and `MockAgent`-style contract tests or a minimal equivalent; do not add an HTTP abstraction library unless native fetch proves insufficient.
+Use `httpx` with `MockTransport` for contract tests; do not add an HTTP abstraction library unless `httpx` proves insufficient.
 
 Acceptance: recorded fixtures cover success, 4xx validation/moderation, 401/403 access, 429 quota, 5xx, malformed JSON, timeout, and abort paths.
 
 ### Phase 3 - Tool schemas and services
 
-Implement the six tool contracts and model capability registry. Add Zod cross-field rules, error normalization, tool annotations, structured results, and provider-task state mapping.
+Implement the six tool contracts and model capability registry. Add Pydantic model validators, error normalization, `ToolAnnotations` (camelCase fields: `destructiveHint`, `readOnlyHint`, `idempotentHint`, `openWorldHint`) per the tool annotations section, structured results, and provider-task state mapping.
 
-Acceptance: every invalid combination fails before network dispatch; every successful result matches its `outputSchema`; tool execution errors are actionable and contain no secrets.
+Acceptance: every invalid combination fails before network dispatch; every successful result matches its `outputSchema` (auto-generated by FastMCP from return type); tool execution errors are actionable and contain no secrets.
 
 ### Phase 4 - Artifact persistence and resources
 
-Implement filesystem storage first with atomic temp-file rename, SHA-256, MIME sniffing, ownership metadata, and TTL cleanup. Register `seed-media://artifacts/{id}` and return resource links. Add the object-store adapter only for remote deployment.
+Implement filesystem storage first with atomic temp-file rename, SHA-256, MIME sniffing, ownership metadata, and TTL cleanup. Register `seed-media://artifacts/{id}` via `@mcp.resource` and return resource links. Add the object-store adapter only for remote deployment.
 
 Acceptance: audio, image, video, and last-frame outputs survive provider URL expiry in a simulated test; unauthorized principals cannot read another tenant's artifact.
 
@@ -619,7 +746,7 @@ Acceptance: clean build/lint/typecheck/test run, live smoke report, dependency a
 
 | Layer | Required coverage |
 |---|---|
-| Unit | Zod bounds/unions, model capability rules, task state machine, URL/IP policy, MIME/size checks, error mapping, redaction |
+| Unit | Pydantic model validators, model capability rules, task state machine, URL/IP policy, MIME/size checks, error mapping, redaction |
 | Provider contract | Exact request headers/body/path and response parsing against official redacted fixtures |
 | Integration | Tool handler to mock provider to artifact store; partial Seedream item failures; Seedance URL persistence |
 | MCP protocol | Tool discovery, `inputSchema`, `outputSchema`, structured/text compatibility, resources, cancellation signal, annotations |
@@ -669,7 +796,7 @@ sequenceDiagram
 | Seed Audio sample-rate default conflicts with allowed list | Validation or audio mismatch | Omit default; allow only listed values |
 | Seed Audio has no published error taxonomy, QPS, timeout, or idempotency contract | Unsafe retries and weak diagnosis | No mutation replay; capture request/log IDs; confirm with product team |
 | Provider output URLs expire in 2 or 24 hours | Broken MCP results | Persist immediately and return resource links |
-| MCP Tasks and SDK v2 are not production-stable today | Client incompatibility | Stable SDK v1.x and explicit provider task tools; adapter later |
+| MCP Tasks are experimental; FastMCP background tasks extra is optional | Client incompatibility | Explicit provider task tools for MVP; add `fastmcp[tasks]` after specification stabilizes |
 | Real-person or cloned-voice inputs require rights/consent | Legal and safety exposure | Human confirmation, approved asset workflow, audit logs, no bypass |
 | Generated Base64 can exceed client/context limits | Transport failure or context bloat | Inline byte limit and artifact resources |
 | Mutation timeout has ambiguous completion | Duplicate spend | No automatic retry; surface reconciliation identifiers |
@@ -718,9 +845,14 @@ Known conflicts preserved in this plan:
 
 ### Runtime and Model Context Protocol
 
-- [Node.js releases](https://nodejs.org/en/about/previous-releases) — official current/LTS status; Node.js 24 is LTS as of 2026-07-20.
-- [MCP TypeScript SDK v1](https://ts.sdk.modelcontextprotocol.io/) — production SDK installation and capabilities.
-- [MCP TypeScript server guide](https://ts.sdk.modelcontextprotocol.io/server) — `McpServer`, `stdio`, Streamable HTTP, stateless/stateful patterns, and DNS rebinding protection.
+- [FastMCP installation](https://gofastmcp.com/getting-started/installation) — official `uv add fastmcp` setup and version policy, accessed 2026-07-20.
+- [FastMCP quickstart](https://gofastmcp.com/getting-started/quickstart) — official `FastMCP` class, `@mcp.tool` decorator, and `mcp.run()` entrypoint, accessed 2026-07-20.
+- [FastMCP server](https://gofastmcp.com/servers/server) — official `FastMCP` constructor, configuration reference, and transport options, accessed 2026-07-20.
+- [FastMCP tools](https://gofastmcp.com/servers/tools) — official `@mcp.tool` decorator, `ToolAnnotations`, async support, and output schemas, accessed 2026-07-20.
+- [FastMCP resources](https://gofastmcp.com/servers/resources) — official `@mcp.resource` decorator, resource templates, and `ResourceResult`, accessed 2026-07-20.
+- [Running your server](https://gofastmcp.com/deployment/running-server) — official `stdio`/`http`/`sse` transports, `fastmcp run` CLI, and `--reload` dev mode, accessed 2026-07-20.
+- [Project configuration](https://gofastmcp.com/deployment/server-configuration) — official `fastmcp.json` declarative configuration with `uv` environment, accessed 2026-07-20.
+- [FastMCP settings](https://gofastmcp.com/more/settings) — official environment variable and `.env` configuration, accessed 2026-07-20.
 - [MCP tools specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) — schemas, structured content, image/audio content, resource links, error handling, and security requirements.
 - [MCP transports specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) — `stdio`, Streamable HTTP, Origin validation, and localhost binding.
 - [MCP authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) — OAuth resource-server behavior for remote HTTP.
@@ -728,6 +860,6 @@ Known conflicts preserved in this plan:
 
 ## Final Recommendation
 
-Implement a **local-first, stable-SDK v1 MCP server with six typed tools and one artifact resource template**. Keep provider-native async behavior explicit for Seedance, keep Seed Audio and Seedream synchronous in MVP, persist all outputs, and defer Seedream streaming plus native MCP Tasks until real client support and the next MCP specification stabilize.
+Implement a **local-first FastMCP server with six typed tools and one artifact resource template**. Keep provider-native async behavior explicit for Seedance, keep Seed Audio and Seedream synchronous in MVP, persist all outputs, and defer Seedream streaming plus native MCP Tasks until real client support and the next MCP specification stabilize.
 
 Before coding, complete Phase 0. The model-ID and Seed Audio contract checks are small but prevent the most expensive classes of rework: building against the wrong regional/model alias, retrying a billable request unsafely, or returning media links that expire before users can consume them.
