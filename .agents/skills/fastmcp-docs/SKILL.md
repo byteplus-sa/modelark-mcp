@@ -11,7 +11,7 @@ Use the bundled `llms.txt` as the discovery map for official FastMCP documentati
 
 FastMCP is the standard Python framework for building MCP (Model Context Protocol) applications. MCP is the open protocol that connects LLMs to tools and data; FastMCP makes it Pythonic — you declare a tool with a plain function and the schema, validation, and documentation are generated automatically.
 
-FastMCP 1.0 was incorporated into the official MCP Python SDK in 2024. The actively maintained standalone project is made by the Prefect team and powers the majority of MCP servers across all languages.
+FastMCP 1.0 was incorporated into the official MCP Python SDK in 2024. The actively maintained standalone project is made by the Prefect team and powers the majority of MCP servers across all languages. As of v3.0.0 (February 2026), the repository moved from `jlowin/fastmcp` to [`PrefectHQ/fastmcp`](https://github.com/PrefectHQ/fastmcp) under Prefect's stewardship; the current release is v3.4.4 (July 2026).
 
 Three pillars:
 
@@ -41,17 +41,17 @@ if __name__ == "__main__":
 - Every indexed URL is a candidate, not proof of a technical claim.
 - Verify substantive claims against the selected live `gofastmcp.com` pages.
 - Prefer official FastMCP docs over blogs, search snippets, or third-party summaries.
-- Context7 library `/jlowin/fastmcp` can be used as corroboration when available; the canonical page URL from `llms.txt` remains the citation target.
+- Context7 library `/prefecthq/fastmcp` can be used as corroboration when available; the canonical page URL from `llms.txt` remains the citation target.
 
 ## Find the index
 
 The bundled `llms.txt` lives next to this `SKILL.md`:
 
 ```
-/Users/bytedance/.agents/skills/fastmcp-docs/llms.txt
+llms.txt
 ```
 
-Read it directly with the Read tool, or grep it for keywords. No path argument is normally needed.
+Read it directly with the Read tool, or grep it for keywords. The skill loader resolves paths relative to this skill's base directory, so the filename alone is enough regardless of where the skill is installed (project `.agents/` or global `~/.agents/`).
 
 ## Research workflow
 
@@ -59,9 +59,9 @@ Read it directly with the Read tool, or grep it for keywords. No path argument i
 2. Search the index with two or three focused query variants:
 
    ```bash
-   grep -i "middleware" /Users/bytedance/.agents/skills/fastmcp-docs/llms.txt
-   grep -i "oauth\|auth" /Users/bytedance/.agents/skills/fastmcp-docs/llms.txt
-   grep -i "composition\|compose" /Users/bytedance/.agents/skills/fastmcp-docs/llms.txt
+   grep -i "middleware" llms.txt
+   grep -i "oauth\|auth" llms.txt
+   grep -i "composition\|compose" llms.txt
    ```
 
 3. Select the smallest useful source set — normally one overview/guide plus one API reference page. Avoid collecting many loosely related pages.
