@@ -121,6 +121,7 @@ def _seedance_capabilities() -> dict[str, VideoCapabilities]:
     model_id = settings.seedance_default_model
 
     model_lower = model_id.lower()
+    resolutions: tuple[str, ...]
     if "mini" in model_lower:
         family = ModelFamily.SEEDANCE_2_MINI
         resolutions = ("480p", "720p")

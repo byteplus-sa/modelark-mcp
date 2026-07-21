@@ -1,2 +1,18 @@
-def hello() -> str:
-    return "Hello from modelark-mcp!"
+"""ModelArk Seed Multimodal MCP Server.
+
+A Python MCP server (FastMCP on uv) that exposes BytePlus multimodal
+generation through a small, typed, safe tool surface:
+
+- Seed Audio — full-scene audio generation through Seed Speech.
+- Seedream — image generation and editing through ModelArk.
+- Seedance — asynchronous video generation and task management through ModelArk.
+- Durable artifacts — MCP resources for generated media whose provider URLs expire.
+- Transports — local stdio first, with protected Streamable HTTP as a deployable option.
+"""
+
+from __future__ import annotations
+
+from modelark_mcp.server import get_artifact_store, mcp
+
+__all__ = ["get_artifact_store", "mcp"]
+__version__ = "0.1.0"

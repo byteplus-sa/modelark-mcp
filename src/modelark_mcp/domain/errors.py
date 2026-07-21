@@ -2,8 +2,9 @@
 
 Provider validation, moderation, access, quota, and execution failures are
 returned as tool results with ``isError: true``, structured content, and a
-concise correction path. This model captures the normalized error shape
-that all provider gateways produce.
+concise correction path. This module provides both a Pydantic model
+(``NormalizedProviderError``) for structured output and an exception class
+(``ProviderError``) that wraps it for raising within the server.
 """
 
 from __future__ import annotations
@@ -39,3 +40,52 @@ class NormalizedProviderError(BaseModel):
         default=None,
         description="True if a mutation timed out after dispatch — the billable operation may have succeeded.",
     )
+
+
+class ProviderError(Exception):
+    """Exception wrapping a ``NormalizedProviderError``.
+
+    This allows provider errors to be raised as exceptions within the
+    server while still carrying structured error data. Tool handlers
+    catch this and convert it to an MCP error result.
+    """
+
+    def __init__(self, error: NormalizedProviderError) -> None:
+        self.error = error
+        super().__init__(error.message)
+
+    @property
+    def normalized(self) -> NormalizedProviderError:
+        return self.error
+
+    @property
+    def provider(self) -> ProviderName:
+        return self.error.provider
+
+    @property
+    def operation(self) -> str:
+        return self.error.operation
+
+    @property
+    def http_status(self) -> int | None:
+        return self.error.http_status
+
+    @property
+    def code(self) -> str | None:
+        return self.error.code
+
+    @property
+    def message(self) -> str:
+        return self.error.message
+
+    @property
+    def request_id(self) -> str | None:
+        return self.error.request_id
+
+    @property
+    def retryable(self) -> bool:
+        return self.error.retryable
+
+    @property
+    def ambiguous_completion(self) -> bool | None:
+        return self.error.ambiguous_completion

@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "structlog>=25.5.0",
+    "truststore>=0.10.4",
 ]
 
 [build-system]
@@ -59,7 +60,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B011"]
+"tests/**" = ["B011", "TC001", "TC002", "TC003"]
+# Pydantic models need runtime access to type annotations, so imports used
+# in model fields cannot be moved to TYPE_CHECKING blocks.
+"src/modelark_mcp/tools/**" = ["TC001", "TC002", "TC003"]
 
 # --- Mypy -------------------------------------------------------------------
 
@@ -78,11 +82,6 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 show_error_codes = true
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
-disallow_untyped_decorators = false
 
 # --- Pytest -----------------------------------------------------------------
 

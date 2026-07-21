@@ -8,7 +8,7 @@
   "environment": {
     "type": "uv",
     "python": ">=3.12",
-    "dependencies": ["fastmcp", "httpx", "pydantic", "pydantic-settings"]
+    "dependencies": ["fastmcp", "httpx", "pydantic", "pydantic-settings", "truststore"]
   },
   "deployment": {
     "transport": "stdio",

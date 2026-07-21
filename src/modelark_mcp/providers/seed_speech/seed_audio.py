@@ -103,15 +103,15 @@ class SeedAudioService:
                     refs.append(entry)
 
         if image_ref:
-            entry: dict[str, Any] = {}
+            img_entry: dict[str, Any] = {}
             if image_ref.get("kind") == "url":
-                entry["image_url"] = image_ref.get("url")
+                img_entry["image_url"] = image_ref.get("url")
             elif image_ref.get("kind") == "base64":
-                entry["image_data"] = image_ref.get("data")
+                img_entry["image_data"] = image_ref.get("data")
             if image_ref.get("mime_type"):
-                entry["mime_type"] = image_ref["mime_type"]
-            if entry:
-                refs.append(entry)
+                img_entry["mime_type"] = image_ref["mime_type"]
+            if img_entry:
+                refs.append(img_entry)
 
         return refs
 

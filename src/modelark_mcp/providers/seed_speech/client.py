@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 
 from modelark_mcp.config.env import get_settings
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderName
+from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError, ProviderName
 from modelark_mcp.observability.logger import error as log_error
 from modelark_mcp.observability.logger import info as log_info
 
@@ -80,14 +80,15 @@ class SeedSpeechGateway:
     @staticmethod
     def extract_log_id(response: httpx.Response) -> str | None:
         """Extract the diagnostic ``X-Tt-Logid`` from response headers."""
-        return response.headers.get("X-Tt-Logid") or response.headers.get("x-tt-logid")
+        value = response.headers.get("X-Tt-Logid") or response.headers.get("x-tt-logid")
+        return str(value) if value is not None else None
 
     @staticmethod
     def normalize_error(
         response: httpx.Response,
         operation: str,
-    ) -> NormalizedProviderError:
-        """Normalize an error HTTP response into a ``NormalizedProviderError``."""
+    ) -> ProviderError:
+        """Normalize an error HTTP response into a ``ProviderError``."""
         log_id = SeedSpeechGateway.extract_log_id(response)
         status = response.status_code
 
@@ -119,35 +120,39 @@ class SeedSpeechGateway:
             retryable=retryable,
             log_id=log_id,
         )
-        return normalized
+        return ProviderError(normalized)
 
     @staticmethod
-    def normalize_timeout(operation: str) -> NormalizedProviderError:
+    def normalize_timeout(operation: str) -> ProviderError:
         """Normalize a timeout — Seed Audio mutations are not safely retryable."""
-        return NormalizedProviderError(
-            provider="seed-speech",
-            operation=operation,
-            http_status=None,
-            code="TIMEOUT",
-            message=(
-                f"Request timed out during '{operation}'. "
-                "The audio generation may have succeeded. "
-                "Do not retry; reconcile using the X-Api-Request-Id."
-            ),
-            request_id=None,
-            retryable=False,
-            ambiguous_completion=True,
+        return ProviderError(
+            NormalizedProviderError(
+                provider="seed-speech",
+                operation=operation,
+                http_status=None,
+                code="TIMEOUT",
+                message=(
+                    f"Request timed out during '{operation}'. "
+                    "The audio generation may have succeeded. "
+                    "Do not retry; reconcile using the X-Api-Request-Id."
+                ),
+                request_id=None,
+                retryable=False,
+                ambiguous_completion=True,
+            )
         )
 
     @staticmethod
-    def normalize_connection_error(operation: str, exc: Exception) -> NormalizedProviderError:
+    def normalize_connection_error(operation: str, exc: Exception) -> ProviderError:
         """Normalize a connection error."""
-        return NormalizedProviderError(
-            provider="seed-speech",
-            operation=operation,
-            http_status=None,
-            code="CONNECTION_ERROR",
-            message=f"Failed to connect to Seed Speech: {exc}",
-            request_id=None,
-            retryable=True,
+        return ProviderError(
+            NormalizedProviderError(
+                provider="seed-speech",
+                operation=operation,
+                http_status=None,
+                code="CONNECTION_ERROR",
+                message=f"Failed to connect to Seed Speech: {exc}",
+                request_id=None,
+                retryable=True,
+            )
         )

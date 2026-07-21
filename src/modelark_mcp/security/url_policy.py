@@ -73,7 +73,7 @@ def validate_url(url: str, *, allow_http: bool = False) -> None:
         raise UrlValidationError(f"Failed to resolve hostname '{hostname}': {exc}") from exc
 
     for info in infos:
-        ip = info[4][0]
+        ip = str(info[4][0])
         if _is_blocked_ip(ip):
             raise UrlValidationError(f"Hostname '{hostname}' resolves to blocked IP '{ip}'.")
 

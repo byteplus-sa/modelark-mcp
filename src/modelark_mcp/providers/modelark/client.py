@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 
 from modelark_mcp.config.env import get_settings
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderName
+from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError, ProviderName
 from modelark_mcp.observability.logger import error as log_error
 from modelark_mcp.observability.logger import info as log_info
 
@@ -85,14 +85,15 @@ class ModelArkGateway:
     @staticmethod
     def extract_request_id(response: httpx.Response) -> str | None:
         """Extract the ModelArk request ID from response headers."""
-        return response.headers.get("X-Request-Id") or response.headers.get("x-request-id")
+        value = response.headers.get("X-Request-Id") or response.headers.get("x-request-id")
+        return str(value) if value is not None else None
 
     @staticmethod
     def normalize_error(
         response: httpx.Response,
         operation: str,
-    ) -> NormalizedProviderError:
-        """Normalize an error HTTP response into a ``NormalizedProviderError``."""
+    ) -> ProviderError:
+        """Normalize an error HTTP response into a ``ProviderError``."""
         request_id = ModelArkGateway.extract_request_id(response)
         status = response.status_code
 
@@ -125,39 +126,43 @@ class ModelArkGateway:
             retryable=retryable,
             request_id=request_id,
         )
-        return normalized
+        return ProviderError(normalized)
 
     @staticmethod
-    def normalize_timeout(operation: str) -> NormalizedProviderError:
-        """Normalize a timeout into a ``NormalizedProviderError``.
+    def normalize_timeout(operation: str) -> ProviderError:
+        """Normalize a timeout into a ``ProviderError``.
 
         A mutation timeout has ambiguous completion — the billable operation
         may have succeeded upstream.
         """
-        return NormalizedProviderError(
-            provider="modelark",
-            operation=operation,
-            http_status=None,
-            code="TIMEOUT",
-            message=(
-                f"Request timed out during '{operation}'. "
-                "The upstream operation may have succeeded. "
-                "Do not retry blindly; reconcile using the task ID or request ID."
-            ),
-            request_id=None,
-            retryable=False,
-            ambiguous_completion=True,
+        return ProviderError(
+            NormalizedProviderError(
+                provider="modelark",
+                operation=operation,
+                http_status=None,
+                code="TIMEOUT",
+                message=(
+                    f"Request timed out during '{operation}'. "
+                    "The upstream operation may have succeeded. "
+                    "Do not retry blindly; reconcile using the task ID or request ID."
+                ),
+                request_id=None,
+                retryable=False,
+                ambiguous_completion=True,
+            )
         )
 
     @staticmethod
-    def normalize_connection_error(operation: str, exc: Exception) -> NormalizedProviderError:
+    def normalize_connection_error(operation: str, exc: Exception) -> ProviderError:
         """Normalize a connection error."""
-        return NormalizedProviderError(
-            provider="modelark",
-            operation=operation,
-            http_status=None,
-            code="CONNECTION_ERROR",
-            message=f"Failed to connect to ModelArk: {exc}",
-            request_id=None,
-            retryable=True,
+        return ProviderError(
+            NormalizedProviderError(
+                provider="modelark",
+                operation=operation,
+                http_status=None,
+                code="CONNECTION_ERROR",
+                message=f"Failed to connect to ModelArk: {exc}",
+                request_id=None,
+                retryable=True,
+            )
         )
