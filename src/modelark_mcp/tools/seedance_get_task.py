@@ -96,15 +96,23 @@ async def seedance_get_task(input: SeedanceGetTaskInput, ctx: Context) -> Seedan
             store = get_artifact_store()
             source_expiry = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
 
-            if task.video_url and task.video_url.url:
+            if task.video_url:
                 try:
                     video_ref = await store.copy_from_trusted_url(
-                        url=task.video_url.url,
+                        url=task.video_url,
                         media_type="video",
                         mime_type="video/mp4",
                         source_expires_at=source_expiry,
                     )
                 except Exception as exc:
+                    from modelark_mcp.observability.logger import warning as log_warning
+
+                    log_warning(
+                        "artifact_persist_failed",
+                        task_id=input.task_id,
+                        media_type="video",
+                        error=str(exc),
+                    )
                     await ctx.warning(f"Failed to persist video artifact: {exc}")
 
             if task.last_frame_url:
@@ -116,12 +124,23 @@ async def seedance_get_task(input: SeedanceGetTaskInput, ctx: Context) -> Seedan
                         source_expires_at=source_expiry,
                     )
                 except Exception as exc:
+                    from modelark_mcp.observability.logger import warning as log_warning
+
+                    log_warning(
+                        "artifact_persist_failed",
+                        task_id=input.task_id,
+                        media_type="last_frame",
+                        error=str(exc),
+                    )
                     await ctx.warning(f"Failed to persist last-frame artifact: {exc}")
 
-            _persistence_cache[input.task_id] = {
-                "video": video_ref,
-                "last_frame": last_frame_ref,
-            }
+            # Only cache if at least one artifact was persisted.
+            # Don't cache failures — allow retry on next poll.
+            if video_ref is not None or last_frame_ref is not None:
+                _persistence_cache[input.task_id] = {
+                    "video": video_ref,
+                    "last_frame": last_frame_ref,
+                }
 
     await ctx.report_progress(progress=100, total=100)
     log_info(
@@ -132,12 +151,7 @@ async def seedance_get_task(input: SeedanceGetTaskInput, ctx: Context) -> Seedan
     )
 
     # Normalize settings from the generation config.
-    settings_dict: dict[str, Any] = {}
-    if task.content:
-        if isinstance(task.content, dict):
-            settings_dict = task.content
-        else:
-            settings_dict = task.content.model_dump(exclude_none=True)
+    settings_dict: dict[str, Any] = dict(task.content) if task.content else {}
 
     return SeedanceTaskOutput(
         task_id=task.id,

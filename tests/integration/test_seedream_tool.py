@@ -16,12 +16,12 @@ import respx
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.providers.modelark.schemas import SeedreamProviderResponse
 from modelark_mcp.providers.modelark.seedream import SeedreamService
+from modelark_mcp.test_utils import FakeContext
 from modelark_mcp.tools.seedream_generate_image import (
     SeedreamGenerateInput,
     SeedreamGenerateOutput,
     seedream_generate_image,
 )
-from tests.integration.conftest import FakeContext
 
 
 def _patch_seedream_service(monkeypatch: pytest.MonkeyPatch, response_data: dict[str, Any]) -> None:

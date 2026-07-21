@@ -162,15 +162,14 @@ class TestSeedanceGetTask:
                     "status": "succeeded",
                     "created_at": 1721400000,
                     "updated_at": 1721400100,
-                    "video_url": {"url": "https://cdn.example.com/video.mp4", "duration": "5s"},
+                    "content": {"video_url": "https://cdn.example.com/video.mp4"},
                     "usage": {"completion_tokens": 100, "prompt_tokens": 10},
                 },
             )
         )
         task, _ = await service.get_task("task-1")
         assert task.status == "succeeded"
-        assert task.video_url is not None
-        assert task.video_url.url == "https://cdn.example.com/video.mp4"
+        assert task.video_url == "https://cdn.example.com/video.mp4"
         assert task.usage is not None
         assert task.usage.completion_tokens == 100
 
@@ -222,12 +221,15 @@ class TestSeedanceGetTask:
                     "status": "succeeded",
                     "created_at": 1721400000,
                     "updated_at": 1721400100,
-                    "video_url": {"url": "https://cdn.example.com/video.mp4"},
-                    "last_frame_url": "https://cdn.example.com/last_frame.jpg",
+                    "content": {
+                        "video_url": "https://cdn.example.com/video.mp4",
+                        "last_frame_url": "https://cdn.example.com/last_frame.jpg",
+                    },
                 },
             )
         )
         task, _ = await service.get_task("task-1")
+        assert task.video_url == "https://cdn.example.com/video.mp4"
         assert task.last_frame_url == "https://cdn.example.com/last_frame.jpg"
 
     @respx.mock

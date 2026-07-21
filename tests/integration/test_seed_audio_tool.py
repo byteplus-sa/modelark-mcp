@@ -14,12 +14,12 @@ import pytest
 
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
+from modelark_mcp.test_utils import FakeContext
 from modelark_mcp.tools.seed_audio_generate import (
     SeedAudioGenerateInput,
     SeedAudioGenerateOutput,
     seed_audio_generate,
 )
-from tests.integration.conftest import FakeContext
 
 SPEECH_BASE = "https://voice.test.example.com"
 

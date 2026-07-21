@@ -15,9 +15,9 @@ from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.providers.modelark.schemas import (
     SeedanceGenerationUsage,
     SeedanceTaskResponse,
-    SeedanceVideoUrl,
 )
 from modelark_mcp.providers.modelark.seedance import SeedanceService
+from modelark_mcp.test_utils import FakeContext
 from modelark_mcp.tools.seedance_cancel_or_delete_task import (
     SeedanceCancelOrDeleteInput,
     SeedanceCancelOrDeleteOutput,
@@ -40,7 +40,6 @@ from modelark_mcp.tools.seedance_list_tasks import (
     SeedanceTaskPage,
     seedance_list_tasks,
 )
-from tests.integration.conftest import FakeContext
 
 
 async def _mock_close(self: SeedanceService) -> None:
@@ -170,7 +169,7 @@ class TestSeedanceGetTaskTool:
             status="succeeded",
             created_at=1721400000,
             updated_at=1721400100,
-            video_url=SeedanceVideoUrl(url="https://tos-ap-southeast.bytepluses.com/video.mp4"),
+            content={"video_url": "https://tos-ap-southeast.bytepluses.com/video.mp4"},
             usage=SeedanceGenerationUsage(completion_tokens=100, prompt_tokens=10),
         )
 
@@ -239,7 +238,7 @@ class TestSeedanceGetTaskTool:
             status="succeeded",
             created_at=1721400000,
             updated_at=1721400100,
-            video_url=SeedanceVideoUrl(url="https://tos-ap-southeast.bytepluses.com/video.mp4"),
+            content={"video_url": "https://tos-ap-southeast.bytepluses.com/video.mp4"},
         )
 
         async def mock_get(

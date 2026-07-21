@@ -151,10 +151,17 @@ class SeedanceService:
 
         if images:
             for img in images:
+                url_value: str
+                if img.get("kind") == "base64" and img.get("data"):
+                    mime = img.get("mime_type", "image/png")
+                    url_value = f"data:{mime};base64,{img['data']}"
+                else:
+                    url_value = img.get("url", "")
+
                 content.append(
                     SeedanceContentItem(
                         type="image_url",
-                        image_url=img.get("url", ""),
+                        image_url={"url": url_value},
                         role=img.get("role"),
                     )
                 )
@@ -164,17 +171,24 @@ class SeedanceService:
                 content.append(
                     SeedanceContentItem(
                         type="video_url",
-                        video_url=vid.get("url", ""),
+                        video_url={"url": vid.get("url", "")},
                         role=vid.get("role", "reference_video"),
                     )
                 )
 
         if audios:
             for aud in audios:
+                audio_url_value: str
+                if aud.get("kind") == "base64" and aud.get("data"):
+                    mime = aud.get("mime_type", "audio/mpeg")
+                    audio_url_value = f"data:{mime};base64,{aud['data']}"
+                else:
+                    audio_url_value = aud.get("url", "")
+
                 content.append(
                     SeedanceContentItem(
                         type="audio_url",
-                        audio_url=aud.get("url", ""),
+                        audio_url={"url": audio_url_value},
                         role=aud.get("role", "reference_audio"),
                     )
                 )

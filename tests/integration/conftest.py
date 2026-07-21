@@ -6,41 +6,12 @@ so tool handlers can be tested end-to-end without real credentials or network.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
 
 from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
-
-
-@dataclass
-class FakeContext:
-    """Minimal Context implementation for testing tool handlers."""
-
-    messages: list[str] = field(default_factory=list)
-    progress_reports: list[tuple[int, int]] = field(default_factory=list)
-
-    async def info(self, message: str, **kwargs: object) -> None:
-        self.messages.append(f"INFO: {message}")
-
-    async def debug(self, message: str, **kwargs: object) -> None:
-        self.messages.append(f"DEBUG: {message}")
-
-    async def warning(self, message: str, **kwargs: object) -> None:
-        self.messages.append(f"WARNING: {message}")
-
-    async def error(self, message: str, **kwargs: object) -> None:
-        self.messages.append(f"ERROR: {message}")
-
-    async def report_progress(self, progress: int, total: int) -> None:
-        self.progress_reports.append((progress, total))
-
-    async def read_resource(self, uri: str) -> object:
-        raise NotImplementedError
-
-    async def sample(self, messages: object, **kwargs: object) -> object:
-        raise NotImplementedError
+from modelark_mcp.test_utils import FakeContext
 
 
 @pytest.fixture
@@ -76,6 +47,8 @@ def test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def fake_ctx() -> FakeContext:
+    from modelark_mcp.test_utils import FakeContext
+
     return FakeContext()
 
 

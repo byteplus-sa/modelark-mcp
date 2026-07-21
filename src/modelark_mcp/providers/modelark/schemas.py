@@ -152,10 +152,41 @@ class SeedanceTaskResponse(BaseModel):
     created_at: int | str | None = None
     updated_at: int | str | None = None
     error: SeedanceErrorDetail | None = None
-    content: SeedanceGenerationConfig | dict[str, Any] | None = None
-    video_url: SeedanceVideoUrl | None = None
-    last_frame_url: str | None = None
+    content: dict[str, Any] | None = None
     usage: SeedanceGenerationUsage | None = None
+    # Generation settings (may be top-level or inside content).
+    seed: int | None = None
+    resolution: str | None = None
+    ratio: str | None = None
+    duration: int | str | None = None
+    framespersecond: int | None = None
+    service_tier: str | None = None
+    execution_expires_after: int | None = None
+    generate_audio: bool | None = None
+    draft: bool | None = None
+    priority: int | None = None
+
+    @property
+    def video_url(self) -> str | None:
+        """Extract the video URL from the content object."""
+        if self.content and isinstance(self.content, dict):
+            url = self.content.get("video_url")
+            if isinstance(url, str):
+                return url
+            if isinstance(url, dict):
+                return url.get("url")
+        return None
+
+    @property
+    def last_frame_url(self) -> str | None:
+        """Extract the last frame URL from the content object."""
+        if self.content and isinstance(self.content, dict):
+            url = self.content.get("last_frame_url")
+            if isinstance(url, str):
+                return url
+            if isinstance(url, dict):
+                return url.get("url")
+        return None
 
 
 class SeedanceTaskListResponse(BaseModel):

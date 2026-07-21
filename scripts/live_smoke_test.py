@@ -1,0 +1,388 @@
+"""Live smoke test: generate image, audio, and video through the MCP tools.
+
+Run with: uv run python scripts/live_smoke_test.py
+
+Exercises the full tool handler path for all three products:
+1. Seedream — generate an image, persist to artifact store
+2. Seed Audio — generate audio, persist to artifact store
+3. Seedance — create video task using the generated image as reference,
+   poll until succeeded, persist video
+
+All artifacts are saved locally in .artifacts/ and verified retrievable
+via the seed-media:// resource template.
+
+Cost: ~$0.02 (image) + ~$0.003 (audio) + ~$0.05-0.10 (short 480p video)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import sys
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+
+import truststore
+
+truststore.inject_into_ssl()
+
+from modelark_mcp.config.env import get_settings  # noqa: E402
+from modelark_mcp.server import get_artifact_store  # noqa: E402
+from modelark_mcp.test_utils import FakeContext  # noqa: E402
+from modelark_mcp.tools.seed_audio_generate import (  # noqa: E402
+    SeedAudioGenerateInput,
+    seed_audio_generate,
+)
+from modelark_mcp.tools.seedance_create_task import (  # noqa: E402
+    SeedanceCreateTaskInput,
+    SeedanceImageInput,
+    seedance_create_task,
+)
+from modelark_mcp.tools.seedance_get_task import (  # noqa: E402
+    SeedanceGetTaskInput,
+    seedance_get_task,
+)
+from modelark_mcp.tools.seedream_generate_image import (  # noqa: E402
+    SeedreamGenerateInput,
+    seedream_generate_image,
+)
+
+ARTIFACTS_DIR = Path(".artifacts")
+
+
+def header(title: str) -> None:
+    print(f"\n{'=' * 60}")
+    print(f"  {title}")
+    print(f"{'=' * 60}\n")
+
+
+async def test_image_generation() -> dict[str, str]:
+    """Generate an image via seedream_generate_image and verify the artifact."""
+    header("Seedream: Image Generation")
+    ctx = FakeContext()
+
+    print("Generating image: 'A serene mountain landscape at sunset, digital art'...")
+    print(f"  Model: {get_settings().seedream_default_model}")
+    print("  Size: 1024x1024")
+
+    result = await seedream_generate_image(
+        SeedreamGenerateInput(
+            prompt="A serene mountain landscape at sunset, digital art",
+            size="1024x1024",
+            response_format="url",
+            persist=True,
+        ),
+        ctx,
+    )
+
+    print(f"\n  Provider: {result.provider}")
+    print(f"  Model: {result.model}")
+    print(f"  Created: {result.created_at}")
+    print(f"  Artifacts: {len(result.artifacts)}")
+    print(f"  Item errors: {len(result.item_errors)}")
+    print(f"  Usage: {result.usage.model_dump()}")
+
+    assert len(result.artifacts) >= 1, "Expected at least 1 artifact"
+    artifact = result.artifacts[0]
+    print(f"\n  Artifact ID: {artifact.id}")
+    print(f"  Artifact URI: {artifact.uri}")
+    print(f"  Media type: {artifact.media_type}")
+    print(f"  MIME: {artifact.mime_type}")
+    print(f"  Bytes: {artifact.bytes}")
+    print(f"  SHA-256: {artifact.sha256}")
+
+    # Verify the artifact is retrievable from the store.
+    store = get_artifact_store()
+    stored = await store.get(artifact.id)
+    assert len(stored.data) > 0, "Artifact data should not be empty"
+    print(f"  Verified: artifact retrieved from store ({len(stored.data)} bytes)")
+
+    # Save a copy for easy viewing.
+    ext = artifact.mime_type.split("/")[-1]
+    output_path = ARTIFACTS_DIR / f"smoke_test_image.{ext}"
+    output_path.write_bytes(stored.data)
+    print(f"  Saved copy: {output_path}")
+
+    return {"image": artifact.id}
+
+
+async def test_audio_generation() -> dict[str, str]:
+    """Generate audio via seed_audio_generate and verify the artifact."""
+    header("Seed Audio: Audio Generation")
+    ctx = FakeContext()
+
+    print("Generating audio: 'Welcome to the ModelArk Seed Multimodal MCP Server...'")
+
+    result = await seed_audio_generate(
+        SeedAudioGenerateInput(
+            text_prompt=(
+                "Welcome to the ModelArk Seed Multimodal MCP Server. "
+                "This is a live smoke test of the Seed Audio generation tool. "
+                "The generated audio is persisted as a durable artifact."
+            ),
+            persist=True,
+        ),
+        ctx,
+    )
+
+    print(f"\n  Provider: {result.provider}")
+    print(f"  Model: {result.model}")
+    print(f"  Duration: {result.duration_seconds}s")
+    print(f"  Billing duration: {result.billing_duration_seconds}s")
+    print(f"  Provider log ID: {result.provider_log_id}")
+
+    assert result.artifact is not None, "Expected an artifact"
+    artifact = result.artifact
+    print(f"\n  Artifact ID: {artifact.id}")
+    print(f"  Artifact URI: {artifact.uri}")
+    print(f"  Media type: {artifact.media_type}")
+    print(f"  MIME: {artifact.mime_type}")
+    print(f"  Bytes: {artifact.bytes}")
+
+    # Verify retrieval.
+    store = get_artifact_store()
+    stored = await store.get(artifact.id)
+    assert len(stored.data) > 0, "Audio artifact should not be empty"
+    print(f"  Verified: artifact retrieved from store ({len(stored.data)} bytes)")
+
+    # Save a copy.
+    output_path = ARTIFACTS_DIR / "smoke_test_audio.wav"
+    output_path.write_bytes(stored.data)
+    print(f"  Saved copy: {output_path}")
+
+    return {"audio": artifact.id}
+
+
+async def test_video_generation_with_image() -> dict[str, str]:
+    """Create a Seedance video task using a generated image as reference."""
+    header("Seedance: Video Generation (with generated image)")
+
+    # Step 1: Generate a reference image.
+    print("Step 1: Generating reference image...")
+    ctx = FakeContext()
+    image_result = await seedream_generate_image(
+        SeedreamGenerateInput(
+            prompt="A fluffy orange cat sitting on a garden path, photorealistic",
+            size="1024x1024",
+            response_format="b64_json",
+            persist=True,
+        ),
+        ctx,
+    )
+
+    assert len(image_result.artifacts) >= 1
+    image_artifact = image_result.artifacts[0]
+    print(f"  Reference image generated: {image_artifact.id}")
+
+    # Get the image data as base64 for Seedance input.
+    store = get_artifact_store()
+    stored_image = await store.get(image_artifact.id)
+    image_b64 = base64.b64encode(stored_image.data).decode()
+
+    # Step 2: Create the video task using the generated image.
+    print("\nStep 2: Creating Seedance video task...")
+    print(f"  Model: {get_settings().seedance_default_model}")
+    print("  Resolution: 480p")
+    print("  Duration: 5s")
+
+    create_result = await seedance_create_task(
+        SeedanceCreateTaskInput(
+            prompt="The cat walks forward through the garden, gentle movement, warm sunlight",
+            images=[
+                SeedanceImageInput(
+                    kind="base64",
+                    data=image_b64,
+                    mime_type="image/png",
+                    role="reference_image",
+                )
+            ],
+            resolution="480p",
+            duration=5,
+        ),
+        ctx,
+    )
+
+    print(f"\n  Task ID: {create_result.task_id}")
+    print(f"  Status: {create_result.status}")
+    print(f"  Poll after: {create_result.recommended_poll_after_ms}ms")
+
+    # Step 3: Poll until terminal.
+    print("\nStep 3: Polling for completion...")
+    task_id = create_result.task_id
+    max_wait_seconds = 300  # 5 minutes max
+    poll_interval = 10  # seconds
+    start_time = time.time()
+
+    final_result = None
+    while time.time() - start_time < max_wait_seconds:
+        elapsed = int(time.time() - start_time)
+        print(f"  [{elapsed}s] Polling task {task_id}...")
+
+        ctx = FakeContext()
+        result = await seedance_get_task(
+            SeedanceGetTaskInput(task_id=task_id, persist_output=True),
+            ctx,
+        )
+
+        print(f"  [{elapsed}s] Status: {result.status}")
+
+        if result.status in ("succeeded", "failed", "expired", "cancelled"):
+            final_result = result
+            break
+
+        await asyncio.sleep(poll_interval)
+
+    if final_result is None:
+        print(f"\n  TIMEOUT: Task did not complete within {max_wait_seconds}s")
+        print(f"  Task ID: {task_id} (check later with seedance_get_task)")
+        return {"video": "timeout", "task_id": task_id}
+
+    print(f"\n  Final status: {final_result.status}")
+    print(f"  Model: {final_result.model}")
+    print(f"  Created: {final_result.created_at}")
+    print(f"  Updated: {final_result.updated_at}")
+
+    if final_result.error:
+        print(f"  Error: {final_result.error}")
+
+    # If video wasn't persisted during polling, try once more explicitly
+    # with a fresh context (the cache may have been populated with None).
+    if not final_result.video and final_result.status == "succeeded":
+        print("\n  Video not persisted during polling — retrying with fresh context...")
+        # Clear the persistence cache for this task to force re-download.
+        from modelark_mcp.tools.seedance_get_task import _persistence_cache
+
+        _persistence_cache.pop(task_id, None)
+
+        retry_ctx = FakeContext()
+        final_result = await seedance_get_task(
+            SeedanceGetTaskInput(task_id=task_id, persist_output=True),
+            retry_ctx,
+        )
+        if retry_ctx.messages:
+            print(f"  Context messages: {retry_ctx.messages}")
+        if final_result.status != "succeeded":
+            print(f"  Retry status: {final_result.status}")
+
+    if final_result.video:
+        artifact = final_result.video
+        print(f"\n  Video artifact ID: {artifact.id}")
+        print(f"  Video artifact URI: {artifact.uri}")
+        print(f"  Media type: {artifact.media_type}")
+        print(f"  MIME: {artifact.mime_type}")
+        print(f"  Bytes: {artifact.bytes}")
+
+        # Verify retrieval.
+        stored = await store.get(artifact.id)
+        assert len(stored.data) > 0, "Video artifact should not be empty"
+        print(f"  Verified: artifact retrieved from store ({len(stored.data)} bytes)")
+
+        # Save a copy.
+        output_path = ARTIFACTS_DIR / "smoke_test_video.mp4"
+        output_path.write_bytes(stored.data)
+        print(f"  Saved copy: {output_path}")
+
+        return {"video": artifact.id, "task_id": task_id}
+
+    if final_result.last_frame:
+        artifact = final_result.last_frame
+        print(f"\n  Last frame artifact ID: {artifact.id}")
+        stored = await store.get(artifact.id)
+        output_path = ARTIFACTS_DIR / "smoke_test_last_frame.jpg"
+        output_path.write_bytes(stored.data)
+        print(f"  Saved copy: {output_path}")
+
+    return {"video": final_result.status, "task_id": task_id}
+
+
+async def verify_artifacts(artifact_ids: dict[str, str]) -> None:
+    """Verify all artifacts are retrievable from the store."""
+    header("Artifact Verification")
+
+    store = get_artifact_store()
+
+    for media_type, artifact_id in artifact_ids.items():
+        if artifact_id in ("skipped", "timeout") or artifact_id.startswith("failed"):
+            print(f"  {media_type}: SKIPPED ({artifact_id})")
+            continue
+
+        print(f"  {media_type}: Retrieving artifact {artifact_id}...")
+        try:
+            artifact = await store.get(artifact_id)
+            print(f"    Data: {len(artifact.data)} bytes")
+            print(f"    MIME: {artifact.mime_type}")
+            print(f"    Media type: {artifact.media_type}")
+            print("    PASS")
+        except Exception as exc:
+            print(f"    FAIL: {exc}")
+
+    # List all artifacts on disk.
+    print("\n  Artifacts on disk:")
+    if ARTIFACTS_DIR.exists():
+        for path in sorted(ARTIFACTS_DIR.rglob("*")):
+            if path.is_file() and not path.name.startswith("."):
+                size_kb = path.stat().st_size / 1024
+                print(f"    {path} ({size_kb:.1f} KB)")
+    else:
+        print("    (none)")
+
+
+async def main() -> int:
+    header("ModelArk Seed MCP — Live Smoke Test")
+    print(f"Timestamp: {datetime.now(UTC).isoformat()}")
+    print(f"Artifacts dir: {ARTIFACTS_DIR.resolve()}")
+
+    settings = get_settings()
+    print(f"ModelArk configured: {settings.has_modelark}")
+    print(f"Seed Audio configured: {settings.has_seed_audio}")
+    print(f"Seedream model: {settings.seedream_default_model}")
+    print(f"Seedance model: {settings.seedance_default_model}")
+
+    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    results: dict[str, str] = {}
+
+    # 1. Image generation
+    try:
+        results.update(await test_image_generation())
+    except Exception as exc:
+        print(f"\n  IMAGE FAILED: {exc}")
+        import traceback
+
+        traceback.print_exc()
+        results["image"] = "failed"
+
+    # 2. Audio generation
+    try:
+        results.update(await test_audio_generation())
+    except Exception as exc:
+        print(f"\n  AUDIO FAILED: {exc}")
+        import traceback
+
+        traceback.print_exc()
+        results["audio"] = "failed"
+
+    # 3. Video generation (uses the generated image as reference)
+    try:
+        results.update(await test_video_generation_with_image())
+    except Exception as exc:
+        print(f"\n  VIDEO FAILED: {exc}")
+        import traceback
+
+        traceback.print_exc()
+        results["video"] = "failed"
+
+    # 4. Verify all artifacts
+    await verify_artifacts(results)
+
+    # Summary
+    header("Summary")
+    for media_type, status in results.items():
+        print(f"  {media_type}: {status}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(asyncio.run(main()))
