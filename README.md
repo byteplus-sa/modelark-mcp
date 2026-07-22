@@ -1,36 +1,170 @@
 # ModelArk Seed Multimodal MCP Server
 
-A Python [Model Context Protocol](https://modelcontextprotocol.io) server built
-on [FastMCP](https://gofastmcp.com) that exposes BytePlus multimodal generation
-through a small, typed, safe tool surface.
+A Python [Model Context Protocol](https://modelcontextprotocol.io) server
+built on [FastMCP](https://gofastmcp.com) that exposes BytePlus multimodal
+generation through a typed, safe tool surface.
 
-## Capabilities
+## What It Does
 
-- **Seed Audio** — full-scene audio generation through Seed Speech.
-- **Seedream** — image generation and editing through ModelArk.
-- **Seedance** — asynchronous video generation and task management through
-  ModelArk.
-- **Durable artifacts** — generated media is persisted locally so MCP resources
-  remain usable after the provider URLs expire (2h for audio, 24h for
-  image/video).
-- **Transports** — local `stdio` by default, with protected Streamable HTTP for
-  remote deployment (both natively supported by FastMCP).
+The server provides **9 MCP tools** across three BytePlus products:
 
-Seedance and Seedream use the ModelArk data-plane host with Bearer
-authentication. Seed Audio uses the Seed Speech host with `X-Api-Key`. The
-server normalizes both behind one domain layer.
+| Product | Tools | Description |
+|---|---|---|
+| **Seed Audio** | `seed_audio_generate`, `seed_audio_generate_variations` | Full-scene audio generation through Seed Speech |
+| **Seedream** | `seedream_generate_image`, `seedream_generate_image_variations` | Image generation and editing through ModelArk |
+| **Seedance** | `seedance_create_task`, `seedance_create_task_variations`, `seedance_get_task`, `seedance_list_tasks`, `seedance_cancel_or_delete_task` | Async video generation and task management through ModelArk |
 
-## Status
+Key features:
 
-In planning. See [`plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md`](plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md)
-for the full design, verified API inventory, tool contracts, and implementation
-phases.
+- **Durable artifacts** — all generated media is persisted locally so MCP
+  resources remain usable after provider URLs expire (2h audio, 24h
+  image/video)
+- **Parallel variations** — generate N independent variations in a single
+  call with `asyncio.gather`, partial failures captured per variation
+- **Per-variation seeds** — Seedream supports reproducible generation with
+  `base_seed + index` deterministic seeds
+- **Typed inputs** — Pydantic models validate all inputs before spending
+  quota; unsupported combinations are rejected at the MCP layer
+- **Model capability registry** — logical model families map to
+  operator-configured model IDs; validates resolutions, formats, and
+  batch support per model
+- **Security** — SSRF URL policy, media MIME/size preflight, stderr-only
+  structured logging with redaction
+- **256 tests** — unit, contract, integration, and MCP conformance
+
+## Quick Start
+
+```bash
+# Clone the repository
+git clone <repo-url> modelark-mcp
+cd modelark-mcp
+
+# Install dependencies
+uv sync
+
+# Configure credentials
+cp .env.example .env
+# Edit .env and fill in your BytePlus API keys
+
+# Run the server
+make start
+
+# Or run the verification script to test your credentials
+uv run python scripts/verify_phase0.py
+```
+
+## Configuration
+
+Edit `.env` with your BytePlus credentials:
+
+```dotenv
+BYTEPLUS_MODELARK_API_KEY=your_modelark_key
+BYTEPLUS_SEED_AUDIO_API_KEY=your_seed_audio_key  # pragma: allowlist secret
+SEEDREAM_DEFAULT_MODEL=dola-seedream-5-0-pro-260628
+SEEDANCE_DEFAULT_MODEL=dreamina-seedance-2-0-260128
+```
+
+If a credential is absent, the server skips registering that product's
+tools. Both keys are required for all 9 tools to appear.
+
+See [Configuration](docs/configuration.md) for the full environment
+variable reference.
+
+## Using with MCP Clients
+
+The server runs as a `stdio` process. Configure it in your MCP client:
+
+### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "modelark-seed": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark_mcp"],
+      "env": {
+        "BYTEPLUS_MODELARK_API_KEY": "your_key"  # pragma: allowlist secret,
+        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_key"  # pragma: allowlist secret
+      }
+    }
+  }
+}
+```
+
+### Cursor, VS Code, MCP Inspector
+
+See the [Integration Guide](docs/integration-guide.md) for configuration
+snippets for Cursor IDE, VS Code MCP extension, and the MCP Inspector.
+
+## Available Make Targets
+
+```bash
+make help          # Show all targets
+make install       # Install dependencies from uv.lock
+make start         # Run the server over stdio
+make start-http    # Run the server over Streamable HTTP (localhost:3000)
+make dev           # Run in dev mode with auto-reload
+make test          # Run the test suite
+make lint          # Lint with ruff
+make typecheck     # Type-check with mypy
+make inspect       # Launch FastMCP inspector
+make check-env     # Validate environment configuration
+```
 
 ## Documentation
 
-- [`plans/`](plans/) — implementation plans for features.
-- [`specs/`](specs/) — future-looking specs and design docs.
-- [`docs/`](docs/) — project documentation (install, configure, deploy).
+| Document | Description |
+|---|---|
+| [Getting Started](docs/getting-started.md) | Installation, configuration, and first run |
+| [Configuration](docs/configuration.md) | Full environment variable reference |
+| [Integration Guide](docs/integration-guide.md) | MCP client setup (Claude, Cursor, VS Code, Inspector) |
+| [API Reference](docs/api-reference.md) | Complete tool schemas, inputs, outputs, and examples |
+| [Use Cases](docs/use-cases.md) | Common scenarios with example tool calls |
+| [Tools](docs/tools.md) | Tool reference with input/output tables |
+| [Transports](docs/transports.md) | stdio vs HTTP deployment |
+| [Troubleshooting](docs/troubleshooting.md) | Common errors and fixes |
 
-See [`AGENTS.md`](AGENTS.md) for the documentation standard that governs these
-directories.
+## Project Layout
+
+```text
+modelark-mcp/
+├── src/modelark_mcp/
+│   ├── server.py              # FastMCP instance, tool registration, resource template
+│   ├── __main__.py            # Entry point (truststore injection)
+│   ├── config/                # Pydantic Settings, model capability registry
+│   ├── domain/                # ArtifactRef, errors, media, models
+│   ├── providers/             # ModelArk + Seed Speech gateways and adapters
+│   ├── tools/                 # 9 tool handlers + parallel helpers + cost estimation
+│   ├── artifacts/             # Filesystem artifact store
+│   └── security/              # URL policy, media policy, auth context
+├── tests/
+│   ├── unit/                  # Model validators, URL policy, media policy, helpers
+│   ├── contract/              # Provider gateway + adapter contract tests
+│   └── integration/           # Tool handler + MCP conformance tests
+├── docs/                      # User and contributor documentation
+├── plans/                     # Implementation plans
+├── scripts/                   # Verification and smoke test scripts
+├── fastmcp.json               # Declarative server configuration
+├── Makefile                  # Task runner
+└── pyproject.toml             # Project metadata and dependencies
+```
+
+## Tech Stack
+
+- [Python 3.12+](https://www.python.org/) on [uv](https://docs.astral.sh/uv/)
+- [FastMCP v3](https://gofastmcp.com/) — MCP server framework
+- [httpx](https://www.python-httpx.org/) — async HTTP client
+- [Pydantic v2](https://docs.pydantic.dev/) — typed models and validation
+- [pydantic-settings](https://pydantic.dev/docs/validation/latest/concepts/pydantic_settings/) — environment configuration
+- [truststore](https://truststore.readthedocs.io/) — macOS system certificate injection
+- [respx](https://github.com/lundberg/respx) — HTTP mocking for contract tests
+
+## License
+
+See the project configuration for license details.
+
+## Status
+
+Fully implemented and live-verified against BytePlus APIs. All three
+products (Seed Audio, Seedream, Seedance) confirmed working with real
+credentials. 256 tests passing, lint clean, mypy strict clean.
