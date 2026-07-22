@@ -59,6 +59,7 @@ class SeedreamService:
         prompt: str,
         images: list[dict[str, Any]] | None = None,
         size: str | None = None,
+        seed: int | None = None,
         max_images: int | None = None,
         output_format: str | None = None,
         response_format: str | None = None,
@@ -72,7 +73,6 @@ class SeedreamService:
         """
         image_field: str | list[str] | None = None
         if images:
-            # Provider accepts a URL string, data URI string, or array of either.
             if len(images) == 1:
                 image_field = images[0].get("url") or images[0].get("data")
             else:
@@ -85,7 +85,7 @@ class SeedreamService:
         sequential = None
         sequential_options = None
         if max_images is not None and max_images > 1:
-            sequential = True
+            sequential = "auto"
             sequential_options = {"max_images": max_images}
 
         optimize_options = None
@@ -97,6 +97,7 @@ class SeedreamService:
             prompt=prompt,
             image=image_field,
             size=size,
+            seed=seed,
             sequential_image_generation=sequential,
             sequential_image_generation_options=sequential_options,
             stream=False,

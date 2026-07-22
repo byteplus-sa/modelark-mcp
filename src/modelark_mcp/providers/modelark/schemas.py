@@ -23,7 +23,8 @@ class SeedreamProviderRequest(BaseModel):
     prompt: str
     image: str | list[str] | None = None
     size: str | None = None
-    sequential_image_generation: bool | None = None
+    seed: int | None = None
+    sequential_image_generation: str | None = None
     sequential_image_generation_options: dict[str, Any] | None = None
     stream: bool = False
     output_format: str | None = None

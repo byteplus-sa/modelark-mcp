@@ -156,12 +156,24 @@ def register_tools() -> None:
         from modelark_mcp.tools.seed_audio_generate import (
             seed_audio_generate,
         )
+        from modelark_mcp.tools.seed_audio_generate_variations import (
+            TOOL_ANNOTATIONS as audio_var_annotations,
+        )
+        from modelark_mcp.tools.seed_audio_generate_variations import (
+            seed_audio_generate_variations,
+        )
 
         mcp.tool(
             name="seed_audio_generate",
             annotations={**audio_annotations},
         )(seed_audio_generate)
         log_info("tool_registered", tool="seed_audio_generate")
+
+        mcp.tool(
+            name="seed_audio_generate_variations",
+            annotations={**audio_var_annotations},
+        )(seed_audio_generate_variations)
+        log_info("tool_registered", tool="seed_audio_generate_variations")
 
     if settings.has_modelark:
         from modelark_mcp.tools.seedance_cancel_or_delete_task import (
@@ -175,6 +187,12 @@ def register_tools() -> None:
         )
         from modelark_mcp.tools.seedance_create_task import (
             seedance_create_task,
+        )
+        from modelark_mcp.tools.seedance_create_task_variations import (
+            TOOL_ANNOTATIONS as seedance_var_annotations,
+        )
+        from modelark_mcp.tools.seedance_create_task_variations import (
+            seedance_create_task_variations,
         )
         from modelark_mcp.tools.seedance_get_task import (
             TOOL_ANNOTATIONS as get_annotations,
@@ -194,6 +212,12 @@ def register_tools() -> None:
         from modelark_mcp.tools.seedream_generate_image import (
             seedream_generate_image,
         )
+        from modelark_mcp.tools.seedream_generate_image_variations import (
+            TOOL_ANNOTATIONS as seedream_var_annotations,
+        )
+        from modelark_mcp.tools.seedream_generate_image_variations import (
+            seedream_generate_image_variations,
+        )
 
         mcp.tool(
             name="seedream_generate_image",
@@ -202,10 +226,22 @@ def register_tools() -> None:
         log_info("tool_registered", tool="seedream_generate_image")
 
         mcp.tool(
+            name="seedream_generate_image_variations",
+            annotations={**seedream_var_annotations},
+        )(seedream_generate_image_variations)
+        log_info("tool_registered", tool="seedream_generate_image_variations")
+
+        mcp.tool(
             name="seedance_create_task",
             annotations={**create_annotations},
         )(seedance_create_task)
         log_info("tool_registered", tool="seedance_create_task")
+
+        mcp.tool(
+            name="seedance_create_task_variations",
+            annotations={**seedance_var_annotations},
+        )(seedance_create_task_variations)
+        log_info("tool_registered", tool="seedance_create_task_variations")
 
         mcp.tool(
             name="seedance_get_task",

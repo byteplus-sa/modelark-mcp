@@ -69,7 +69,7 @@ class TestSeedreamRequestBuilding:
             prompt="generate 3 variants",
             max_images=3,
         )
-        assert request.sequential_image_generation is True
+        assert request.sequential_image_generation == "auto"
         assert request.sequential_image_generation_options == {"max_images": 3}
 
     def test_single_image_does_not_set_sequential(self) -> None:

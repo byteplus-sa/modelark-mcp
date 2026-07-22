@@ -63,14 +63,17 @@ def no_creds_server(
 class TestToolDiscovery:
     """Verify all six tools are discoverable when credentials are set."""
 
-    async def test_all_six_tools_registered(self, configured_server: None) -> None:
+    async def test_all_tools_registered(self, configured_server: None) -> None:
         server = configured_server
         tools = await server.mcp.list_tools()
         tool_names = {t.name for t in tools}
         assert tool_names == {
             "seed_audio_generate",
+            "seed_audio_generate_variations",
             "seedream_generate_image",
+            "seedream_generate_image_variations",
             "seedance_create_task",
+            "seedance_create_task_variations",
             "seedance_get_task",
             "seedance_list_tasks",
             "seedance_cancel_or_delete_task",
