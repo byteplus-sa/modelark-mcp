@@ -208,6 +208,99 @@ class TestOutputSchemas:
         assert "task_id" in schema["properties"]
 
 
+class TestVariationToolAnnotations:
+    """Verify ToolAnnotations for the three variation tools."""
+
+    async def test_seedream_variations_annotations(self, configured_server: None) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "seedream_generate_image_variations")
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is False
+        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.openWorldHint is True
+
+    async def test_seed_audio_variations_annotations(self, configured_server: None) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "seed_audio_generate_variations")
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is False
+        assert tool.annotations.openWorldHint is True
+
+    async def test_seedance_variations_annotations(self, configured_server: None) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "seedance_create_task_variations")
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is False
+        assert tool.annotations.openWorldHint is True
+
+
+class TestVariationInputSchemas:
+    """Verify inputSchema is auto-generated for variation tools."""
+
+    async def test_seedream_variations_input_schema(self, configured_server: None) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "seedream_generate_image_variations")
+        schema = tool.parameters
+        assert schema is not None
+        input_props = schema["properties"]["input"]["properties"]
+        assert "prompt" in input_props
+        assert "variations" in input_props
+        assert "base_seed" in input_props
+
+    async def test_seed_audio_variations_input_schema(self, configured_server: None) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "seed_audio_generate_variations")
+        schema = tool.parameters
+        assert schema is not None
+        input_props = schema["properties"]["input"]["properties"]
+        assert "text_prompt" in input_props
+        assert "variations" in input_props
+
+    async def test_seedance_variations_input_schema(self, configured_server: None) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "seedance_create_task_variations")
+        schema = tool.parameters
+        assert schema is not None
+        input_props = schema["properties"]["input"]["properties"]
+        assert "variations" in input_props
+        assert "variation_prompts" in input_props
+
+
+class TestVariationOutputSchemas:
+    """Verify outputSchema is auto-generated for variation tools."""
+
+    async def test_seedream_variations_output_schema(self, configured_server: None) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "seedream_generate_image_variations")
+        schema = tool.output_schema
+        assert schema is not None
+        assert "summary" in schema["properties"]
+
+    async def test_seed_audio_variations_output_schema(self, configured_server: None) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "seed_audio_generate_variations")
+        schema = tool.output_schema
+        assert schema is not None
+        assert "summary" in schema["properties"]
+
+    async def test_seedance_variations_output_schema(self, configured_server: None) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "seedance_create_task_variations")
+        schema = tool.output_schema
+        assert schema is not None
+        assert "summary" in schema["properties"]
+        assert "recommended_poll_after_ms" in schema["properties"]
+
+
 class TestResourceTemplate:
     """Verify the seed-media artifact resource template is registered."""
 

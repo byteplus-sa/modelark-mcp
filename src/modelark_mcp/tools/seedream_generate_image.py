@@ -35,6 +35,9 @@ class SeedreamGenerateInput(BaseModel):
     images: list[MediaSource] | None = None
     model: str | None = None
     size: str | None = None
+    seed: int | None = Field(
+        None, ge=-1, le=2147483647, description="Random seed. -1 = random, 0+ = fixed."
+    )
     max_images: int | None = Field(None, ge=1, le=15)
     output_format: Literal["png", "jpeg"] | None = None
     response_format: Literal["url", "b64_json"] | None = None
@@ -108,6 +111,7 @@ async def seedream_generate_image(
         prompt=input.prompt,
         images=images_data,
         size=input.size,
+        seed=input.seed,
         max_images=input.max_images,
         output_format=input.output_format,
         response_format=input.response_format,

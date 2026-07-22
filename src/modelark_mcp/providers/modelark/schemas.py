@@ -88,7 +88,6 @@ class SeedanceCreateProviderRequest(BaseModel):
     resolution: str | None = None
     ratio: str | None = None
     duration: int | None = None
-    seed: int | None = None
     camera_fixed: bool | None = None
     watermark: bool | None = None
     generate_audio: bool | None = None

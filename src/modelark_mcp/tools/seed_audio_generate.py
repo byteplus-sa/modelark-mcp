@@ -143,6 +143,8 @@ async def seed_audio_generate(
     except ProviderError as exc:
         await ctx.error(f"Seed Audio generation failed: {exc.message}")
         raise
+    finally:
+        await service.close()
 
     await ctx.report_progress(progress=80, total=100)
 

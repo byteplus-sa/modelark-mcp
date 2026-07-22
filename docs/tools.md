@@ -168,3 +168,71 @@ cancellation of a running task.
 | `failed` | No | Yes |
 | `expired` | No | Yes |
 | `cancelled` | No | No |
+
+
+## Parallel Generation Tools
+
+The server also provides three parallel generation tools that generate
+multiple variations in a single call using `asyncio.gather`. Each variation
+runs independently — partial failures are captured per variation.
+
+### seedream_generate_image_variations
+
+Generate N independent image variations in parallel with distinct seeds.
+
+**Input:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `prompt` | string | No* | — | Base prompt for all variations |
+| `variations` | integer | No | 1 | Number of variations (1-10) |
+| `variation_prompts` | list[string] | No | — | Explicit prompts per variation |
+| `base_seed` | integer | No | — | Base seed. None=random. -1=client-random. N=deterministic (N+i) |
+| `images` | list[MediaSource] | No | — | Reference images |
+| `model` | string | No | — | Override configured model |
+| `size` | string | No | — | Image dimensions |
+| `output_format` | "png" \| "jpeg" | No | — | Output format |
+| `response_format` | "url" \| "b64_json" | No | — | Response format |
+| `watermark` | boolean | No | — | AIGC watermark |
+| `prompt_optimization` | "standard" \| "fast" | No | — | Optimization mode |
+| `persist` | boolean | No | true | Persist to artifact store |
+
+\* Either `prompt` or `variation_prompts` must be provided.
+
+**Output:** `VariationSummary` with `total`, `succeeded`, `failed`, and
+per-variation results (artifact or error).
+
+### seed_audio_generate_variations
+
+Generate N independent audio variations in parallel.
+
+**Input:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `text_prompt` | string | No* | — | Base prompt (1-3000 chars) |
+| `variations` | integer | No | 1 | Number of variations (1-5) |
+| `variation_prompts` | list[string] | No | — | Explicit prompts per variation |
+| `audio_references` | list[AudioReference] | No | — | Up to 3 audio references |
+| `image_reference` | MediaSource | No | — | Image reference (mutually exclusive with audio) |
+| `output` | AudioOutputOptions | No | — | Format, sample rate, etc. |
+| `watermark` | AudioWatermarkOptions | No | — | AIGC watermark |
+| `persist` | boolean | No | true | Persist to artifact store |
+
+\* Either `text_prompt` or `variation_prompts` must be provided.
+
+### seedance_create_task_variations
+
+Create N independent Seedance video tasks in parallel. Returns task IDs
+for async polling via `seedance_get_task`.
+
+**Input:** Inherits all fields from `seedance_create_task`, plus:
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `variations` | integer | No | 1 | Number of variations (1-5) |
+| `variation_prompts` | list[string] | No | — | Explicit prompts per variation |
+
+\* Either `prompt` or `variation_prompts` must be provided.
+
+**Output:** `VariationSummary` + `recommended_poll_after_ms`.

@@ -23,6 +23,7 @@ from modelark_mcp.domain.media import MediaSource
 from modelark_mcp.domain.models import VariationResult, VariationSummary
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedream import SeedreamService
+from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._parallel import gather_with_timeout, generate_seeds, resolve_prompts
 
 
@@ -97,6 +98,8 @@ async def seedream_generate_image_variations(
     await ctx.info(f"Starting {input.variations} parallel Seedream generations")
     await ctx.report_progress(progress=10, total=100)
 
+    log_cost_estimate(product="image", variations=input.variations)
+
     settings = get_settings()
     if not settings.has_modelark:
         raise ValueError("BYTEPLUS_MODELARK_API_KEY is not configured.")
@@ -125,71 +128,79 @@ async def seedream_generate_image_variations(
     timeout = settings.request_timeout_ms / 1000
 
     service = SeedreamService()
+    limiter = asyncio.Semaphore(5)
 
     async def _generate_single(idx: int) -> VariationResult:
-        try:
-            request = SeedreamService.build_request(
-                model=caps.model_id,
-                prompt=prompts[idx],
-                images=images_data,
-                size=input.size,
-                seed=seeds[idx],
-                output_format=input.output_format,
-                response_format=input.response_format,
-                watermark=input.watermark,
-                prompt_optimization=input.prompt_optimization,
-            )
+        async with limiter:
+            try:
+                request = SeedreamService.build_request(
+                    model=caps.model_id,
+                    prompt=prompts[idx],
+                    images=images_data,
+                    size=input.size,
+                    seed=seeds[idx],
+                    output_format=input.output_format,
+                    response_format=input.response_format,
+                    watermark=input.watermark,
+                    prompt_optimization=input.prompt_optimization,
+                )
 
-            response, request_id = await service.generate(request)
+                response, request_id = await service.generate(request)
 
-            artifact: ArtifactRef | None = None
-            source_expiry = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
-            mime = f"image/{input.output_format}" if input.output_format else "image/png"
+                artifact: ArtifactRef | None = None
+                source_expiry = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
+                mime = f"image/{input.output_format}" if input.output_format else "image/png"
 
-            if input.persist and response.data:
-                item = response.data[0]
-                if item.b64_json:
-                    artifact = await store.put_base64(
-                        data=item.b64_json,
-                        media_type="image",
-                        mime_type=mime,
-                        source_expires_at=source_expiry,
-                    )
-                elif item.url:
-                    artifact = await store.copy_from_trusted_url(
-                        url=item.url,
-                        media_type="image",
-                        mime_type=mime,
-                        source_expires_at=source_expiry,
-                    )
-            elif not input.persist and response.data:
-                item = response.data[0]
-                if item.url:
-                    artifact = ArtifactRef(
-                        id="provider-url",
-                        uri=item.url,
-                        media_type="image",
-                        mime_type=mime,
-                        created_at=datetime.now(UTC).isoformat(),
-                        source_expires_at=source_expiry,
-                    )
+                if input.persist and response.data:
+                    item = response.data[0]
+                    if item.b64_json:
+                        artifact = await store.put_base64(
+                            data=item.b64_json,
+                            media_type="image",
+                            mime_type=mime,
+                            source_expires_at=source_expiry,
+                        )
+                    elif item.url:
+                        artifact = await store.copy_from_trusted_url(
+                            url=item.url,
+                            media_type="image",
+                            mime_type=mime,
+                            source_expires_at=source_expiry,
+                        )
+                elif not input.persist and response.data:
+                    item = response.data[0]
+                    if item.url:
+                        artifact = ArtifactRef(
+                            id="provider-url",
+                            uri=item.url,
+                            media_type="image",
+                            mime_type=mime,
+                            created_at=datetime.now(UTC).isoformat(),
+                            source_expires_at=source_expiry,
+                        )
 
-            return VariationResult(
-                index=idx, seed=seeds[idx], artifact=artifact, request_id=request_id
-            )
-        except ProviderError as exc:
-            return VariationResult(
-                index=idx,
-                seed=seeds[idx],
-                error={"code": exc.code or "PROVIDER_ERROR", "message": exc.message},
-                request_id=exc.request_id,
-            )
-        except Exception as exc:
-            return VariationResult(
-                index=idx,
-                seed=seeds[idx],
-                error={"code": "UNEXPECTED_ERROR", "message": str(exc)},
-            )
+                return VariationResult(
+                    index=idx,
+                    seed=seeds[idx],
+                    artifact=artifact,
+                    request_id=request_id,
+                )
+            except ProviderError as exc:
+                return VariationResult(
+                    index=idx,
+                    seed=seeds[idx],
+                    error={
+                        "code": exc.code or "PROVIDER_ERROR",
+                        "message": exc.message,
+                    },
+                    request_id=exc.request_id,
+                )
+            except Exception as exc:
+                return VariationResult(
+                    index=idx,
+                    seed=seeds[idx],
+                    error={"code": "UNEXPECTED_ERROR", "message": str(exc)},
+                )
 
     coros = [_generate_single(i) for i in range(input.variations)]
 
@@ -205,7 +216,10 @@ async def seedream_generate_image_variations(
                 VariationResult(
                     index=i,
                     seed=seeds[i],
-                    error={"code": "TIMEOUT", "message": f"Variation {i} timed out"},
+                    error={
+                        "code": "TIMEOUT",
+                        "message": f"Variation {i} timed out",
+                    },
                 )
             )
         elif isinstance(result, Exception):
