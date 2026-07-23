@@ -146,17 +146,60 @@ failed, per-variation results with partial failure capture).
 
 Requires `BYTEPLUS_MODELARK_API_KEY`. Auth scope: `seedream:generate`.
 
+#### `seedream_edit_image`
+
+Interactive image editing with spatial precision. Supports point-based and
+bounding-box editing through structured coordinate inputs. At least one
+reference image and one coordinate (point or bbox) are required.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | `str` | Yes | 1–4000 characters. Natural-language edit instruction. |
+| `images` | `list[MediaSource]` | Yes | Reference images to edit (at least 1). |
+| `point` | `EditCoordinate` | No* | Point coordinate `{x, y}` (0–999). *Required if bbox not provided. |
+| `bbox` | `EditBbox` | No* | Bounding-box `{x1, y1, x2, y2}` (0–999). *Required if point not provided. |
+| All other image params | — | No | Same as `seedream_generate_image` |
+
+Returns `SeedreamEditOutput` with `artifacts: list[ArtifactRef]` and
+`usage: SeedreamUsage`.
+
+**Example — replace an object near a point:**
+
+```json
+{
+  "prompt": "Replace the object with a crown.",
+  "images": [{"kind": "url", "url": "https://example.com/photo.png"}],
+  "point": {"x": 520, "y": 460}
+}
+```
+
+**Example — replace a region with a bounding box:**
+
+```json
+{
+  "prompt": "Replace with a garden.",
+  "images": [{"kind": "url", "url": "https://example.com/photo.png"}],
+  "bbox": {"x1": 120, "y1": 180, "x2": 640, "y2": 760}
+}
+```
+
+Coordinates are normalized to 0–999 (top-left = `0,0`, bottom-right =
+`999,999`). Convert pixel coordinates: `normalized = round(pixel / dimension * 1000)`.
+
+---
+
 #### `seedream_generate_image`
 
-Generate or edit images. Supports text-to-image, reference-based editing, batch
-generation (Lite/4x models), seed-based reproducibility, and prompt
-optimization.
+Generate images from text prompts. Supports text-to-image, reference-based
+generation, batch generation (Lite/4x models), seed-based reproducibility, and
+prompt optimization. For interactive editing with spatial coordinates, prefer
+`seedream_edit_image`.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `prompt` | `str` | Yes | 1–4000 characters |
 | `images` | `list[MediaSource]` | No | Reference images for editing |
-| `model` | `str` | No | Model ID (default: `dola-seedream-5-0-pro-260628`) |
+| `model` | `str` | No | Model ID. Default: `dola-seedream-5-0-pro-260628` (Pro). Lite and 4x IDs are configured via `SEEDREAM_MODEL_BINDINGS`. |
 | `size` | `str` | No | e.g. `1024x1024` |
 | `seed` | `int` | No | -1 to 2147483647; -1 = client-randomized |
 | `max_images` | `int` | No | 1–15 (batch for Lite/4x models only) |
@@ -271,7 +314,7 @@ polling.
 | `images` | `list[SeedanceImageInput]` | No | Up to 9 images with roles: `first_frame`, `last_frame`, `reference_image` |
 | `videos` | `list[SeedanceVideoInput]` | No | Up to 3 videos with role: `reference_video` |
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 3 audios with role: `reference_audio` |
-| `model` | `str` | No | Default: `dreamina-seedance-2-0-260128` |
+| `model` | `str` | No | Model ID. Default: `dreamina-seedance-2-0-260128` (Standard). Fast and Mini IDs are configured via `SEEDANCE_MODEL_BINDINGS`. |
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` \| `"4k"` | No | |
 | `ratio` | `str` | No | Aspect ratio |
 | `duration` | `int` | No | -1 to 15 seconds |
@@ -434,19 +477,20 @@ Each server process maintains shared runtime services:
 ### Model Capability Registry
 
 The server validates inputs against known model capabilities before spending
-quota. Six model families:
+quota. Six model families, with these default model IDs:
 
-| Family | Model | Key Traits |
+| Family | Default Model ID | Key Traits |
 |---|---|---|
-| SEEDREAM_PRO | `dola-seedream-5-0-pro-260628` | 10 refs, no batch, PNG/JPEG |
-| SEEDREAM_LITE | (configured) | 14 refs, batch, streaming, PNG/JPEG |
-| SEEDREAM_4X | (configured) | 14 refs, batch, streaming, JPEG only |
-| SEEDANCE_2 | `dreamina-seedance-2-0-260128` | 9 imgs/3 vids/3 audios, 480p–4K |
-| SEEDANCE_2_FAST | (configured) | 480p, 720p only |
-| SEEDANCE_2_MINI | (configured) | 480p, 720p only |
+| **Seedream Pro** | `dola-seedream-5-0-pro-260628` | 10 refs, no batch, PNG/JPEG |
+| **Seedream Lite** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, PNG/JPEG |
+| **Seedream 4.x** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, JPEG only |
+| **Seedance 2 Standard** | `dreamina-seedance-2-0-260128` | 9 imgs / 3 vids / 3 audios, 480p–4K, 0–15s |
+| **Seedance 2 Fast** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
+| **Seedance 2 Mini** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
 
 Custom model IDs must be explicitly bound via `SEEDREAM_MODEL_BINDINGS` or
-`SEEDANCE_MODEL_BINDINGS` JSON.
+`SEEDANCE_MODEL_BINDINGS` JSON. When a client omits the `model` parameter, the
+default model for that product is used.
 
 ---
 
@@ -490,8 +534,12 @@ prompt. For variation tools, pass `base_seed` to get a deterministic sequence
 
 ### Image Editing
 
-Pass reference images via the `images` parameter to edit existing images. The
-prompt describes the desired change while the reference provides the base.
+For interactive, coordinate-based editing, use `seedream_edit_image` with
+structured `point` or `bbox` coordinates. The tool constructs the `<point>`
+and `<bbox>` markup automatically.
+
+For reference-based generation without spatial targeting, use
+`seedream_generate_image` with the `images` parameter.
 
 ---
 

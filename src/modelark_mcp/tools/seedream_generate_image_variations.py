@@ -54,7 +54,10 @@ class SeedreamVariationsInput(BaseModel):
     )
     model: str | None = Field(
         None,
-        description="Model ID to use (e.g. 'seedream-4.0', 'seedream-lite'). Defaults to the configured default model.",
+        description=(
+            "Model ID. Available: 'dola-seedream-5-0-pro-260628' (Pro, default, no batch, 10 refs, PNG/JPEG). "
+            "Lite and 4x model IDs are configured via SEEDREAM_MODEL_BINDINGS. Omit to use the default."
+        ),
     )
     size: str | None = Field(
         None,

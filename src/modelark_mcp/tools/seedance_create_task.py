@@ -91,7 +91,10 @@ class SeedanceCreateTaskInput(BaseModel):
     )
     model: str | None = Field(
         None,
-        description="Model ID to use (e.g. 'seedance-2.0'). Defaults to the configured default model.",
+        description=(
+            "Model ID. Available: 'dreamina-seedance-2-0-260128' (Standard, default, 480p-4K, 9 imgs/3 vids/3 audios). "
+            "Fast and Mini model IDs are configured via SEEDANCE_MODEL_BINDINGS. Omit to use the default."
+        ),
     )
     resolution: Literal["480p", "720p", "1080p", "4k"] | None = Field(
         None, description="Output video resolution. Must be supported by the selected model."

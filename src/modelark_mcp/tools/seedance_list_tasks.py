@@ -45,7 +45,13 @@ class SeedanceListTasksInput(BaseModel):
         None,
         description="Filter to specific task IDs. Non-owner users can only query their own tasks.",
     )
-    model: str | None = Field(None, description="Filter tasks by model ID (e.g. 'seedance-2.0').")
+    model: str | None = Field(
+        None,
+        description=(
+            "Filter tasks by model ID. Default available: 'dreamina-seedance-2-0-260128' (Standard). "
+            "Fast and Mini model IDs may also be configured via SEEDANCE_MODEL_BINDINGS."
+        ),
+    )
     service_tier: Literal["default", "flex"] | None = Field(
         None, description="Filter tasks by service tier: default or flex."
     )
