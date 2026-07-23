@@ -21,6 +21,10 @@ class TestMediaSource:
         assert src.kind == MediaSourceKind.base64
         assert src.data == "aGVsbG8="
 
+    def test_media_category_is_not_client_input(self) -> None:
+        schema = MediaSource.model_json_schema()
+        assert "media_category" not in schema["properties"]
+
     def test_url_source_missing_url_raises(self) -> None:
         with pytest.raises(ValidationError, match="url is required"):
             MediaSource(kind=MediaSourceKind.url)

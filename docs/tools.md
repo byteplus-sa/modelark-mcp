@@ -1,6 +1,6 @@
 # Tools Reference
 
-The server exposes six typed tools. Each accepts a Pydantic input model and
+The server exposes nine typed tools. Each accepts a Pydantic input model and
 returns a Pydantic output model as structured content. All tools accept a
 `ctx: Context` parameter for progress reporting and logging.
 

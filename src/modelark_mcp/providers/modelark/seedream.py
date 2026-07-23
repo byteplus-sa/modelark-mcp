@@ -43,6 +43,8 @@ class SeedreamService:
             raise ModelArkGateway.normalize_timeout("generate_image") from None
         except httpx.ConnectError as exc:
             raise ModelArkGateway.normalize_connection_error("generate_image", exc) from exc
+        except httpx.TransportError as exc:
+            raise ModelArkGateway.normalize_transport_error("generate_image", exc) from exc
 
         request_id = ModelArkGateway.extract_request_id(response)
 

@@ -12,16 +12,21 @@ from datetime import UTC
 from typing import Literal
 
 from fastmcp import Context
+from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import get_capability_registry
-from modelark_mcp.domain.artifacts import ArtifactRef
+from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.media import MediaSource
 from modelark_mcp.domain.models import SeedreamItemError, SeedreamUsage
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedream import SeedreamService
+from modelark_mcp.providers.retry import call_with_retry
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
+from modelark_mcp.tools._cost import log_cost_estimate
+from modelark_mcp.tools._errors import provider_error_result
 
 # ---------------------------------------------------------------------------
 # Input / Output models
@@ -31,7 +36,7 @@ from modelark_mcp.providers.modelark.seedream import SeedreamService
 class SeedreamGenerateInput(BaseModel):
     """Input model for ``seedream_generate_image``."""
 
-    prompt: str
+    prompt: str = Field(..., min_length=1, max_length=4000)
     images: list[MediaSource] | None = None
     model: str | None = None
     size: str | None = None
@@ -64,7 +69,7 @@ class SeedreamGenerateOutput(BaseModel):
 
 async def seedream_generate_image(
     input: SeedreamGenerateInput, ctx: Context
-) -> SeedreamGenerateOutput:
+) -> SeedreamGenerateOutput | ToolResult:
     """Generate or edit an image through ModelArk Seedream.
 
     Supports text-to-image and reference-based editing. The ``max_images``
@@ -121,12 +126,20 @@ async def seedream_generate_image(
 
     await ctx.report_progress(progress=50, total=100)
 
+    estimated_cost = log_cost_estimate(product="image", variations=input.max_images or 1)
+
     service = SeedreamService()
     try:
-        response, request_id = await service.generate(request)
+        async with billed_provider_slot(
+            ctx,
+            provider="modelark",
+            product="image",
+            estimated_cost_usd=estimated_cost,
+        ):
+            response, request_id = await call_with_retry(lambda: service.generate(request))
     except ProviderError as exc:
         await ctx.error(f"Seedream generation failed: {exc.message}")
-        raise
+        return provider_error_result(exc)
     finally:
         await service.close()
 
@@ -135,32 +148,30 @@ async def seedream_generate_image(
     # Persist artifacts.
     artifacts: list[ArtifactRef] = []
     if input.persist:
-        from modelark_mcp.server import get_artifact_store
-
-        store = get_artifact_store()
+        store = get_runtime(ctx).artifact_store
+        owner = get_principal(ctx)
         from datetime import datetime, timedelta
 
         source_expiry = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
 
         for item in response.data:
+            mime_type = f"image/{item.output_format or input.output_format or 'jpeg'}"
             if item.b64_json:
                 ref = await store.put_base64(
                     data=item.b64_json,
-                    media_type="image",
-                    mime_type=(
-                        f"image/{input.output_format}" if input.output_format else "image/png"
-                    ),
+                    media_type=MediaType.IMAGE,
+                    mime_type=mime_type,
                     source_expires_at=source_expiry,
+                    auth=owner,
                 )
                 artifacts.append(ref)
             elif item.url:
                 ref = await store.copy_from_trusted_url(
                     url=item.url,
-                    media_type="image",
-                    mime_type=(
-                        f"image/{input.output_format}" if input.output_format else "image/png"
-                    ),
+                    media_type=MediaType.IMAGE,
+                    mime_type=mime_type,
                     source_expires_at=source_expiry,
+                    auth=owner,
                 )
                 artifacts.append(ref)
     else:
@@ -174,8 +185,8 @@ async def seedream_generate_image(
                     ArtifactRef(
                         id="provider-url",
                         uri=item.url,
-                        media_type="image",
-                        mime_type=f"image/{input.output_format or 'png'}",
+                        media_type=MediaType.IMAGE,
+                        mime_type=f"image/{item.output_format or input.output_format or 'jpeg'}",
                         created_at=datetime.now(UTC).isoformat(),
                         source_expires_at=source_expiry,
                     )

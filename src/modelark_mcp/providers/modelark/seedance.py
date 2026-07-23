@@ -12,7 +12,11 @@ from typing import Any
 
 import httpx
 
-from modelark_mcp.domain.models import SeedanceTaskSummary, SeedanceTaskUsage
+from modelark_mcp.domain.models import (
+    SeedanceTaskStatus,
+    SeedanceTaskSummary,
+    SeedanceTaskUsage,
+)
 from modelark_mcp.providers.modelark.client import ModelArkGateway
 from modelark_mcp.providers.modelark.schemas import (
     SeedanceContentItem,
@@ -44,6 +48,8 @@ class SeedanceService:
             raise ModelArkGateway.normalize_timeout("create_task") from None
         except httpx.ConnectError as exc:
             raise ModelArkGateway.normalize_connection_error("create_task", exc) from exc
+        except httpx.TransportError as exc:
+            raise ModelArkGateway.normalize_transport_error("create_task", exc) from exc
 
         request_id = ModelArkGateway.extract_request_id(response)
 
@@ -65,6 +71,8 @@ class SeedanceService:
             raise ModelArkGateway.normalize_timeout("get_task") from None
         except httpx.ConnectError as exc:
             raise ModelArkGateway.normalize_connection_error("get_task", exc) from exc
+        except httpx.TransportError as exc:
+            raise ModelArkGateway.normalize_transport_error("get_task", exc) from exc
 
         request_id = ModelArkGateway.extract_request_id(response)
 
@@ -89,17 +97,17 @@ class SeedanceService:
         Returns ``(page, request_id)``.
         """
         params: dict[str, Any] = {
-            "page": page,
+            "page_num": page,
             "page_size": page_size,
         }
         if status:
-            params["status"] = status
+            params["filter.status"] = status
         if task_ids:
-            params["task_ids"] = task_ids
+            params["filter.task_ids"] = task_ids
         if model:
-            params["model"] = model
+            params["filter.model"] = model
         if service_tier:
-            params["service_tier"] = service_tier
+            params["filter.service_tier"] = service_tier
 
         try:
             response = await self._gateway.get("/contents/generations/tasks", params=params)
@@ -107,6 +115,8 @@ class SeedanceService:
             raise ModelArkGateway.normalize_timeout("list_tasks") from None
         except httpx.ConnectError as exc:
             raise ModelArkGateway.normalize_connection_error("list_tasks", exc) from exc
+        except httpx.TransportError as exc:
+            raise ModelArkGateway.normalize_transport_error("list_tasks", exc) from exc
 
         request_id = ModelArkGateway.extract_request_id(response)
 
@@ -127,6 +137,8 @@ class SeedanceService:
             raise ModelArkGateway.normalize_timeout("delete_task") from None
         except httpx.ConnectError as exc:
             raise ModelArkGateway.normalize_connection_error("delete_task", exc) from exc
+        except httpx.TransportError as exc:
+            raise ModelArkGateway.normalize_transport_error("delete_task", exc) from exc
 
         request_id = ModelArkGateway.extract_request_id(response)
 
@@ -231,7 +243,7 @@ class SeedanceService:
         return SeedanceTaskSummary(
             task_id=task.id,
             model=task.model,
-            status=task.status,
+            status=SeedanceTaskStatus(task.status),
             created_at=str(task.created_at or ""),
             updated_at=str(task.updated_at or ""),
         )

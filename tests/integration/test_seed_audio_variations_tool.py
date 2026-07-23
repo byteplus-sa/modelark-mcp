@@ -11,12 +11,12 @@ import pytest
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.providers.seed_speech.schemas import SeedAudioProviderResponse
 from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
-from modelark_mcp.test_utils import FakeContext
 from modelark_mcp.tools.seed_audio_generate_variations import (
     SeedAudioVariationsInput,
     SeedAudioVariationsOutput,
     seed_audio_generate_variations,
 )
+from tests.fixtures.fake_context import FakeContext
 
 
 def _patch_audio_by_prompt(
@@ -62,7 +62,7 @@ class TestSeedAudioVariationsTool:
             },
         )
 
-        with patch("modelark_mcp.server.get_artifact_store", return_value=temp_store):
+        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seed_audio_generate_variations(
                 SeedAudioVariationsInput(
                     text_prompt="hello",
@@ -101,7 +101,7 @@ class TestSeedAudioVariationsTool:
             },
         )
 
-        with patch("modelark_mcp.server.get_artifact_store", return_value=temp_store):
+        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seed_audio_generate_variations(
                 SeedAudioVariationsInput(
                     variation_prompts=["good", "bad", "good"],

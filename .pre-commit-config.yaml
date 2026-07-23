@@ -1,4 +1,13 @@
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
@@ -11,6 +20,22 @@ repos:
     rev: v0.15.22
     hooks:
       - id: ruff
-        args:
-          - --fix
       - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (uv)
+        entry: uv run mypy src
+        language: system
+        types: [python]
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: pip-audit
+        name: pip-audit (uv)
+        entry: uv run pip-audit --strict
+        language: system
+        types: [python]
+        pass_filenames: false

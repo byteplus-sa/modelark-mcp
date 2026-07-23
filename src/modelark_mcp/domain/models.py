@@ -6,21 +6,50 @@ models live alongside their tool handlers in ``tools/``.
 
 from __future__ import annotations
 
-from typing import Any
+from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from modelark_mcp.domain.artifacts import ArtifactRef
+
+
+class SeedanceTaskStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    CANCELLED = "cancelled"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    EXPIRED = "expired"
+
+
+class SubtitleUtterance(BaseModel):
+    """Utterance-level subtitle timing returned by Seed Audio."""
+
+    model_config = ConfigDict(extra="allow")
+
+    text: str = ""
+    start: float | None = None
+    end: float | None = None
+
+
+class SubtitleWord(BaseModel):
+    """Word-level subtitle timing returned by Seed Audio."""
+
+    model_config = ConfigDict(extra="allow")
+
+    text: str = ""
+    start: float | None = None
+    end: float | None = None
 
 
 class Subtitle(BaseModel):
     """Timestamped subtitle data for Seed Audio output."""
 
-    utterances: list[dict[str, Any]] = Field(
+    utterances: list[SubtitleUtterance] = Field(
         default_factory=list,
         description="Utterance-level subtitle entries with timestamps.",
     )
-    words: list[dict[str, Any]] = Field(
+    words: list[SubtitleWord] = Field(
         default_factory=list,
         description="Word-level subtitle entries with timestamps.",
     )
@@ -54,9 +83,40 @@ class SeedanceTaskSummary(BaseModel):
 
     task_id: str
     model: str
-    status: str
+    status: SeedanceTaskStatus
     created_at: str
     updated_at: str
+
+
+class VariationError(BaseModel):
+    """Machine-readable failure for one variation."""
+
+    code: str
+    message: str = ""
+    request_id: str | None = None
+    retryable: bool = False
+    ambiguous_completion: bool = False
+
+
+class SeedanceTaskError(BaseModel):
+    """Typed task failure returned by Seedance."""
+
+    code: str = ""
+    message: str = ""
+
+
+class SeedanceTaskSettings(BaseModel):
+    """Known Seedance settings, preserving provider extensions."""
+
+    model_config = ConfigDict(extra="allow")
+
+    resolution: str | None = None
+    ratio: str | None = None
+    duration: int | str | None = None
+    generate_audio: bool | None = None
+    return_last_frame: bool | None = None
+    service_tier: str | None = None
+    priority: int | None = None
 
 
 class VariationResult(BaseModel):
@@ -66,7 +126,7 @@ class VariationResult(BaseModel):
     seed: int | None = Field(None, description="Seed used (if applicable).")
     artifact: ArtifactRef | None = Field(None, description="Generated artifact (None if failed).")
     task_id: str | None = Field(None, description="Task ID for async results (Seedance only).")
-    error: dict[str, Any] | None = Field(None, description="Error if this variation failed.")
+    error: VariationError | None = Field(None, description="Error if this variation failed.")
     request_id: str | None = None
     provider_log_id: str | None = None
 

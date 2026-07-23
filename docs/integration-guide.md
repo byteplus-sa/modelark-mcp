@@ -16,9 +16,9 @@ subprocess and communicates over stdin/stdout. The entry point is
 `python -m modelark_mcp`, which injects `truststore` for macOS TLS
 certificate verification before starting the FastMCP server.
 
-**Always use `python -m modelark_mcp`** (not `fastmcp run`) in client
-configurations — this ensures `truststore` loads before any provider
-API calls.
+Use `python -m modelark_mcp` in client configurations so transport security
+settings are applied consistently. The server module also injects `truststore`
+before provider clients are created.
 
 ## Providing Credentials
 
@@ -168,9 +168,8 @@ The MCP Inspector provides a web UI for testing tools interactively.
 make inspect
 ```
 
-This launches `fastmcp inspect src/modelark_mcp/server.py:mcp`. Note:
-this path does not inject `truststore`, so it may fail on macOS for
-ModelArk TLS. If you hit SSL errors, use option 2.
+This launches `fastmcp inspect src/modelark_mcp/server.py:mcp`; the server
+module injects `truststore` before provider clients are created.
 
 **Option 2: npx inspector (recommended for macOS)**
 
@@ -182,8 +181,7 @@ npx @modelcontextprotocol/inspector \
   uv --directory /path/to/modelark-mcp run python -m modelark_mcp
 ```
 
-This injects `truststore` via the module entry point. The browser UI
-opens — select **STDIO** transport and click **Connect**.
+The browser UI opens—select **STDIO** transport and click **Connect**.
 
 **Option 3: HTTP transport**
 
@@ -199,9 +197,8 @@ Then connect the Inspector to `http://127.0.0.1:3000/mcp`.
 
 ### SSL Certificate Errors (macOS)
 
-If you see `CERTIFICATE_VERIFY_FAILED`, the server wasn't started with
-`truststore`. Always use `python -m modelark_mcp` (not `fastmcp run`)
-in client configurations.
+If you see `CERTIFICATE_VERIFY_FAILED`, confirm `truststore` is installed and
+start through `python -m modelark_mcp` so the complete entrypoint runs.
 
 ### "API key not configured" Error
 
@@ -244,5 +241,15 @@ Both keys are required for all 9 tools to appear.
 | `MCP_TRANSPORT` | No | `stdio` | `stdio` or `http` |
 | `MCP_HOST` | No | `127.0.0.1` | HTTP bind address |
 | `MCP_PORT` | No | `3000` | HTTP port |
+| `MCP_AUTH_MODE` | No | `local` | Set `jwt` for non-loopback HTTP |
+| `MCP_JWT_JWKS_URI` | For JWT | — | HTTPS JSON Web Key Set URL |
+| `MCP_JWT_ISSUER` | For JWT | — | Required token issuer |
+| `MCP_JWT_AUDIENCE` | For JWT | — | Required token audience |
+| `MCP_TENANT_CLAIM` | No | `tenant_id` | Tenant-isolation claim |
+| `MCP_ALLOWED_HOSTS` | For HTTP | loopback | Accepted Host headers |
+| `MCP_ALLOWED_ORIGINS` | For browser HTTP | — | Accepted browser origins |
 | `ARTIFACT_DIR` | No | `.artifacts` | Local artifact storage |
 | `ARTIFACT_TTL_SECONDS` | No | `604800` (7 days) | Artifact retention |
+
+See [Configuration](configuration.md) for model bindings, body limits,
+concurrency, and budget settings.

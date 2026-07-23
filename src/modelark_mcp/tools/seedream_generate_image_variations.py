@@ -8,33 +8,37 @@ variation — one bad variation does not fail the batch.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import get_capability_registry
-from modelark_mcp.domain.artifacts import ArtifactRef
+from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.media import MediaSource
-from modelark_mcp.domain.models import VariationResult, VariationSummary
+from modelark_mcp.domain.models import VariationError, VariationResult, VariationSummary
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedream import SeedreamService
-from modelark_mcp.tools._cost import log_cost_estimate
-from modelark_mcp.tools._parallel import gather_with_timeout, generate_seeds, resolve_prompts
+from modelark_mcp.providers.retry import call_with_retry
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
+from modelark_mcp.tools._cost import DEFAULT_MAX_CONCURRENT, estimate_cost, log_cost_estimate
+from modelark_mcp.tools._parallel import generate_seeds, resolve_prompts, run_variation_batch
 
 
 class SeedreamVariationsInput(BaseModel):
     """Input for parallel Seedream image generation."""
 
     prompt: str | None = Field(
-        None, description="Base prompt for all variations. Required if variation_prompts is None."
+        None,
+        min_length=1,
+        max_length=4000,
+        description="Base prompt for all variations. Required if variation_prompts is None.",
     )
     variations: int = Field(1, ge=1, le=10, description="Number of variations.")
-    variation_prompts: list[str] | None = Field(
+    variation_prompts: list[Annotated[str, Field(min_length=1, max_length=4000)]] | None = Field(
         None,
         description="Explicit prompts per variation. If provided, overrides prompt and must have `variations` entries.",
     )
@@ -118,9 +122,9 @@ async def seedream_generate_image_variations(
     seeds = generate_seeds(input.base_seed, input.variations)
     prompts = resolve_prompts(input.prompt, input.variation_prompts, input.variations)
 
-    from modelark_mcp.server import get_artifact_store
-
-    store = get_artifact_store()
+    runtime = get_runtime(ctx)
+    store = runtime.artifact_store
+    owner = get_principal(ctx)
 
     images_data: list[dict[str, Any]] | None = (
         [src.model_dump() for src in input.images] if input.images else None
@@ -128,129 +132,109 @@ async def seedream_generate_image_variations(
     timeout = settings.request_timeout_ms / 1000
 
     service = SeedreamService()
-    limiter = asyncio.Semaphore(5)
 
     async def _generate_single(idx: int) -> VariationResult:
-        async with limiter:
-            try:
-                request = SeedreamService.build_request(
-                    model=caps.model_id,
-                    prompt=prompts[idx],
-                    images=images_data,
-                    size=input.size,
-                    seed=seeds[idx],
-                    output_format=input.output_format,
-                    response_format=input.response_format,
-                    watermark=input.watermark,
-                    prompt_optimization=input.prompt_optimization,
-                )
+        try:
+            request = SeedreamService.build_request(
+                model=caps.model_id,
+                prompt=prompts[idx],
+                images=images_data,
+                size=input.size,
+                seed=seeds[idx],
+                output_format=input.output_format,
+                response_format=input.response_format,
+                watermark=input.watermark,
+                prompt_optimization=input.prompt_optimization,
+            )
 
-                response, request_id = await service.generate(request)
+            async with billed_provider_slot(
+                ctx,
+                provider="modelark",
+                product="image",
+                estimated_cost_usd=estimate_cost(product="image", variations=1),
+            ):
+                response, request_id = await call_with_retry(lambda: service.generate(request))
 
-                artifact: ArtifactRef | None = None
-                source_expiry = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
-                mime = f"image/{input.output_format}" if input.output_format else "image/png"
+            artifact: ArtifactRef | None = None
+            source_expiry = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
 
-                if input.persist and response.data:
-                    item = response.data[0]
-                    if item.b64_json:
-                        artifact = await store.put_base64(
-                            data=item.b64_json,
-                            media_type="image",
-                            mime_type=mime,
-                            source_expires_at=source_expiry,
-                        )
-                    elif item.url:
-                        artifact = await store.copy_from_trusted_url(
-                            url=item.url,
-                            media_type="image",
-                            mime_type=mime,
-                            source_expires_at=source_expiry,
-                        )
-                elif not input.persist and response.data:
-                    item = response.data[0]
-                    if item.url:
-                        artifact = ArtifactRef(
-                            id="provider-url",
-                            uri=item.url,
-                            media_type="image",
-                            mime_type=mime,
-                            created_at=datetime.now(UTC).isoformat(),
-                            source_expires_at=source_expiry,
-                        )
+            if input.persist and response.data:
+                item = response.data[0]
+                mime = f"image/{item.output_format or input.output_format or 'jpeg'}"
+                if item.b64_json:
+                    artifact = await store.put_base64(
+                        data=item.b64_json,
+                        media_type=MediaType.IMAGE,
+                        mime_type=mime,
+                        source_expires_at=source_expiry,
+                        auth=owner,
+                    )
+                elif item.url:
+                    artifact = await store.copy_from_trusted_url(
+                        url=item.url,
+                        media_type=MediaType.IMAGE,
+                        mime_type=mime,
+                        source_expires_at=source_expiry,
+                        auth=owner,
+                    )
+            elif not input.persist and response.data:
+                item = response.data[0]
+                if item.url:
+                    artifact = ArtifactRef(
+                        id="provider-url",
+                        uri=item.url,
+                        media_type=MediaType.IMAGE,
+                        mime_type=f"image/{item.output_format or input.output_format or 'jpeg'}",
+                        created_at=datetime.now(UTC).isoformat(),
+                        source_expires_at=source_expiry,
+                    )
 
-                return VariationResult(
-                    index=idx,
-                    seed=seeds[idx],
-                    artifact=artifact,
-                    request_id=request_id,
-                )
-            except ProviderError as exc:
-                return VariationResult(
-                    index=idx,
-                    seed=seeds[idx],
-                    error={
-                        "code": exc.code or "PROVIDER_ERROR",
-                        "message": exc.message,
-                    },
+            return VariationResult(
+                index=idx,
+                seed=seeds[idx],
+                artifact=artifact,
+                request_id=request_id,
+            )
+        except ProviderError as exc:
+            return VariationResult(
+                index=idx,
+                seed=seeds[idx],
+                error=VariationError(
+                    code=exc.code or "PROVIDER_ERROR",
+                    message=exc.message,
                     request_id=exc.request_id,
-                )
-            except Exception as exc:
-                return VariationResult(
-                    index=idx,
-                    seed=seeds[idx],
-                    error={"code": "UNEXPECTED_ERROR", "message": str(exc)},
-                )
-
-    coros = [_generate_single(i) for i in range(input.variations)]
+                    retryable=exc.retryable,
+                    ambiguous_completion=bool(exc.ambiguous_completion),
+                ),
+                request_id=exc.request_id,
+            )
+        except Exception as exc:
+            return VariationResult(
+                index=idx,
+                seed=seeds[idx],
+                error=VariationError(code="UNEXPECTED_ERROR", message=str(exc)),
+            )
 
     try:
-        results = await gather_with_timeout(coros, timeout=timeout)
+        summary = await run_variation_batch(
+            count=input.variations,
+            timeout=timeout,
+            factory=_generate_single,
+            max_concurrent=DEFAULT_MAX_CONCURRENT,
+        )
     finally:
         await service.close()
-
-    variation_results: list[VariationResult] = []
-    for i, result in enumerate(results):
-        if isinstance(result, asyncio.TimeoutError):
-            variation_results.append(
-                VariationResult(
-                    index=i,
-                    seed=seeds[i],
-                    error={
-                        "code": "TIMEOUT",
-                        "message": f"Variation {i} timed out",
-                    },
-                )
-            )
-        elif isinstance(result, Exception):
-            variation_results.append(
-                VariationResult(
-                    index=i,
-                    seed=seeds[i],
-                    error={"code": "GATHER_ERROR", "message": str(result)},
-                )
-            )
-        else:
-            variation_results.append(result)
-
-    succeeded = sum(1 for r in variation_results if r.artifact is not None or r.task_id is not None)
-    failed = input.variations - succeeded
 
     await ctx.report_progress(progress=100, total=100)
     log_info(
         "seedream_variations_complete",
-        total=input.variations,
-        succeeded=succeeded,
-        failed=failed,
+        total=summary.total,
+        succeeded=summary.succeeded,
+        failed=summary.failed,
     )
 
     return SeedreamVariationsOutput(
         model=caps.model_id,
         created_at=datetime.now(UTC).isoformat(),
-        summary=VariationSummary(
-            total=input.variations,
-            succeeded=succeeded,
-            failed=failed,
-            variations=variation_results,
-        ),
+        summary=summary,
     )

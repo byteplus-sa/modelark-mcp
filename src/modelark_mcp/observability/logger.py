@@ -4,11 +4,14 @@ Only MCP JSON-RPC messages go to stdout. All structured logs go to stderr,
 as required by the ``stdio`` transport specification.
 
 Never log: prompt text, full media URLs, Base64, subtitles, or credentials.
+Supports log level filtering via the ``MODELARK_LOG_LEVEL`` environment variable
+(default: INFO).
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from typing import Any
@@ -22,12 +25,42 @@ _REDACT_KEYS: frozenset[str] = frozenset(
         "token",
         "secret",
         "password",
-        "data",  # base64 media
-        "audio",  # base64 media
-        "image",  # base64 media
-        "video",
+        "b64_json",
+        "audio_data",
+        "image_data",
+        "base64",
+        "prompt",
+        "text_prompt",
+        "variation_prompts",
+        "subtitle",
+        "subtitles",
+        "url",
+        "media_url",
+        "audio_url",
+        "image_url",
+        "video_url",
     }
 )
+
+_LEVELS: dict[str, int] = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40}
+_CURRENT_LEVEL: int = _LEVELS.get(os.environ.get("MODELARK_LOG_LEVEL", "INFO").upper(), 20)
+
+
+def set_level(level: str) -> None:
+    """Set the minimum log level at runtime."""
+    global _CURRENT_LEVEL
+    normalized = level.upper()
+    if normalized not in _LEVELS:
+        raise ValueError(f"Invalid log level '{level}'. Allowed: {sorted(_LEVELS)}")
+    _CURRENT_LEVEL = _LEVELS[normalized]
+
+
+def get_level() -> str:
+    """Return the current log level name."""
+    for name, val in _LEVELS.items():
+        if val == _CURRENT_LEVEL:
+            return name
+    return "INFO"
 
 
 def _redact(value: Any) -> Any:
@@ -42,7 +75,10 @@ def _redact(value: Any) -> Any:
 
 
 def _emit(level: str, message: str, **fields: Any) -> None:
-    """Emit a structured JSON log line to stderr."""
+    """Emit a structured JSON log line to stderr if level is enabled."""
+    level_val = _LEVELS.get(level, 20)
+    if level_val < _CURRENT_LEVEL:
+        return
     record: dict[str, Any] = {
         "ts": datetime.now(UTC).isoformat(),
         "level": level,

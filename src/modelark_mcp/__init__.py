@@ -12,7 +12,7 @@ generation through a small, typed, safe tool surface:
 
 from __future__ import annotations
 
-from modelark_mcp.server import get_artifact_store, mcp
+from modelark_mcp.server import create_server, mcp
 
-__all__ = ["get_artifact_store", "mcp"]
+__all__ = ["create_server", "mcp"]
 __version__ = "0.1.0"

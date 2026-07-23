@@ -45,13 +45,16 @@ make start
 uv run python -m modelark_mcp
 ```
 
-### Streamable HTTP (for remote deployment)
+### Streamable HTTP (loopback development)
 
 ```bash
 make start-http
 # or
 MCP_TRANSPORT=http MCP_PORT=3000 uv run python -m modelark_mcp
 ```
+
+Non-loopback HTTP is fail-closed and requires JWT issuer, audience, JWKS,
+Host, and Origin configuration. See [Transports](transports.md).
 
 ### Dev mode (with auto-reload)
 

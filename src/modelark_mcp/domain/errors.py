@@ -40,6 +40,11 @@ class NormalizedProviderError(BaseModel):
         default=None,
         description="True if a mutation timed out after dispatch — the billable operation may have succeeded.",
     )
+    retry_after_seconds: float | None = Field(
+        default=None,
+        ge=0,
+        description="Provider-requested retry delay when supplied by Retry-After.",
+    )
 
 
 class ProviderError(Exception):

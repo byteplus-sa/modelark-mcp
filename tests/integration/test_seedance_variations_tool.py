@@ -8,13 +8,13 @@ import pytest
 
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.providers.modelark.seedance import SeedanceService
-from modelark_mcp.test_utils import FakeContext
 from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
 from modelark_mcp.tools.seedance_create_task_variations import (
     SeedanceVariationsInput,
     SeedanceVariationsOutput,
     seedance_create_task_variations,
 )
+from tests.fixtures.fake_context import FakeContext
 
 
 def _patch_seedance_by_prompt(
@@ -64,7 +64,7 @@ class TestSeedanceVariationsTool:
             SeedanceVariationsInput(
                 variation_prompts=["a cat", "a dog", "a bird"],
                 variations=3,
-                videos=[SeedanceVideoInput(url="https://cdn.example.com/v.mp4")],
+                videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             ),
             fake_ctx,
         )
@@ -105,7 +105,7 @@ class TestSeedanceVariationsTool:
             SeedanceVariationsInput(
                 variation_prompts=["good", "bad", "good"],
                 variations=3,
-                videos=[SeedanceVideoInput(url="https://cdn.example.com/v.mp4")],
+                videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             ),
             fake_ctx,
         )
@@ -121,7 +121,7 @@ class TestSeedanceVariationsTool:
         with pytest.raises(ValidationError, match="Either prompt or variation_prompts"):
             SeedanceVariationsInput(
                 variations=2,
-                videos=[SeedanceVideoInput(url="https://cdn.example.com/v.mp4")],
+                videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             )
 
     async def test_no_media_raises(self) -> None:
@@ -137,7 +137,7 @@ class TestSeedanceVariationsTool:
             SeedanceVariationsInput(
                 prompt="test",
                 variations=6,
-                videos=[SeedanceVideoInput(url="https://cdn.example.com/v.mp4")],
+                videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             )
 
     async def test_inherited_validators_fire(self) -> None:
@@ -145,6 +145,6 @@ class TestSeedanceVariationsTool:
         from pydantic import ValidationError
 
         # Too many reference videos
-        videos = [SeedanceVideoInput(url=f"https://cdn.example.com/v{i}.mp4") for i in range(4)]
+        videos = [SeedanceVideoInput(url=f"https://example.com/v{i}.mp4") for i in range(4)]
         with pytest.raises(ValidationError, match="Too many reference videos"):
             SeedanceVariationsInput(prompt="test", variations=1, videos=videos)

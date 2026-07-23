@@ -128,8 +128,8 @@ class TestSeedSpeechGatewayErrors:
         response = await gateway.post("/api/v3/tts/create", {})
         error = SeedSpeechGateway.normalize_error(response, "generate_audio")
         assert error.http_status == 429
-        # Seed Audio treats only 5xx as retryable per the plan.
-        assert not error.retryable
+        # Rate limits are safely retryable and may carry Retry-After.
+        assert error.retryable
 
     @respx.mock
     async def test_500_server_error(self, gateway: SeedSpeechGateway) -> None:

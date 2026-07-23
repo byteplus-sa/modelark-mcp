@@ -9,11 +9,17 @@ can retrieve media long after the provider URL expires (2h for audio,
 
 from __future__ import annotations
 
-from typing import Literal
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-MediaType = Literal["image", "audio", "video"]
+
+class MediaType(StrEnum):
+    """Logical generated-media categories."""
+
+    IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
 
 
 class ArtifactRef(BaseModel):

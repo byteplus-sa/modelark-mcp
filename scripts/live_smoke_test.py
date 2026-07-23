@@ -22,14 +22,20 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import truststore
 
 truststore.inject_into_ssl()
 
+from _smoke_context import SmokeContext, require_tool_success  # noqa: E402
+
 from modelark_mcp.config.env import get_settings  # noqa: E402
-from modelark_mcp.server import get_artifact_store  # noqa: E402
-from modelark_mcp.test_utils import FakeContext  # noqa: E402
+from modelark_mcp.runtime import (  # noqa: E402
+    RuntimeServices,
+    close_runtime_services,
+    create_runtime_services,
+)
 from modelark_mcp.tools.seed_audio_generate import (  # noqa: E402
     SeedAudioGenerateInput,
     seed_audio_generate,
@@ -48,6 +54,9 @@ from modelark_mcp.tools.seedream_generate_image import (  # noqa: E402
     seedream_generate_image,
 )
 
+if TYPE_CHECKING:
+    from modelark_mcp.artifacts.store import ArtifactStore
+
 ARTIFACTS_DIR = Path(".artifacts")
 
 
@@ -57,23 +66,23 @@ def header(title: str) -> None:
     print(f"{'=' * 60}\n")
 
 
-async def test_image_generation() -> dict[str, str]:
+async def test_image_generation(ctx: SmokeContext, store: ArtifactStore) -> dict[str, str]:
     """Generate an image via seedream_generate_image and verify the artifact."""
     header("Seedream: Image Generation")
-    ctx = FakeContext()
-
     print("Generating image: 'A serene mountain landscape at sunset, digital art'...")
     print(f"  Model: {get_settings().seedream_default_model}")
     print("  Size: 1024x1024")
 
-    result = await seedream_generate_image(
-        SeedreamGenerateInput(
-            prompt="A serene mountain landscape at sunset, digital art",
-            size="1024x1024",
-            response_format="url",
-            persist=True,
-        ),
-        ctx,
+    result = require_tool_success(
+        await seedream_generate_image(
+            SeedreamGenerateInput(
+                prompt="A serene mountain landscape at sunset, digital art",
+                size="1024x1024",
+                response_format="url",
+                persist=True,
+            ),
+            ctx,
+        )
     )
 
     print(f"\n  Provider: {result.provider}")
@@ -93,7 +102,6 @@ async def test_image_generation() -> dict[str, str]:
     print(f"  SHA-256: {artifact.sha256}")
 
     # Verify the artifact is retrievable from the store.
-    store = get_artifact_store()
     stored = await store.get(artifact.id)
     assert len(stored.data) > 0, "Artifact data should not be empty"
     print(f"  Verified: artifact retrieved from store ({len(stored.data)} bytes)")
@@ -107,23 +115,23 @@ async def test_image_generation() -> dict[str, str]:
     return {"image": artifact.id}
 
 
-async def test_audio_generation() -> dict[str, str]:
+async def test_audio_generation(ctx: SmokeContext, store: ArtifactStore) -> dict[str, str]:
     """Generate audio via seed_audio_generate and verify the artifact."""
     header("Seed Audio: Audio Generation")
-    ctx = FakeContext()
-
     print("Generating audio: 'Welcome to the ModelArk Seed Multimodal MCP Server...'")
 
-    result = await seed_audio_generate(
-        SeedAudioGenerateInput(
-            text_prompt=(
-                "Welcome to the ModelArk Seed Multimodal MCP Server. "
-                "This is a live smoke test of the Seed Audio generation tool. "
-                "The generated audio is persisted as a durable artifact."
+    result = require_tool_success(
+        await seed_audio_generate(
+            SeedAudioGenerateInput(
+                text_prompt=(
+                    "Welcome to the ModelArk Seed Multimodal MCP Server. "
+                    "This is a live smoke test of the Seed Audio generation tool. "
+                    "The generated audio is persisted as a durable artifact."
+                ),
+                persist=True,
             ),
-            persist=True,
-        ),
-        ctx,
+            ctx,
+        )
     )
 
     print(f"\n  Provider: {result.provider}")
@@ -141,7 +149,6 @@ async def test_audio_generation() -> dict[str, str]:
     print(f"  Bytes: {artifact.bytes}")
 
     # Verify retrieval.
-    store = get_artifact_store()
     stored = await store.get(artifact.id)
     assert len(stored.data) > 0, "Audio artifact should not be empty"
     print(f"  Verified: artifact retrieved from store ({len(stored.data)} bytes)")
@@ -154,21 +161,25 @@ async def test_audio_generation() -> dict[str, str]:
     return {"audio": artifact.id}
 
 
-async def test_video_generation_with_image() -> dict[str, str]:
+async def test_video_generation_with_image(
+    ctx: SmokeContext,
+    runtime: RuntimeServices,
+) -> dict[str, str]:
     """Create a Seedance video task using a generated image as reference."""
     header("Seedance: Video Generation (with generated image)")
 
     # Step 1: Generate a reference image.
     print("Step 1: Generating reference image...")
-    ctx = FakeContext()
-    image_result = await seedream_generate_image(
-        SeedreamGenerateInput(
-            prompt="A fluffy orange cat sitting on a garden path, photorealistic",
-            size="1024x1024",
-            response_format="b64_json",
-            persist=True,
-        ),
-        ctx,
+    image_result = require_tool_success(
+        await seedream_generate_image(
+            SeedreamGenerateInput(
+                prompt="A fluffy orange cat sitting on a garden path, photorealistic",
+                size="1024x1024",
+                response_format="b64_json",
+                persist=True,
+            ),
+            ctx,
+        )
     )
 
     assert len(image_result.artifacts) >= 1
@@ -176,7 +187,7 @@ async def test_video_generation_with_image() -> dict[str, str]:
     print(f"  Reference image generated: {image_artifact.id}")
 
     # Get the image data as base64 for Seedance input.
-    store = get_artifact_store()
+    store = runtime.artifact_store
     stored_image = await store.get(image_artifact.id)
     image_b64 = base64.b64encode(stored_image.data).decode()
 
@@ -186,21 +197,23 @@ async def test_video_generation_with_image() -> dict[str, str]:
     print("  Resolution: 480p")
     print("  Duration: 5s")
 
-    create_result = await seedance_create_task(
-        SeedanceCreateTaskInput(
-            prompt="The cat walks forward through the garden, gentle movement, warm sunlight",
-            images=[
-                SeedanceImageInput(
-                    kind="base64",
-                    data=image_b64,
-                    mime_type="image/png",
-                    role="reference_image",
-                )
-            ],
-            resolution="480p",
-            duration=5,
-        ),
-        ctx,
+    create_result = require_tool_success(
+        await seedance_create_task(
+            SeedanceCreateTaskInput(
+                prompt="The cat walks forward through the garden, gentle movement, warm sunlight",
+                images=[
+                    SeedanceImageInput(
+                        kind="base64",
+                        data=image_b64,
+                        mime_type="image/png",
+                        role="reference_image",
+                    )
+                ],
+                resolution="480p",
+                duration=5,
+            ),
+            ctx,
+        )
     )
 
     print(f"\n  Task ID: {create_result.task_id}")
@@ -219,10 +232,11 @@ async def test_video_generation_with_image() -> dict[str, str]:
         elapsed = int(time.time() - start_time)
         print(f"  [{elapsed}s] Polling task {task_id}...")
 
-        ctx = FakeContext()
-        result = await seedance_get_task(
-            SeedanceGetTaskInput(task_id=task_id, persist_output=True),
-            ctx,
+        result = require_tool_success(
+            await seedance_get_task(
+                SeedanceGetTaskInput(task_id=task_id, persist_output=True),
+                ctx,
+            )
         )
 
         print(f"  [{elapsed}s] Status: {result.status}")
@@ -236,7 +250,7 @@ async def test_video_generation_with_image() -> dict[str, str]:
     if final_result is None:
         print(f"\n  TIMEOUT: Task did not complete within {max_wait_seconds}s")
         print(f"  Task ID: {task_id} (check later with seedance_get_task)")
-        return {"video": "timeout", "task_id": task_id}
+        return {"video": "timeout"}
 
     print(f"\n  Final status: {final_result.status}")
     print(f"  Model: {final_result.model}")
@@ -250,15 +264,15 @@ async def test_video_generation_with_image() -> dict[str, str]:
     # with a fresh context (the cache may have been populated with None).
     if not final_result.video and final_result.status == "succeeded":
         print("\n  Video not persisted during polling — retrying with fresh context...")
-        # Clear the persistence cache for this task to force re-download.
-        from modelark_mcp.tools.seedance_get_task import _persistence_cache
+        # Clear the runtime-owned cache for this task to force re-download.
+        runtime.persistence_cache.pop(task_id, None)
 
-        _persistence_cache.pop(task_id, None)
-
-        retry_ctx = FakeContext()
-        final_result = await seedance_get_task(
-            SeedanceGetTaskInput(task_id=task_id, persist_output=True),
-            retry_ctx,
+        retry_ctx = SmokeContext(lifespan_context={"runtime": runtime})
+        final_result = require_tool_success(
+            await seedance_get_task(
+                SeedanceGetTaskInput(task_id=task_id, persist_output=True),
+                retry_ctx,
+            )
         )
         if retry_ctx.messages:
             print(f"  Context messages: {retry_ctx.messages}")
@@ -283,7 +297,7 @@ async def test_video_generation_with_image() -> dict[str, str]:
         output_path.write_bytes(stored.data)
         print(f"  Saved copy: {output_path}")
 
-        return {"video": artifact.id, "task_id": task_id}
+        return {"video": artifact.id}
 
     if final_result.last_frame:
         artifact = final_result.last_frame
@@ -293,14 +307,13 @@ async def test_video_generation_with_image() -> dict[str, str]:
         output_path.write_bytes(stored.data)
         print(f"  Saved copy: {output_path}")
 
-    return {"video": final_result.status, "task_id": task_id}
+    return {"video": final_result.status}
 
 
-async def verify_artifacts(artifact_ids: dict[str, str]) -> None:
-    """Verify all artifacts are retrievable from the store."""
+async def verify_artifacts(artifact_ids: dict[str, str], store: ArtifactStore) -> bool:
+    """Verify all expected artifacts are retrievable from the store."""
     header("Artifact Verification")
-
-    store = get_artifact_store()
+    all_verified = True
 
     for media_type, artifact_id in artifact_ids.items():
         if artifact_id in ("skipped", "timeout") or artifact_id.startswith("failed"):
@@ -316,6 +329,7 @@ async def verify_artifacts(artifact_ids: dict[str, str]) -> None:
             print("    PASS")
         except Exception as exc:
             print(f"    FAIL: {exc}")
+            all_verified = False
 
     # List all artifacts on disk.
     print("\n  Artifacts on disk:")
@@ -326,6 +340,8 @@ async def verify_artifacts(artifact_ids: dict[str, str]) -> None:
                 print(f"    {path} ({size_kb:.1f} KB)")
     else:
         print("    (none)")
+
+    return all_verified
 
 
 async def main() -> int:
@@ -340,48 +356,61 @@ async def main() -> int:
     print(f"Seedance model: {settings.seedance_default_model}")
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    runtime = await create_runtime_services(settings)
+    ctx = SmokeContext(lifespan_context={"runtime": runtime})
 
     results: dict[str, str] = {}
-
-    # 1. Image generation
     try:
-        results.update(await test_image_generation())
-    except Exception as exc:
-        print(f"\n  IMAGE FAILED: {exc}")
-        import traceback
+        # 1. Image generation
+        try:
+            results.update(await test_image_generation(ctx, runtime.artifact_store))
+        except Exception as exc:
+            print(f"\n  IMAGE FAILED: {exc}")
+            import traceback
 
-        traceback.print_exc()
-        results["image"] = "failed"
+            traceback.print_exc()
+            results["image"] = "failed"
 
-    # 2. Audio generation
-    try:
-        results.update(await test_audio_generation())
-    except Exception as exc:
-        print(f"\n  AUDIO FAILED: {exc}")
-        import traceback
+        # 2. Audio generation
+        try:
+            results.update(await test_audio_generation(ctx, runtime.artifact_store))
+        except Exception as exc:
+            print(f"\n  AUDIO FAILED: {exc}")
+            import traceback
 
-        traceback.print_exc()
-        results["audio"] = "failed"
+            traceback.print_exc()
+            results["audio"] = "failed"
 
-    # 3. Video generation (uses the generated image as reference)
-    try:
-        results.update(await test_video_generation_with_image())
-    except Exception as exc:
-        print(f"\n  VIDEO FAILED: {exc}")
-        import traceback
+        # 3. Video generation (uses the generated image as reference)
+        try:
+            results.update(await test_video_generation_with_image(ctx, runtime))
+        except Exception as exc:
+            print(f"\n  VIDEO FAILED: {exc}")
+            import traceback
 
-        traceback.print_exc()
-        results["video"] = "failed"
+            traceback.print_exc()
+            results["video"] = "failed"
 
-    # 4. Verify all artifacts
-    await verify_artifacts(results)
+        # 4. Verify all artifacts
+        artifacts_verified = await verify_artifacts(results, runtime.artifact_store)
+    finally:
+        await close_runtime_services(runtime)
 
     # Summary
     header("Summary")
     for media_type, status in results.items():
         print(f"  {media_type}: {status}")
 
-    return 0
+    expected_media = {"image", "audio", "video"}
+    successful = (
+        artifacts_verified
+        and set(results) == expected_media
+        and all(
+            status not in {"failed", "timeout", "cancelled", "expired"}
+            for status in results.values()
+        )
+    )
+    return 0 if successful else 1
 
 
 if __name__ == "__main__":

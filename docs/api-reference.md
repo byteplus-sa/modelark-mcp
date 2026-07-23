@@ -630,3 +630,16 @@ Returns persisted media by artifact ID with the correct MIME type.
 ### seed-health://status
 
 Returns server health and configuration status as plain text.
+
+## Operational HTTP endpoints
+
+When Streamable HTTP is enabled, the ASGI application also exposes:
+
+| Path | Purpose |
+|---|---|
+| `/health` | Process liveness |
+| `/ready` | Runtime, SQLite state, and artifact-directory readiness |
+| `/metrics` | Prometheus metrics exposition |
+
+These are operational endpoints rather than MCP resources. Protect their
+network reachability at the ingress or reverse-proxy layer.

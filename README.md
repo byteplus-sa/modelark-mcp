@@ -28,9 +28,12 @@ Key features:
 - **Model capability registry** — logical model families map to
   operator-configured model IDs; validates resolutions, formats, and
   batch support per model
-- **Security** — SSRF URL policy, media MIME/size preflight, stderr-only
-  structured logging with redaction
-- **256 tests** — unit, contract, integration, and MCP conformance
+- **Security** — DNS-pinned SSRF-safe downloads, tenant/principal ownership,
+  scoped JWT auth for network HTTP, Host/Origin protection, and body limits
+- **Runtime controls** — shared provider/principal concurrency, daily budget
+  reservations, safe retries, task ownership, readiness, metrics, and tracing
+- **459 offline tests** — unit, contract, integration, HTTP security, E2E, and
+  MCP conformance with 88.08% branch coverage
 
 ## Quick Start
 
@@ -83,8 +86,8 @@ The server runs as a `stdio` process. Configure it in your MCP client:
       "command": "uv",
       "args": ["--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark_mcp"],
       "env": {
-        "BYTEPLUS_MODELARK_API_KEY": "your_key"  # pragma: allowlist secret,
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_key"  # pragma: allowlist secret
+        "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
+        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
       }
     }
   }
@@ -122,6 +125,7 @@ make check-env     # Validate environment configuration
 | [Use Cases](docs/use-cases.md) | Common scenarios with example tool calls |
 | [Tools](docs/tools.md) | Tool reference with input/output tables |
 | [Transports](docs/transports.md) | stdio vs HTTP deployment |
+| [Deployment](docs/deployment.md) | Container, Kubernetes, and remote HTTP deployment |
 | [Troubleshooting](docs/troubleshooting.md) | Common errors and fixes |
 
 ## Project Layout
@@ -129,18 +133,21 @@ make check-env     # Validate environment configuration
 ```text
 modelark-mcp/
 ├── src/modelark_mcp/
-│   ├── server.py              # FastMCP instance, tool registration, resource template
+│   ├── server.py              # Deterministic FastMCP factory and registration
 │   ├── __main__.py            # Entry point (truststore injection)
+│   ├── runtime.py             # Lifespan-owned stores, limits, budgets, ownership
 │   ├── config/                # Pydantic Settings, model capability registry
 │   ├── domain/                # ArtifactRef, errors, media, models
 │   ├── providers/             # ModelArk + Seed Speech gateways and adapters
 │   ├── tools/                 # 9 tool handlers + parallel helpers + cost estimation
-│   ├── artifacts/             # Filesystem artifact store
-│   └── security/              # URL policy, media policy, auth context
+│   ├── artifacts/             # Tenant-aware filesystem artifact store
+│   ├── observability/         # Structured logging and Prometheus metrics
+│   └── security/              # JWT, URL/media policy, safe downloader, HTTP limits
 ├── tests/
 │   ├── unit/                  # Model validators, URL policy, media policy, helpers
 │   ├── contract/              # Provider gateway + adapter contract tests
-│   └── integration/           # Tool handler + MCP conformance tests
+│   ├── integration/           # Tool handler, HTTP security, MCP conformance
+│   └── e2e/                   # In-process FastMCP client tests
 ├── docs/                      # User and contributor documentation
 ├── plans/                     # Implementation plans
 ├── scripts/                   # Verification and smoke test scripts
@@ -156,6 +163,9 @@ modelark-mcp/
 - [httpx](https://www.python-httpx.org/) — async HTTP client
 - [Pydantic v2](https://docs.pydantic.dev/) — typed models and validation
 - [pydantic-settings](https://pydantic.dev/docs/validation/latest/concepts/pydantic_settings/) — environment configuration
+- [Starlette](https://www.starlette.io/) — HTTP middleware, body limits, and responses
+- [prometheus-client](https://github.com/prometheus/client_python) — `/metrics` and Prometheus exposition
+- [cachetools](https://github.com/tkem/cachetools) — TTL caching for provider responses and principal limits
 - [truststore](https://truststore.readthedocs.io/) — macOS system certificate injection
 - [respx](https://github.com/lundberg/respx) — HTTP mocking for contract tests
 
@@ -165,6 +175,8 @@ See the project configuration for license details.
 
 ## Status
 
-Fully implemented and live-verified against BytePlus APIs. All three
-products (Seed Audio, Seedream, Seedance) confirmed working with real
-credentials. 256 tests passing, lint clean, mypy strict clean.
+All three provider surfaces and both transports are implemented. The local
+release gate passes 459 offline tests at 88.08% branch coverage, Ruff formatting
+and lint, strict mypy, Bandit/secret scans, and package build. Dependency audit
+and container health are enforced by CI. Remote HTTP requires JWT configuration
+and is intentionally fail-closed.

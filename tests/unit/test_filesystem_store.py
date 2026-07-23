@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import base64
+import uuid
 from typing import TYPE_CHECKING
 
 import pytest
 
 from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
+from modelark_mcp.security.auth_context import AuthContext
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,8 +50,79 @@ class TestFilesystemArtifactStore:
         assert ref.sha256 == expected
 
     async def test_get_nonexistent_raises(self, store: FilesystemArtifactStore) -> None:
+        # Use a valid UUID format that doesn't exist
+        fake_id = str(uuid.uuid4())
         with pytest.raises(FileNotFoundError):
-            await store.get("nonexistent-id")
+            await store.get(fake_id)
+
+    @pytest.mark.parametrize(
+        "artifact_id",
+        ["../escape", "-" * 36, str(uuid.uuid1()), str(uuid.uuid4()).upper()],
+    )
+    async def test_get_rejects_noncanonical_uuid4(
+        self,
+        store: FilesystemArtifactStore,
+        artifact_id: str,
+    ) -> None:
+        with pytest.raises(ValueError, match="Invalid artifact ID"):
+            await store.get(artifact_id)
+
+    async def test_storage_revalidates_mime(self, store: FilesystemArtifactStore) -> None:
+        data = base64.b64encode(b"not-an-image").decode()
+        with pytest.raises(ValueError, match="Image MIME type"):
+            await store.put_base64(
+                data=data,
+                media_type="image",
+                mime_type="text/html",
+            )
+
+    async def test_get_rejects_cross_principal_access(self, store: FilesystemArtifactStore) -> None:
+        owner = AuthContext(principal_id="alice", tenant_id="tenant-a")
+        ref = await store.put_base64(
+            data=base64.b64encode(b"owned-image").decode(),
+            media_type="image",
+            mime_type="image/png",
+            auth=owner,
+        )
+
+        with pytest.raises(PermissionError, match="not owned"):
+            await store.get(
+                ref.id,
+                auth=AuthContext(principal_id="bob", tenant_id="tenant-a"),
+            )
+
+    async def test_get_rejects_cross_tenant_access(self, store: FilesystemArtifactStore) -> None:
+        owner = AuthContext(principal_id="alice", tenant_id="tenant-a")
+        ref = await store.put_base64(
+            data=base64.b64encode(b"owned-image").decode(),
+            media_type="image",
+            mime_type="image/png",
+            auth=owner,
+        )
+
+        with pytest.raises(PermissionError, match="not owned"):
+            await store.get(
+                ref.id,
+                auth=AuthContext(principal_id="alice", tenant_id="tenant-b"),
+            )
+
+    async def test_legacy_metadata_is_local_only(self, store: FilesystemArtifactStore) -> None:
+        ref = await store.put_base64(
+            data=base64.b64encode(b"legacy-image").decode(),
+            media_type="image",
+            mime_type="image/png",
+        )
+        metadata_path = store._metadata_path(ref.id)
+        metadata_path.write_text(ref.model_dump_json())
+
+        local_artifact = await store.get(ref.id, auth=AuthContext())
+        assert local_artifact.data == b"legacy-image"
+
+        with pytest.raises(PermissionError, match="not owned"):
+            await store.get(
+                ref.id,
+                auth=AuthContext(principal_id="remote", tenant_id="tenant-a"),
+            )
 
     async def test_delete_expired_returns_zero(self, store: FilesystemArtifactStore) -> None:
         from datetime import UTC, datetime

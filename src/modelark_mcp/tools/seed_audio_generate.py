@@ -10,17 +10,23 @@ from __future__ import annotations
 
 from datetime import UTC
 from typing import Literal
+from uuid import uuid4
 
 from fastmcp import Context
+from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
-from modelark_mcp.domain.artifacts import ArtifactRef
+from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.media import AudioReference, MediaSource
 from modelark_mcp.domain.models import Subtitle
 from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
+from modelark_mcp.tools._cost import log_cost_estimate
+from modelark_mcp.tools._errors import provider_error_result
 
 # ---------------------------------------------------------------------------
 # Input / Output models
@@ -76,7 +82,7 @@ class SeedAudioGenerateOutput(BaseModel):
     billing_duration_seconds: float
     artifact: ArtifactRef
     subtitle: Subtitle | None = None
-    request_id: str
+    request_id: str | None = None
     provider_log_id: str | None = None
 
 
@@ -87,7 +93,7 @@ class SeedAudioGenerateOutput(BaseModel):
 
 async def seed_audio_generate(
     input: SeedAudioGenerateInput, ctx: Context
-) -> SeedAudioGenerateOutput:
+) -> SeedAudioGenerateOutput | ToolResult:
     """Generate full-scene audio through Seed Speech.
 
     Accepts a text prompt (up to 3,000 characters) and optional audio or
@@ -138,11 +144,22 @@ async def seed_audio_generate(
 
     await ctx.report_progress(progress=50, total=100)
 
+    estimated_cost = log_cost_estimate(product="audio", variations=1, duration_seconds=15.0)
+    client_request_id = str(uuid4())
+
     try:
-        response, log_id = await service.generate(request)
+        async with billed_provider_slot(
+            ctx,
+            provider="seed-speech",
+            product="audio",
+            estimated_cost_usd=estimated_cost,
+        ):
+            response, log_id = await call_with_retry(
+                lambda: service.generate(request, request_id=client_request_id)
+            )
     except ProviderError as exc:
         await ctx.error(f"Seed Audio generation failed: {exc.message}")
-        raise
+        return provider_error_result(exc)
     finally:
         await service.close()
 
@@ -151,14 +168,13 @@ async def seed_audio_generate(
     # Persist the audio output.
     artifact: ArtifactRef
     if input.persist and response.audio:
-        from modelark_mcp.server import get_artifact_store
-
-        store = get_artifact_store()
+        store = get_runtime(ctx).artifact_store
         artifact = await store.put_base64(
             data=response.audio,
-            media_type="audio",
+            media_type=MediaType.AUDIO,
             mime_type="audio/wav",
             source_expires_at=None,  # 2-hour expiry, but we don't have exact timestamp
+            auth=get_principal(ctx),
         )
     elif response.url:
         # If we only have a URL (no Base64), return a reference to the
@@ -169,7 +185,7 @@ async def seed_audio_generate(
         artifact = ArtifactRef(
             id="provider-url",
             uri=response.url,
-            media_type="audio",
+            media_type=MediaType.AUDIO,
             mime_type="audio/wav",
             created_at=datetime.now(UTC).isoformat(),
             source_expires_at=expiry,
@@ -190,7 +206,7 @@ async def seed_audio_generate(
         billing_duration_seconds=response.original_duration or 0.0,
         artifact=artifact,
         subtitle=SeedAudioService.extract_subtitle(response),
-        request_id="",  # X-Api-Request-Id is set on request, not response
+        request_id=client_request_id,
         provider_log_id=log_id,
     )
 

@@ -51,21 +51,22 @@ start: ## Run the server over stdio
 	$(FASTMCP) run $(ENTRY)
 
 start-http: ## Run the server over Streamable HTTP (localhost:3000)
-	$(FASTMCP) run $(ENTRY) --transport http --host 127.0.0.1 --port 3000
+	MCP_TRANSPORT=http MCP_HOST=127.0.0.1 MCP_PORT=3000 $(UV) run python -m modelark_mcp
 
 # --- Quality gates ---------------------------------------------------------
 
-test: ## Run the test suite (pytest)
-	$(UV) run pytest
+test: ## Run the offline test suite with coverage enforcement
+	$(UV) run pytest --cov=modelark_mcp --cov-report=term-missing
 
 test-watch: ## Run tests in watch mode
 	$(UV) run pytest-watch
 
 lint: ## Lint with ruff
-	$(UV) run ruff check src tests
+	$(UV) run ruff check src tests scripts
+	$(UV) run ruff format --check src tests scripts
 
 format: ## Format code with ruff
-	$(UV) run ruff format src tests
+	$(UV) run ruff format src tests scripts
 
 typecheck: ## Type-check with mypy
 	$(UV) run mypy src

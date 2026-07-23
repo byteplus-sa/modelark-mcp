@@ -6,12 +6,15 @@ so tool handlers can be tested end-to-end without real credentials or network.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 
-from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
-from modelark_mcp.test_utils import FakeContext
+from modelark_mcp.artifacts.store import ArtifactStore
+from modelark_mcp.runtime import RuntimeServices, close_runtime_services, create_runtime_services
+from tests.fixtures.fake_context import FakeContext
 
 
 @pytest.fixture
@@ -33,29 +36,26 @@ def test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     refresh_capability_registry()
 
-    # Reset the artifact store singleton.
-    import modelark_mcp.server as server_mod
-
-    server_mod._artifact_store = None
-
     yield
 
     get_settings.cache_clear()
     refresh_capability_registry()
-    server_mod._artifact_store = None
 
 
 @pytest.fixture
-def fake_ctx() -> FakeContext:
-    from modelark_mcp.test_utils import FakeContext
+async def fake_ctx(test_env: None) -> AsyncIterator[FakeContext]:
+    from modelark_mcp.config.env import get_settings
+    from tests.fixtures.fake_context import FakeContext
 
-    return FakeContext()
+    runtime = await create_runtime_services(get_settings())
+    try:
+        yield FakeContext(lifespan_context={"runtime": runtime})
+    finally:
+        await close_runtime_services(runtime)
 
 
 @pytest.fixture
-def temp_store(test_env: None, tmp_path: Path) -> FilesystemArtifactStore:
+def temp_store(fake_ctx: FakeContext) -> ArtifactStore:
     """Return a temp filesystem artifact store."""
-    return FilesystemArtifactStore(
-        artifact_dir=str(tmp_path / ".artifacts"),
-        ttl_seconds=3600,
-    )
+    runtime = cast("RuntimeServices", fake_ctx.lifespan_context["runtime"])
+    return runtime.artifact_store

@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from modelark_mcp.domain.models import Subtitle
+from modelark_mcp.domain.models import Subtitle, SubtitleUtterance, SubtitleWord
 from modelark_mcp.providers.seed_speech.client import SeedSpeechGateway
 from modelark_mcp.providers.seed_speech.schemas import (
     SeedAudioProviderRequest,
@@ -46,6 +46,8 @@ class SeedAudioService:
             raise SeedSpeechGateway.normalize_timeout("generate_audio") from None
         except httpx.ConnectError as exc:
             raise SeedSpeechGateway.normalize_connection_error("generate_audio", exc) from exc
+        except httpx.TransportError as exc:
+            raise SeedSpeechGateway.normalize_transport_error("generate_audio", exc) from exc
 
         log_id = SeedSpeechGateway.extract_log_id(response)
 
@@ -123,8 +125,10 @@ class SeedAudioService:
         if response.subtitle is None:
             return None
         return Subtitle(
-            utterances=response.subtitle.utterances,
-            words=response.subtitle.words,
+            utterances=[
+                SubtitleUtterance.model_validate(item) for item in response.subtitle.utterances
+            ],
+            words=[SubtitleWord.model_validate(item) for item in response.subtitle.words],
         )
 
     async def close(self) -> None:

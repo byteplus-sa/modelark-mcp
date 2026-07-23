@@ -41,7 +41,7 @@ class TestVariationResult:
             error={"code": "TIMEOUT", "message": "timed out"},
         )
         assert r.error is not None
-        assert r.error["code"] == "TIMEOUT"
+        assert r.error.code == "TIMEOUT"
 
 
 class TestVariationSummary:

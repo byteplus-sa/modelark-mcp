@@ -6,22 +6,24 @@ support seeds, so variations rely on the stochastic nature of the model.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from uuid import uuid4
 
 from fastmcp import Context
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
-from modelark_mcp.domain.artifacts import ArtifactRef
+from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.media import AudioReference, MediaSource
-from modelark_mcp.domain.models import VariationResult, VariationSummary
+from modelark_mcp.domain.models import VariationError, VariationResult, VariationSummary
 from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
-from modelark_mcp.tools._cost import log_cost_estimate
-from modelark_mcp.tools._parallel import gather_with_timeout, resolve_prompts
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
+from modelark_mcp.tools._cost import DEFAULT_MAX_CONCURRENT, estimate_cost, log_cost_estimate
+from modelark_mcp.tools._parallel import resolve_prompts, run_variation_batch
 from modelark_mcp.tools.seed_audio_generate import AudioOutputOptions, AudioWatermarkOptions
 
 
@@ -96,9 +98,9 @@ async def seed_audio_generate_variations(
 
     prompts = resolve_prompts(input.text_prompt, input.variation_prompts, input.variations)
 
-    from modelark_mcp.server import get_artifact_store
-
-    store = get_artifact_store()
+    runtime = get_runtime(ctx)
+    store = runtime.artifact_store
+    owner = get_principal(ctx)
 
     audio_refs_data: list[dict[str, Any]] | None = (
         [ref.model_dump() for ref in input.audio_references] if input.audio_references else None
@@ -116,110 +118,95 @@ async def seed_audio_generate_variations(
 
     timeout = settings.request_timeout_ms / 1000
     service = SeedAudioService()
-    limiter = asyncio.Semaphore(5)
 
     async def _generate_single(idx: int) -> VariationResult:
-        async with limiter:
-            try:
-                references = SeedAudioService.build_references(
-                    audio_refs=audio_refs_data,
-                    image_ref=image_ref_data,
+        try:
+            client_request_id = str(uuid4())
+            references = SeedAudioService.build_references(
+                audio_refs=audio_refs_data,
+                image_ref=image_ref_data,
+            )
+
+            request = SeedAudioService.build_request(
+                text_prompt=prompts[idx],
+                references=references if references else None,
+                output=output_dict,
+                watermark=watermark_dict,
+            )
+
+            async with billed_provider_slot(
+                ctx,
+                provider="seed-speech",
+                product="audio",
+                estimated_cost_usd=estimate_cost(
+                    product="audio", variations=1, duration_seconds=15.0
+                ),
+            ):
+                response, log_id = await call_with_retry(
+                    lambda: service.generate(request, request_id=client_request_id)
                 )
 
-                request = SeedAudioService.build_request(
-                    text_prompt=prompts[idx],
-                    references=references if references else None,
-                    output=output_dict,
-                    watermark=watermark_dict,
+            artifact: ArtifactRef | None = None
+            source_expiry = (datetime.now(UTC) + timedelta(hours=2)).isoformat()
+
+            if input.persist and response.audio:
+                artifact = await store.put_base64(
+                    data=response.audio,
+                    media_type=MediaType.AUDIO,
+                    mime_type="audio/wav",
+                    source_expires_at=source_expiry,
+                    auth=owner,
+                )
+            elif response.url:
+                artifact = ArtifactRef(
+                    id="provider-url",
+                    uri=response.url,
+                    media_type=MediaType.AUDIO,
+                    mime_type="audio/wav",
+                    created_at=datetime.now(UTC).isoformat(),
+                    source_expires_at=source_expiry,
                 )
 
-                response, log_id = await service.generate(request)
-
-                artifact: ArtifactRef | None = None
-                source_expiry = (datetime.now(UTC) + timedelta(hours=2)).isoformat()
-
-                if input.persist and response.audio:
-                    artifact = await store.put_base64(
-                        data=response.audio,
-                        media_type="audio",
-                        mime_type="audio/wav",
-                        source_expires_at=source_expiry,
-                    )
-                elif response.url:
-                    artifact = ArtifactRef(
-                        id="provider-url",
-                        uri=response.url,
-                        media_type="audio",
-                        mime_type="audio/wav",
-                        created_at=datetime.now(UTC).isoformat(),
-                        source_expires_at=source_expiry,
-                    )
-
-                return VariationResult(
-                    index=idx,
-                    artifact=artifact,
-                    provider_log_id=log_id,
-                )
-            except ProviderError as exc:
-                return VariationResult(
-                    index=idx,
-                    error={
-                        "code": exc.code or "PROVIDER_ERROR",
-                        "message": exc.message,
-                    },
+            return VariationResult(
+                index=idx,
+                artifact=artifact,
+                request_id=client_request_id,
+                provider_log_id=log_id,
+            )
+        except ProviderError as exc:
+            return VariationResult(
+                index=idx,
+                error=VariationError(
+                    code=exc.code or "PROVIDER_ERROR",
+                    message=exc.message,
                     request_id=exc.request_id,
-                )
-            except Exception as exc:
-                return VariationResult(
-                    index=idx,
-                    error={"code": "UNEXPECTED_ERROR", "message": str(exc)},
-                )
-
-    coros = [_generate_single(i) for i in range(input.variations)]
+                    retryable=exc.retryable,
+                    ambiguous_completion=bool(exc.ambiguous_completion),
+                ),
+                request_id=exc.request_id,
+            )
+        except Exception as exc:
+            return VariationResult(
+                index=idx,
+                error=VariationError(code="UNEXPECTED_ERROR", message=str(exc)),
+            )
 
     try:
-        results = await gather_with_timeout(coros, timeout=timeout)
+        summary = await run_variation_batch(
+            count=input.variations,
+            timeout=timeout,
+            factory=_generate_single,
+            max_concurrent=DEFAULT_MAX_CONCURRENT,
+        )
     finally:
         await service.close()
-
-    variation_results: list[VariationResult] = []
-    for i, result in enumerate(results):
-        if isinstance(result, asyncio.TimeoutError):
-            variation_results.append(
-                VariationResult(
-                    index=i,
-                    error={
-                        "code": "TIMEOUT",
-                        "message": f"Variation {i} timed out",
-                    },
-                )
-            )
-        elif isinstance(result, Exception):
-            variation_results.append(
-                VariationResult(
-                    index=i,
-                    error={"code": "GATHER_ERROR", "message": str(result)},
-                )
-            )
-        else:
-            variation_results.append(result)
-
-    succeeded = sum(1 for r in variation_results if r.artifact is not None or r.task_id is not None)
-    failed = input.variations - succeeded
 
     await ctx.report_progress(progress=100, total=100)
     log_info(
         "seed_audio_variations_complete",
-        total=input.variations,
-        succeeded=succeeded,
-        failed=failed,
+        total=summary.total,
+        succeeded=summary.succeeded,
+        failed=summary.failed,
     )
 
-    return SeedAudioVariationsOutput(
-        summary=VariationSummary(
-            total=input.variations,
-            succeeded=succeeded,
-            failed=failed,
-            variations=variation_results,
-        )
-    )
+    return SeedAudioVariationsOutput(summary=summary)

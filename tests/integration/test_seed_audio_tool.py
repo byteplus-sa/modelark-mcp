@@ -11,15 +11,16 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from fastmcp.tools import ToolResult
 
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
-from modelark_mcp.test_utils import FakeContext
 from modelark_mcp.tools.seed_audio_generate import (
     SeedAudioGenerateInput,
     SeedAudioGenerateOutput,
     seed_audio_generate,
 )
+from tests.fixtures.fake_context import FakeContext
 
 SPEECH_BASE = "https://voice.test.example.com"
 
@@ -62,11 +63,11 @@ class TestSeedAudioGenerateTool:
                 "audio": audio_b64,
                 "duration": 2.5,
                 "original_duration": 3.0,
-                "url": "https://cdn.example.com/audio.wav",
+                "url": "https://example.com/audio.wav",
             },
         )
 
-        with patch("modelark_mcp.server.get_artifact_store", return_value=temp_store):
+        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seed_audio_generate(
                 SeedAudioGenerateInput(text_prompt="Hello world"), fake_ctx
             )
@@ -101,18 +102,18 @@ class TestSeedAudioGenerateTool:
                 "audio": None,
                 "duration": 1.5,
                 "original_duration": 2.0,
-                "url": "https://cdn.example.com/audio.wav",
+                "url": "https://example.com/audio.wav",
             },
         )
 
-        with patch("modelark_mcp.server.get_artifact_store", return_value=temp_store):
+        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seed_audio_generate(
                 SeedAudioGenerateInput(text_prompt="Hello", persist=True), fake_ctx
             )
 
         # No base64 audio → falls back to provider URL ref.
         assert result.artifact.id == "provider-url"
-        assert result.artifact.uri == "https://cdn.example.com/audio.wav"
+        assert result.artifact.uri == "https://example.com/audio.wav"
 
     async def test_progress_reporting(
         self,
@@ -127,7 +128,7 @@ class TestSeedAudioGenerateTool:
             {"code": 0, "audio": audio_b64, "duration": 1.0, "original_duration": 1.0},
         )
 
-        with patch("modelark_mcp.server.get_artifact_store", return_value=temp_store):
+        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             await seed_audio_generate(SeedAudioGenerateInput(text_prompt="Hi"), fake_ctx)
 
         # Should have reported progress at 10, 30, 50, 80, 100.
@@ -165,7 +166,7 @@ class TestSeedAudioGenerateTool:
 
         monkeypatch.setattr(SeedAudioService, "generate", mock_generate)
 
-        with pytest.raises(ProviderError) as exc_info:
-            await seed_audio_generate(SeedAudioGenerateInput(text_prompt="test"), fake_ctx)
-        assert exc_info.value.http_status == 400
-        assert "text too long" in exc_info.value.message
+        result = await seed_audio_generate(SeedAudioGenerateInput(text_prompt="test"), fake_ctx)
+        assert isinstance(result, ToolResult)
+        assert result.is_error
+        assert result.structured_content["error"]["code"] == "INVALID_PARAM"

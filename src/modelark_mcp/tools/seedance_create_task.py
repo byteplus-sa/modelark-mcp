@@ -8,17 +8,24 @@ cannot be the sole media input.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from fastmcp import Context
+from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import get_capability_registry
+from modelark_mcp.domain.artifacts import MediaType
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.media import MediaSource
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedance import SeedanceService
+from modelark_mcp.providers.retry import call_with_retry
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
+from modelark_mcp.security.url_policy import validate_url
+from modelark_mcp.tools._cost import log_cost_estimate
+from modelark_mcp.tools._errors import provider_error_result
 
 # ---------------------------------------------------------------------------
 # Input / Output models
@@ -28,6 +35,7 @@ from modelark_mcp.providers.modelark.seedance import SeedanceService
 class SeedanceImageInput(MediaSource):
     """Image input with an optional role for Seedance."""
 
+    MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.IMAGE
     role: Literal["first_frame", "last_frame", "reference_image"] | None = None
 
 
@@ -38,17 +46,23 @@ class SeedanceVideoInput(BaseModel):
     url: str
     role: Literal["reference_video"] = "reference_video"
 
+    @model_validator(mode="after")
+    def validate_video_url(self) -> SeedanceVideoInput:
+        validate_url(self.url)
+        return self
+
 
 class SeedanceAudioInput(MediaSource):
     """Audio reference input for Seedance."""
 
+    MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.AUDIO
     role: Literal["reference_audio"] = "reference_audio"
 
 
 class SeedanceCreateTaskInput(BaseModel):
     """Input model for ``seedance_create_task``."""
 
-    prompt: str | None = None
+    prompt: str | None = Field(None, min_length=1, max_length=4000)
     images: list[SeedanceImageInput] | None = None
     videos: list[SeedanceVideoInput] | None = None
     audios: list[SeedanceAudioInput] | None = None
@@ -109,7 +123,7 @@ class SeedanceCreateTaskOutput(BaseModel):
 
 async def seedance_create_task(
     input: SeedanceCreateTaskInput, ctx: Context
-) -> SeedanceCreateTaskOutput:
+) -> SeedanceCreateTaskOutput | ToolResult:
     """Create an asynchronous Seedance video generation task.
 
     Accepts text, image, video, and audio references as content input.
@@ -187,14 +201,24 @@ async def seedance_create_task(
 
     await ctx.report_progress(progress=50, total=100)
 
+    estimated_cost = log_cost_estimate(product="video", variations=1)
+
     service = SeedanceService()
     try:
-        task_id, request_id = await service.create_task(request)
+        async with billed_provider_slot(
+            ctx,
+            provider="modelark",
+            product="video",
+            estimated_cost_usd=estimated_cost,
+        ):
+            task_id, request_id = await call_with_retry(lambda: service.create_task(request))
     except ProviderError as exc:
         await ctx.error(f"Seedance task creation failed: {exc.message}")
-        raise
+        return provider_error_result(exc)
     finally:
         await service.close()
+
+    await get_runtime(ctx).ownership_store.record(task_id, get_principal(ctx))
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

@@ -9,9 +9,12 @@ These tests exercise the FastMCP layer directly — no provider calls.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from modelark_mcp.config.env import get_settings
+from modelark_mcp.server import create_server
 
 
 @pytest.fixture
@@ -25,14 +28,7 @@ def configured_server(
     # Clear cached settings.
     get_settings.cache_clear()
 
-    # Re-import server to re-register tools with new settings.
-    import importlib
-
-    import modelark_mcp.server as server_mod
-
-    importlib.reload(server_mod)
-
-    yield server_mod
+    yield SimpleNamespace(mcp=create_server(get_settings()))
 
     get_settings.cache_clear()
 
@@ -49,13 +45,7 @@ def no_creds_server(
 
     get_settings.cache_clear()
 
-    import importlib
-
-    import modelark_mcp.server as server_mod
-
-    importlib.reload(server_mod)
-
-    yield server_mod
+    yield SimpleNamespace(mcp=create_server(get_settings()))
 
     get_settings.cache_clear()
 

@@ -1,0 +1,16 @@
+.git
+.venv
+.mypy_cache
+.ruff_cache
+.pytest_cache
+__pycache__
+*.egg-info
+dist
+.agents
+.claude
+.env
+plans
+specs
+docs
+tests
+.pre-commit-config.yaml

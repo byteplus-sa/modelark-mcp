@@ -1,69 +1,84 @@
 # Configuration
 
-All configuration is loaded from environment variables or a `.env` file using
-Pydantic Settings. Copy `.env.example` to `.env` and fill in your values.
+Configuration is loaded from environment variables or `.env` by Pydantic
+Settings. Copy `.env.example` to `.env`. Empty values are ignored.
 
-## Provider Credentials
+## Providers and models
 
-| Variable | Description | Required |
+| Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_MODELARK_API_KEY` | ModelArk API key (Seedream + Seedance). Uses Bearer auth. | For image/video tools |
-| `BYTEPLUS_SEED_AUDIO_API_KEY` | Seed Speech API key (Seed Audio). Uses X-Api-Key. | For audio tools |
+| `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream and Seedance; sent as Bearer auth |
+| `BYTEPLUS_SEED_AUDIO_API_KEY` | empty | Enables Seed Audio; sent as `X-Api-Key` |
+| `BYTEPLUS_MODELARK_BASE_URL` | AP Southeast ModelArk URL | HTTPS data-plane base URL |
+| `BYTEPLUS_SEED_AUDIO_BASE_URL` | AP Southeast Seed Speech URL | HTTPS service base URL |
+| `SEEDREAM_DEFAULT_MODEL` | `dola-seedream-5-0-pro-260628` | Default image model/endpoint ID |
+| `SEEDANCE_DEFAULT_MODEL` | `dreamina-seedance-2-0-260128` | Default video model/endpoint ID |
+| `SEEDREAM_MODEL_FAMILY` | empty | Family for a custom default: `pro`, `lite`, or `4x` |
+| `SEEDANCE_MODEL_FAMILY` | empty | Family for a custom default: `standard`, `fast`, or `mini` |
+| `SEEDREAM_MODEL_BINDINGS` | empty | JSON list of `{model_id, family}` bindings |
+| `SEEDANCE_MODEL_BINDINGS` | empty | JSON list of `{model_id, family}` bindings |
 
-Credentials are startup configuration only — never tool arguments. If a
-credential is absent, the server does not register that product's tools.
+The two built-in default IDs have known families. A custom ID must be bound
+explicitly; the server does not infer capabilities from substrings in an ID.
+For example:
 
-## Provider Base URLs
+```dotenv
+SEEDREAM_DEFAULT_MODEL=my-image-endpoint
+SEEDREAM_MODEL_BINDINGS=[{"model_id":"my-image-endpoint","family":"pro"}]
+```
 
-| Variable | Default | Description |
+Credentials are startup-only. If a provider key is absent, its tools are not
+registered.
+
+## Transport and authentication
+
+| Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_MODELARK_BASE_URL` | `https://ark.ap-southeast.bytepluses.com/api/v3` | ModelArk data-plane host |
-| `BYTEPLUS_SEED_AUDIO_BASE_URL` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech host |
-
-API keys are region-scoped. Ensure the base URL matches your key's region.
-
-## Model Bindings
-
-| Variable | Default | Description |
-|---|---|---|
-| `SEEDREAM_DEFAULT_MODEL` | `dola-seedream-5-0-pro-260628` | Seedream model ID |
-| `SEEDANCE_DEFAULT_MODEL` | `dreamina-seedance-2-0-260128` | Seedance model ID |
-
-Model IDs are configuration, not hard-coded truth. Confirm your account's
-authorized model IDs in the BytePlus console. The capability registry
-validates parameters against the selected model's capabilities.
-
-## MCP Transport
-
-| Variable | Default | Description |
-|---|---|---|
-| `MCP_TRANSPORT` | `stdio` | `stdio` or `http` |
+| `MCP_TRANSPORT` | `stdio` | `stdio` or Streamable `http` |
 | `MCP_HOST` | `127.0.0.1` | HTTP bind address |
-| `MCP_PORT` | `3000` | HTTP port |
-| `MCP_ALLOWED_ORIGINS` | (empty) | Comma-separated allowed Origin values |
+| `MCP_PORT` | `3000` | HTTP listen port |
+| `MCP_ALLOWED_HOSTS` | loopback hosts | Comma-separated accepted Host headers |
+| `MCP_ALLOWED_ORIGINS` | empty | Comma-separated accepted browser Origins |
+| `MCP_HTTP_MAX_BODY_BYTES` | `10485760` | Maximum HTTP request body |
+| `MCP_AUTH_MODE` | `local` | `local` or `jwt` |
+| `MCP_JWT_JWKS_URI` | empty | HTTPS JWKS endpoint for JWT verification |
+| `MCP_JWT_ISSUER` | empty | Required token issuer |
+| `MCP_JWT_AUDIENCE` | empty | Required token audience |
+| `MCP_TENANT_CLAIM` | `tenant_id` | Claim used for tenant isolation |
 
-For local use, keep `stdio`. For remote deployment, use `http` with
-`127.0.0.1` binding and a reverse proxy with TLS.
+`local` auth is accepted only for stdio or loopback HTTP. Binding HTTP to a
+non-loopback address fails closed unless JWT mode and all verifier settings are
+present. JWT tokens must contain a principal (`sub`) and the configured tenant
+claim. Tool scopes are enforced by FastMCP:
 
-## Artifact Persistence
+- `seed:audio:generate`
+- `seedream:generate`
+- `seedance:create`, `seedance:read`, `seedance:delete`
+- `artifacts:read`
 
-| Variable | Default | Description |
+## Persistence and runtime policy
+
+| Variable | Default | Purpose |
 |---|---|---|
-| `ARTIFACT_BACKEND` | `filesystem` | `filesystem` (local) or `object-store` (remote) |
-| `ARTIFACT_DIR` | `.artifacts` | Directory for filesystem storage |
-| `ARTIFACT_TTL_SECONDS` | `604800` (7 days) | How long artifacts are retained |
-| `MCP_INLINE_MEDIA_MAX_BYTES` | `8388608` (8 MiB) | Max size for inline MCP content blocks |
+| `ARTIFACT_BACKEND` | `filesystem` | Only implemented backend |
+| `ARTIFACT_DIR` | `.artifacts` | Media, metadata, ownership, and budget state |
+| `ARTIFACT_TTL_SECONDS` | `604800` | Artifact retention, in seconds |
+| `MCP_INLINE_MEDIA_MAX_BYTES` | `8388608` | Maximum inline MCP media size |
+| `PROVIDER_MAX_CONCURRENCY` | `5` | Process-wide slots per provider |
+| `PRINCIPAL_MAX_CONCURRENCY` | `3` | Shared slots per authenticated principal |
+| `DAILY_BUDGET_USD` | `0` | Per-principal UTC daily estimate limit; zero records only |
 
-Provider URLs expire (2h for audio, 24h for image/video). The server
-persists outputs immediately into durable storage and returns
-`seed-media://artifacts/{id}` resource references.
+The filesystem backend enforces principal and tenant ownership. It is suitable
+for one process. Multiple replicas require shared artifact, task-ownership,
+budget, cache, and limiter implementations before horizontal scaling is safe.
 
-## HTTP Timeouts
+## Timeouts and logging
 
-| Variable | Default | Description |
+| Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_CONNECT_TIMEOUT_MS` | `10000` (10s) | TCP connection timeout |
-| `BYTEPLUS_REQUEST_TIMEOUT_MS` | `300000` (5 min) | Full request timeout |
+| `BYTEPLUS_CONNECT_TIMEOUT_MS` | `10000` | Provider connection timeout |
+| `BYTEPLUS_REQUEST_TIMEOUT_MS` | `300000` | Full provider request timeout |
+| `MODELARK_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
 
-The 5-minute request timeout covers long synchronous generations (Seedream
-Pro, Seed Audio with long text).
+Logs are structured JSON on stderr. Provider credentials and sensitive media
+fields are redacted.

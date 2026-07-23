@@ -10,14 +10,16 @@ from __future__ import annotations
 from typing import Literal
 
 from fastmcp import Context
+from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field
 
 from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.domain.models import SeedanceTaskSummary
+from modelark_mcp.domain.models import SeedanceTaskStatus, SeedanceTaskSummary
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedance import SeedanceService
-
-SeedanceTaskStatus = Literal["queued", "running", "cancelled", "succeeded", "failed", "expired"]
+from modelark_mcp.providers.retry import call_with_retry
+from modelark_mcp.runtime import get_principal, get_runtime
+from modelark_mcp.tools._errors import provider_error_result
 
 
 class SeedanceListTasksInput(BaseModel):
@@ -41,7 +43,9 @@ class SeedanceTaskPage(BaseModel):
     has_more: bool = False
 
 
-async def seedance_list_tasks(input: SeedanceListTasksInput, ctx: Context) -> SeedanceTaskPage:
+async def seedance_list_tasks(
+    input: SeedanceListTasksInput, ctx: Context
+) -> SeedanceTaskPage | ToolResult:
     """List recent Seedance video generation tasks.
 
     Queries the previous seven days of tasks (provider limitation).
@@ -50,20 +54,40 @@ async def seedance_list_tasks(input: SeedanceListTasksInput, ctx: Context) -> Se
     """
     await ctx.info("Listing Seedance tasks")
     await ctx.report_progress(progress=20, total=100)
+    owner = get_principal(ctx)
+    owned_task_ids = await get_runtime(ctx).ownership_store.list_task_ids(owner)
+
+    requested_task_ids = input.task_ids
+    if not owner.is_local:
+        requested_task_ids = (
+            sorted(owned_task_ids)
+            if input.task_ids is None
+            else sorted(set(input.task_ids) & owned_task_ids)
+        )
+        if not requested_task_ids:
+            return SeedanceTaskPage(
+                tasks=[],
+                total=0,
+                page=input.page or 1,
+                page_size=input.page_size or 20,
+                has_more=False,
+            )
 
     service = SeedanceService()
     try:
-        response, request_id = await service.list_tasks(
-            page=input.page or 1,
-            page_size=input.page_size or 20,
-            status=input.status,
-            task_ids=input.task_ids,
-            model=input.model,
-            service_tier=input.service_tier,
+        response, request_id = await call_with_retry(
+            lambda: service.list_tasks(
+                page=input.page or 1,
+                page_size=input.page_size or 20,
+                status=input.status,
+                task_ids=requested_task_ids,
+                model=input.model,
+                service_tier=input.service_tier,
+            )
         )
     except ProviderError as exc:
         await ctx.error(f"Failed to list tasks: {exc.message}")
-        raise
+        return provider_error_result(exc)
     finally:
         await service.close()
 

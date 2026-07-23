@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Seedream image generation
@@ -38,6 +38,7 @@ class SeedreamImageData(BaseModel):
 
     url: str | None = None
     b64_json: str | None = None
+    output_format: str | None = None
     index: int | None = None
     revised_prompt: str | None = None
 
@@ -192,6 +193,9 @@ class SeedanceTaskResponse(BaseModel):
 class SeedanceTaskListResponse(BaseModel):
     """Response from ``GET /contents/generations/tasks``."""
 
-    data: list[SeedanceTaskResponse] = Field(default_factory=list)
+    data: list[SeedanceTaskResponse] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("data", "items"),
+    )
     total: int = 0
     has_more: bool | None = None

@@ -17,11 +17,15 @@ from __future__ import annotations
 from typing import Literal
 
 from fastmcp import Context
+from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.providers.modelark.seedance import SeedanceService
+from modelark_mcp.providers.retry import call_with_retry
+from modelark_mcp.runtime import get_principal, get_runtime
+from modelark_mcp.tools._errors import provider_error_result
 
 # States where each mode is valid.
 _CANCELABLE_STATES: frozenset[str] = frozenset({"queued"})
@@ -72,7 +76,7 @@ class SeedanceCancelOrDeleteOutput(BaseModel):
 
 async def seedance_cancel_or_delete_task(
     input: SeedanceCancelOrDeleteInput, ctx: Context
-) -> SeedanceCancelOrDeleteOutput:
+) -> SeedanceCancelOrDeleteOutput | ToolResult:
     """Cancel (queued) or delete (terminal) a Seedance video generation task.
 
     .. warning::
@@ -94,15 +98,19 @@ async def seedance_cancel_or_delete_task(
         f"Seedance {input.mode} task {input.task_id} (expected_status={input.expected_status})"
     )
     await ctx.report_progress(progress=20, total=100)
+    await get_runtime(ctx).ownership_store.require_owner(
+        input.task_id,
+        get_principal(ctx),
+    )
 
     service = SeedanceService()
 
     # 1. Fetch current state.
     try:
-        task, _ = await service.get_task(input.task_id)
+        task, _ = await call_with_retry(lambda: service.get_task(input.task_id))
     except ProviderError as exc:
         await ctx.error(f"Failed to fetch task state: {exc.message}")
-        raise
+        return provider_error_result(exc)
     finally:
         await service.close()
 
@@ -136,10 +144,10 @@ async def seedance_cancel_or_delete_task(
     # 3. Issue DELETE.
     service = SeedanceService()
     try:
-        request_id = await service.delete_task(input.task_id)
+        request_id = await call_with_retry(lambda: service.delete_task(input.task_id))
     except ProviderError as exc:
         await ctx.error(f"DELETE failed: {exc.message}")
-        raise
+        return provider_error_result(exc)
     finally:
         await service.close()
 

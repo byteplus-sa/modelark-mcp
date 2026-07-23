@@ -3,14 +3,28 @@
 These types are used across tool inputs to describe image, audio, and video
 references in a provider-agnostic way. Provider adapters translate them to
 the specific provider DTOs.
+
+All user-supplied URLs are validated through the SSRF-safe ``validate_url``
+policy, and Base64 data is size-checked via ``check_base64_size`` before
+reaching the provider.
 """
 
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
+
+from modelark_mcp.domain.artifacts import MediaType
+from modelark_mcp.security.media_policy import (
+    check_base64_size,
+    get_media_limits,
+    validate_audio_mime,
+    validate_image_mime,
+    validate_video_mime,
+)
+from modelark_mcp.security.url_policy import validate_url
 
 
 class MediaSourceKind(StrEnum):
@@ -25,6 +39,8 @@ class MediaSource(BaseModel):
 
     Exactly one of ``url`` or ``data`` must be set, matching ``kind``.
     """
+
+    MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.IMAGE
 
     kind: MediaSourceKind = Field(
         ..., description="Whether the media is referenced by URL or Base64."
@@ -52,6 +68,29 @@ class MediaSource(BaseModel):
             raise ValueError("data must not be set when kind is 'url'")
         if self.kind == MediaSourceKind.base64 and self.url:
             raise ValueError("url must not be set when kind is 'base64'")
+
+        if self.kind == MediaSourceKind.url and self.url:
+            validate_url(self.url)
+
+        if self.kind == MediaSourceKind.base64 and self.data:
+            limits = get_media_limits()
+            media_category = type(self).MEDIA_CATEGORY
+            max_bytes = {
+                "image": limits.image_max_bytes,
+                "audio": limits.audio_max_bytes,
+                "video": limits.video_max_bytes,
+            }[media_category]
+            check_base64_size(self.data, max_bytes, label=media_category)
+
+        if self.mime_type:
+            media_category = type(self).MEDIA_CATEGORY
+            if media_category == "image":
+                validate_image_mime(self.mime_type)
+            elif media_category == "audio":
+                validate_audio_mime(self.mime_type)
+            elif media_category == "video":
+                validate_video_mime(self.mime_type)
+
         return self
 
 
@@ -92,4 +131,15 @@ class AudioReference(BaseModel):
             raise ValueError("speaker_id/data must not be set when kind is 'url'")
         if self.kind == "base64" and (self.speaker_id or self.url):
             raise ValueError("speaker_id/url must not be set when kind is 'base64'")
+
+        if self.kind == "url" and self.url:
+            validate_url(self.url)
+
+        if self.kind == "base64" and self.data:
+            limits = get_media_limits()
+            check_base64_size(self.data, limits.audio_max_bytes, label="audio")
+
+        if self.mime_type:
+            validate_audio_mime(self.mime_type)
+
         return self

@@ -80,6 +80,12 @@ class TestSeedanceCreateTaskInput:
                 audios=[SeedanceAudioInput(kind="url", url="https://example.com/a.wav")]
             )
 
+    def test_audio_input_rejects_image_mime(self) -> None:
+        from modelark_mcp.tools.seedance_create_task import SeedanceAudioInput
+
+        with pytest.raises(ValidationError, match="Audio MIME type"):
+            SeedanceAudioInput(kind="base64", data="aGVsbG8=", mime_type="image/png")
+
     def test_too_many_images_raises(self) -> None:
         from modelark_mcp.tools.seedance_create_task import SeedanceImageInput
 
@@ -103,6 +109,15 @@ class TestSeedanceCreateTaskInput:
             SeedanceCreateTaskInput(
                 videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
                 duration=20,
+            )
+
+    def test_empty_prompt_raises(self) -> None:
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        with pytest.raises(ValidationError):
+            SeedanceCreateTaskInput(
+                prompt="",
+                videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             )
 
 

@@ -7,9 +7,10 @@ with mocked provider responses and a temp artifact store.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastmcp.tools import ToolResult
 
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.providers.modelark.schemas import (
@@ -17,7 +18,7 @@ from modelark_mcp.providers.modelark.schemas import (
     SeedanceTaskResponse,
 )
 from modelark_mcp.providers.modelark.seedance import SeedanceService
-from modelark_mcp.test_utils import FakeContext
+from modelark_mcp.security.safe_downloader import DownloadedMedia
 from modelark_mcp.tools.seedance_cancel_or_delete_task import (
     SeedanceCancelOrDeleteInput,
     SeedanceCancelOrDeleteOutput,
@@ -32,7 +33,6 @@ from modelark_mcp.tools.seedance_create_task import (
 from modelark_mcp.tools.seedance_get_task import (
     SeedanceGetTaskInput,
     SeedanceTaskOutput,
-    _persistence_cache,
     seedance_get_task,
 )
 from modelark_mcp.tools.seedance_list_tasks import (
@@ -40,6 +40,7 @@ from modelark_mcp.tools.seedance_list_tasks import (
     SeedanceTaskPage,
     seedance_list_tasks,
 )
+from tests.fixtures.fake_context import FakeContext
 
 
 async def _mock_close(self: SeedanceService) -> None:
@@ -68,7 +69,7 @@ class TestSeedanceCreateTaskTool:
         result = await seedance_create_task(
             SeedanceCreateTaskInput(
                 prompt="a cat walking",
-                videos=[SeedanceVideoInput(url="https://cdn.example.com/cat.mp4")],
+                videos=[SeedanceVideoInput(url="https://example.com/cat.mp4")],
             ),
             fake_ctx,
         )
@@ -110,14 +111,15 @@ class TestSeedanceCreateTaskTool:
         monkeypatch.setattr(SeedanceService, "create_task", mock_create)
         monkeypatch.setattr(SeedanceService, "close", _mock_close)
 
-        with pytest.raises(ProviderError) as exc_info:
-            await seedance_create_task(
-                SeedanceCreateTaskInput(
-                    videos=[SeedanceVideoInput(url="https://cdn.example.com/v.mp4")],
-                ),
-                fake_ctx,
-            )
-        assert exc_info.value.http_status == 400
+        result = await seedance_create_task(
+            SeedanceCreateTaskInput(
+                videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            ),
+            fake_ctx,
+        )
+        assert isinstance(result, ToolResult)
+        assert result.is_error
+        assert result.structured_content["error"]["http_status"] == 400
 
 
 class TestSeedanceGetTaskTool:
@@ -161,7 +163,7 @@ class TestSeedanceGetTaskTool:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         # Clear persistence cache before test.
-        _persistence_cache.clear()
+        fake_ctx.lifespan_context["runtime"].persistence_cache.clear()
 
         task = SeedanceTaskResponse(
             id="task-succ",
@@ -181,19 +183,19 @@ class TestSeedanceGetTaskTool:
         monkeypatch.setattr(SeedanceService, "get_task", mock_get)
         monkeypatch.setattr(SeedanceService, "close", _mock_close)
 
-        import httpx
-        import respx
-
         with (
-            patch("modelark_mcp.server.get_artifact_store", return_value=temp_store),
-            patch("modelark_mcp.artifacts.filesystem_store.validate_url"),
-            respx.mock,
+            patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store),
+            patch(
+                "modelark_mcp.security.safe_downloader.SafeDownloader.download",
+                new=AsyncMock(
+                    return_value=DownloadedMedia(
+                        body=b"fake-video-bytes",
+                        content_type="video/mp4",
+                        final_url="https://tos-ap-southeast.bytepluses.com/video.mp4",
+                    )
+                ),
+            ),
         ):
-            respx.get("https://tos-ap-southeast.bytepluses.com/video.mp4").mock(
-                return_value=httpx.Response(
-                    200, content=b"fake-video-bytes", headers={"content-type": "video/mp4"}
-                )
-            )
             result = await seedance_get_task(SeedanceGetTaskInput(task_id="task-succ"), fake_ctx)
 
         assert result.status == "succeeded"
@@ -214,7 +216,8 @@ class TestSeedanceGetTaskTool:
         temp_store: Any,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        _persistence_cache.clear()
+        persistence_cache = fake_ctx.lifespan_context["runtime"].persistence_cache
+        persistence_cache.clear()
 
         # Pre-populate cache to simulate a previous get call.
         from datetime import UTC, datetime
@@ -230,7 +233,7 @@ class TestSeedanceGetTaskTool:
             sha256="abc123",
             created_at=datetime.now(UTC).isoformat(),
         )
-        _persistence_cache["task-cached"] = {"video": cached_ref, "last_frame": None}
+        persistence_cache["task-cached"] = {"video": cached_ref, "last_frame": None}
 
         task = SeedanceTaskResponse(
             id="task-cached",
@@ -249,14 +252,14 @@ class TestSeedanceGetTaskTool:
         monkeypatch.setattr(SeedanceService, "get_task", mock_get)
         monkeypatch.setattr(SeedanceService, "close", _mock_close)
 
-        with patch("modelark_mcp.server.get_artifact_store", return_value=temp_store):
+        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seedance_get_task(SeedanceGetTaskInput(task_id="task-cached"), fake_ctx)
 
         # Should return the cached ref, not download again.
         assert result.video is not None
         assert result.video.id == "cached-video-id"
 
-        _persistence_cache.clear()
+        fake_ctx.lifespan_context["runtime"].persistence_cache.clear()
 
     async def test_get_failed_task_with_error(
         self,
@@ -287,7 +290,7 @@ class TestSeedanceGetTaskTool:
 
         assert result.status == "failed"
         assert result.error is not None
-        assert result.error["code"] == "MODERATION_FAILED"
+        assert result.error.code == "MODERATION_FAILED"
 
 
 class TestSeedanceListTasksTool:

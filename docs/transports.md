@@ -1,69 +1,66 @@
 # Transports
 
-The server supports two transports, both natively supported by FastMCP.
+The server supports stdio and FastMCP Streamable HTTP.
 
-## stdio (default, local)
+## stdio
 
-The default transport for local deployment. MCP JSON-RPC messages flow
-over stdin/stdout. Structured logs go to stderr — only JSON-RPC goes to
-stdout, as required by the MCP specification.
+stdio is the secure local default. MCP JSON-RPC uses stdin/stdout; structured
+logs use stderr.
 
 ```bash
 make start
-# or
+# equivalent
 uv run python -m modelark_mcp
 ```
 
-Use this mode with:
+Use this mode when an MCP client launches the server as a subprocess. The
+local principal owns artifacts and Seedance tasks created by that process.
 
-- Claude Desktop
-- MCP Inspector
-- Any MCP client that spawns the server as a subprocess
+## Streamable HTTP
 
-## Streamable HTTP (remote deployment)
-
-For remote or networked deployment. Binds to `127.0.0.1` by default to
-prevent DNS rebinding attacks. Use a reverse proxy (nginx, Caddy) with
-TLS in front.
+Loopback development can use local auth:
 
 ```bash
-make start-http
-# or
-MCP_TRANSPORT=http uv run python -m modelark_mcp
+MCP_TRANSPORT=http MCP_HOST=127.0.0.1 uv run python -m modelark_mcp
 ```
 
-### Configuration
+Network deployment must use JWT verification:
 
-| Variable | Default | Description |
+```bash
+MCP_TRANSPORT=http \
+MCP_HOST=0.0.0.0 \
+MCP_AUTH_MODE=jwt \
+MCP_JWT_JWKS_URI=https://id.example.com/.well-known/jwks.json \
+MCP_JWT_ISSUER=https://id.example.com/ \
+MCP_JWT_AUDIENCE=modelark-mcp \
+MCP_ALLOWED_HOSTS=mcp.example.com \
+MCP_ALLOWED_ORIGINS=https://client.example.com \
+uv run python -m modelark_mcp
+```
+
+The server validates JWT signature, issuer, audience, scopes, principal, and
+tenant. Host/Origin protection and a streamed body-size limit are enabled.
+Terminate TLS at a trusted reverse proxy and pass the original Host header.
+
+## Operational HTTP routes
+
+| Route | Authentication | Meaning |
 |---|---|---|
-| `MCP_HOST` | `127.0.0.1` | Bind address |
-| `MCP_PORT` | `3000` | Listen port |
-| `MCP_ALLOWED_ORIGINS` | (empty) | Comma-separated Origin allowlist |
+| `/health` | none | Process liveness |
+| `/ready` | none | Runtime, database, and artifact-directory readiness |
+| `/metrics` | none | Prometheus exposition |
 
-### Security Notes
-
-For remote multi-tenant deployment, you need:
-
-- **OAuth resource-server middleware** — validate JWT audience/issuer/scopes
-- **Origin validation** — reject requests with invalid `Origin` headers
-- **Rate limiting** — per-principal concurrency and request limits
-- **HTTPS** — TLS termination via reverse proxy
-- **Scope checks** — suggested scopes: `seed:audio:generate`,
-  `seedream:generate`, `seedance:create`, `seedance:read`, `seedance:delete`
-
-These are not yet implemented — the server is designed for local `stdio`
-use first. Remote hardening is a planned follow-up.
+Restrict `/metrics` at the network or reverse-proxy layer if metric labels or
+traffic volumes are operationally sensitive. MCP traffic remains on FastMCP's
+configured Streamable HTTP path.
 
 ## MCP Inspector
 
-Launch the FastMCP inspector to explore tools, resources, and schemas
-interactively:
-
 ```bash
 make inspect
-# or
-make inspect-dev   # with auto-reload
+# or with reload
+make inspect-dev
 ```
 
-The inspector connects over `stdio` and provides a web UI for testing tool
-calls, viewing input/output schemas, and browsing resources.
+For authenticated HTTP inspection, configure the inspector/client to send a
+Bearer token with the scopes needed by the tools being tested.

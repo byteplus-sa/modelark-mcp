@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from modelark_mcp.config.env import get_settings
+from modelark_mcp.config.env import SeedanceFamily, SeedreamFamily, get_settings
 
 
 class ModelFamily(StrEnum):
@@ -71,83 +71,71 @@ class VideoCapabilities:
 def _seedream_capabilities() -> dict[str, ImageCapabilities]:
     """Build the Seedream capability registry from configured model IDs."""
     settings = get_settings()
-    model_id = settings.seedream_default_model
-
-    # Infer family from the model ID prefix to set correct capabilities.
-    if "pro" in model_id.lower() or "dola-seedream" in model_id.lower():
-        caps = ImageCapabilities(
-            family=ModelFamily.SEEDREAM_PRO,
-            model_id=model_id,
-            max_references=10,
-            supports_batch=False,
-            supports_streaming=False,
-            supported_output_formats=("png", "jpeg"),
-        )
-    elif "5-0" in model_id:
-        caps = ImageCapabilities(
-            family=ModelFamily.SEEDREAM_LITE,
-            model_id=model_id,
-            max_references=14,
-            supports_batch=True,
-            supports_streaming=True,
-            supported_output_formats=("png", "jpeg"),
-        )
-    elif "4-" in model_id:
-        caps = ImageCapabilities(
-            family=ModelFamily.SEEDREAM_4X,
-            model_id=model_id,
-            max_references=14,
-            supports_batch=True,
-            supports_streaming=True,
-            supported_output_formats=("jpeg",),
-        )
-    else:
-        # Conservative default for unknown models.
-        caps = ImageCapabilities(
-            family=ModelFamily.SEEDREAM_LITE,
-            model_id=model_id,
-            max_references=10,
-            supports_batch=False,
-            supports_streaming=False,
-            supported_output_formats=("png", "jpeg"),
-        )
-
-    return {model_id: caps}
+    capabilities: dict[str, ImageCapabilities] = {}
+    for binding in settings.seedream_model_bindings:
+        if binding.family is SeedreamFamily.PRO:
+            caps = ImageCapabilities(
+                family=ModelFamily.SEEDREAM_PRO,
+                model_id=binding.model_id,
+                max_references=10,
+                supports_batch=False,
+                supports_streaming=False,
+                supported_output_formats=("png", "jpeg"),
+            )
+        elif binding.family is SeedreamFamily.LITE:
+            caps = ImageCapabilities(
+                family=ModelFamily.SEEDREAM_LITE,
+                model_id=binding.model_id,
+                max_references=14,
+                supports_batch=True,
+                supports_streaming=True,
+                supported_output_formats=("png", "jpeg"),
+            )
+        else:
+            caps = ImageCapabilities(
+                family=ModelFamily.SEEDREAM_4X,
+                model_id=binding.model_id,
+                max_references=14,
+                supports_batch=True,
+                supports_streaming=True,
+                supported_output_formats=("jpeg",),
+            )
+        capabilities[binding.model_id] = caps
+    return capabilities
 
 
 def _seedance_capabilities() -> dict[str, VideoCapabilities]:
     """Build the Seedance capability registry from configured model IDs."""
     settings = get_settings()
-    model_id = settings.seedance_default_model
+    capabilities: dict[str, VideoCapabilities] = {}
+    for binding in settings.seedance_model_bindings:
+        resolutions: tuple[str, ...]
+        if binding.family is SeedanceFamily.MINI:
+            family = ModelFamily.SEEDANCE_2_MINI
+            resolutions = ("480p", "720p")
+        elif binding.family is SeedanceFamily.FAST:
+            family = ModelFamily.SEEDANCE_2_FAST
+            resolutions = ("480p", "720p")
+        else:
+            family = ModelFamily.SEEDANCE_2
+            resolutions = ("480p", "720p", "1080p", "4k")
 
-    model_lower = model_id.lower()
-    resolutions: tuple[str, ...]
-    if "mini" in model_lower:
-        family = ModelFamily.SEEDANCE_2_MINI
-        resolutions = ("480p", "720p")
-    elif "fast" in model_lower:
-        family = ModelFamily.SEEDANCE_2_FAST
-        resolutions = ("480p", "720p")
-    else:
-        family = ModelFamily.SEEDANCE_2
-        resolutions = ("480p", "720p", "1080p", "4k")
-
-    caps = VideoCapabilities(
-        family=family,
-        model_id=model_id,
-        max_reference_images=9,
-        max_reference_videos=3,
-        max_reference_audios=3,
-        supported_resolutions=resolutions,
-        supports_seed=False,
-        supports_camera_fixed=False,
-        supports_frames=False,
-        supports_service_tier_flex=False,
-        duration_range=(-1, 15),
-        priority_range=(0, 9),
-        execution_expires_after_range=(3600, 259200),
-    )
-    return {model_id: caps}
+        capabilities[binding.model_id] = VideoCapabilities(
+            family=family,
+            model_id=binding.model_id,
+            max_reference_images=9,
+            max_reference_videos=3,
+            max_reference_audios=3,
+            supported_resolutions=resolutions,
+            supports_seed=False,
+            supports_camera_fixed=False,
+            supports_frames=False,
+            supports_service_tier_flex=False,
+            duration_range=(-1, 15),
+            priority_range=(0, 9),
+            execution_expires_after_range=(3600, 259200),
+        )
+    return capabilities
 
 
 class CapabilityRegistry:
@@ -160,8 +148,7 @@ class CapabilityRegistry:
     def get_image_capabilities(self, model_id: str | None = None) -> ImageCapabilities:
         """Return image capabilities for the given model or the default."""
         if model_id is None:
-            # Return the first (default) entry.
-            return next(iter(self._image_caps.values()))
+            return self._image_caps[get_settings().seedream_default_model]
         if model_id not in self._image_caps:
             raise ValueError(
                 f"Model '{model_id}' is not in the configured capability "
@@ -172,7 +159,7 @@ class CapabilityRegistry:
     def get_video_capabilities(self, model_id: str | None = None) -> VideoCapabilities:
         """Return video capabilities for the given model or the default."""
         if model_id is None:
-            return next(iter(self._video_caps.values()))
+            return self._video_caps[get_settings().seedance_default_model]
         if model_id not in self._video_caps:
             raise ValueError(
                 f"Model '{model_id}' is not in the configured capability "

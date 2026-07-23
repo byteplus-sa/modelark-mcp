@@ -281,6 +281,26 @@ class TestSeedanceListTasks:
         assert page.has_more is False
 
     @respx.mock
+    async def test_list_accepts_current_items_response(self, service: SeedanceService) -> None:
+        respx.get(f"{MODELARK_BASE}/contents/generations/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "id": "task-1",
+                            "model": "dreamina-seedance-2-0-260128",
+                            "status": "succeeded",
+                        }
+                    ],
+                    "total": 1,
+                },
+            )
+        )
+        page, _ = await service.list_tasks()
+        assert [task.id for task in page.data] == ["task-1"]
+
+    @respx.mock
     async def test_list_with_status_filter(self, service: SeedanceService) -> None:
         route = respx.get(f"{MODELARK_BASE}/contents/generations/tasks").mock(
             return_value=httpx.Response(
@@ -289,7 +309,17 @@ class TestSeedanceListTasks:
             )
         )
         await service.list_tasks(status="succeeded")
-        assert "status=succeeded" in str(route.calls.last.request.url)
+        assert "filter.status=succeeded" in str(route.calls.last.request.url)
+
+    @respx.mock
+    async def test_list_with_task_id_filters(self, service: SeedanceService) -> None:
+        route = respx.get(f"{MODELARK_BASE}/contents/generations/tasks").mock(
+            return_value=httpx.Response(200, json={"data": [], "total": 0})
+        )
+        await service.list_tasks(task_ids=["task-1", "task-2"])
+        request_url = str(route.calls.last.request.url)
+        assert "filter.task_ids=task-1" in request_url
+        assert "filter.task_ids=task-2" in request_url
 
     @respx.mock
     async def test_list_pagination_params(self, service: SeedanceService) -> None:
@@ -301,7 +331,7 @@ class TestSeedanceListTasks:
         )
         await service.list_tasks(page=3, page_size=50)
         request_url = str(route.calls.last.request.url)
-        assert "page=3" in request_url
+        assert "page_num=3" in request_url
         assert "page_size=50" in request_url
 
 

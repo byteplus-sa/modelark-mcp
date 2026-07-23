@@ -1,15 +1,19 @@
 """Shared helpers for parallel variation generation.
 
-Provides ``generate_seeds``, ``resolve_prompts``, and ``gather_with_timeout``
-used by the variation tool handlers.
+Provides ``generate_seeds``, ``resolve_prompts``, ``gather_with_timeout``,
+``run_variation_batch``, and ``DEFAULT_MAX_CONCURRENT`` used by the
+variation tool handlers.
 """
 
 from __future__ import annotations
 
 import asyncio
-import random
-from collections.abc import Sequence
+import secrets
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
+
+from modelark_mcp.domain.models import VariationError, VariationResult, VariationSummary
+from modelark_mcp.tools._cost import DEFAULT_MAX_CONCURRENT
 
 
 def generate_seeds(base_seed: int | None, count: int) -> list[int | None]:
@@ -25,7 +29,7 @@ def generate_seeds(base_seed: int | None, count: int) -> list[int | None]:
     if base_seed is None:
         return [None] * count
     if base_seed == -1:
-        return [random.randint(0, 2147483647) for _ in range(count)]
+        return [secrets.randbelow(2147483648) for _ in range(count)]
     return [(base_seed + i) % 2147483648 for i in range(count)]
 
 
@@ -47,7 +51,7 @@ def resolve_prompts(
 
 
 async def gather_with_timeout(
-    coros: Sequence[Any],
+    coros: Sequence[Awaitable[Any]],
     timeout: float,
 ) -> list[Any]:
     """Run N coroutines in parallel with a per-coroutine timeout.
@@ -59,3 +63,60 @@ async def gather_with_timeout(
     timed_coros = [asyncio.wait_for(coro, timeout=timeout) for coro in coros]
     results = await asyncio.gather(*timed_coros, return_exceptions=True)
     return list(results)
+
+
+async def run_variation_batch(
+    count: int,
+    timeout: float,
+    factory: Callable[[int], Awaitable[VariationResult]],
+    *,
+    max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+) -> VariationSummary:
+    """Run a batch of variation coroutines with bounded concurrency and timeout.
+
+    Args:
+        count: Number of variations to generate.
+        timeout: Per-coroutine timeout in seconds.
+        factory: Callable(index) -> coroutine that produces a VariationResult.
+        max_concurrent: Maximum concurrent provider calls.
+
+    Returns:
+        VariationSummary with succeeded/failed counts and per-variation results.
+    """
+    limiter = asyncio.Semaphore(max_concurrent)
+
+    async def _guarded(idx: int) -> VariationResult:
+        async with limiter:
+            return await factory(idx)
+
+    coros = [_guarded(i) for i in range(count)]
+    results = await gather_with_timeout(coros, timeout=timeout)
+
+    variation_results: list[VariationResult] = []
+    for i, result in enumerate(results):
+        if isinstance(result, asyncio.TimeoutError):
+            variation_results.append(
+                VariationResult(
+                    index=i,
+                    error=VariationError(code="TIMEOUT", message=f"Variation {i} timed out"),
+                )
+            )
+        elif isinstance(result, Exception):
+            variation_results.append(
+                VariationResult(
+                    index=i,
+                    error=VariationError(code="GATHER_ERROR", message=str(result)),
+                )
+            )
+        else:
+            variation_results.append(result)
+
+    succeeded = sum(1 for r in variation_results if r.artifact is not None or r.task_id is not None)
+    failed = count - succeeded
+
+    return VariationSummary(
+        total=count,
+        succeeded=succeeded,
+        failed=failed,
+        variations=variation_results,
+    )

@@ -8,25 +8,24 @@ status checks do not download twice.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
 
 from fastmcp import Context
+from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field
 
-from modelark_mcp.domain.artifacts import ArtifactRef
+from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.domain.models import SeedanceTaskUsage
+from modelark_mcp.domain.models import (
+    SeedanceTaskError,
+    SeedanceTaskSettings,
+    SeedanceTaskStatus,
+    SeedanceTaskUsage,
+)
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedance import SeedanceService
-
-SeedanceTaskStatus = Literal[
-    "queued",
-    "running",
-    "cancelled",
-    "succeeded",
-    "failed",
-    "expired",
-]
+from modelark_mcp.providers.retry import call_with_retry
+from modelark_mcp.runtime import get_principal, get_runtime
+from modelark_mcp.tools._errors import provider_error_result
 
 
 class SeedanceGetTaskInput(BaseModel):
@@ -44,18 +43,16 @@ class SeedanceTaskOutput(BaseModel):
     status: SeedanceTaskStatus
     created_at: str
     updated_at: str
-    error: dict[str, Any] | None = None
+    error: SeedanceTaskError | None = None
     video: ArtifactRef | None = None
     last_frame: ArtifactRef | None = None
     usage: SeedanceTaskUsage | None = None
-    settings: dict[str, Any] = Field(default_factory=dict)
+    settings: SeedanceTaskSettings = Field(default_factory=SeedanceTaskSettings)
 
 
-# Cache: task_id -> {video_ref, last_frame_ref} so repeated gets don't re-download.
-_persistence_cache: dict[str, dict[str, ArtifactRef | None]] = {}
-
-
-async def seedance_get_task(input: SeedanceGetTaskInput, ctx: Context) -> SeedanceTaskOutput:
+async def seedance_get_task(
+    input: SeedanceGetTaskInput, ctx: Context
+) -> SeedanceTaskOutput | ToolResult:
     """Retrieve the status and output of a Seedance video generation task.
 
     On first successful retrieval with ``persist_output=True``, copies
@@ -64,13 +61,16 @@ async def seedance_get_task(input: SeedanceGetTaskInput, ctx: Context) -> Seedan
     """
     await ctx.info(f"Retrieving Seedance task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)
+    runtime = get_runtime(ctx)
+    owner = get_principal(ctx)
+    await runtime.ownership_store.require_owner(input.task_id, owner)
 
     service = SeedanceService()
     try:
-        task, request_id = await service.get_task(input.task_id)
+        task, request_id = await call_with_retry(lambda: service.get_task(input.task_id))
     except ProviderError as exc:
         await ctx.error(f"Failed to retrieve task: {exc.message}")
-        raise
+        return provider_error_result(exc)
     finally:
         await service.close()
 
@@ -79,30 +79,32 @@ async def seedance_get_task(input: SeedanceGetTaskInput, ctx: Context) -> Seedan
     # Normalize error detail.
     error_dict = None
     if task.error and (task.error.code or task.error.message):
-        error_dict = {"code": task.error.code, "message": task.error.message}
+        error_dict = SeedanceTaskError(
+            code=task.error.code,
+            message=task.error.message,
+        )
 
     # Persist video and last-frame on success (only once per task).
     video_ref: ArtifactRef | None = None
     last_frame_ref: ArtifactRef | None = None
 
     if task.status == "succeeded" and input.persist_output:
-        cache = _persistence_cache.get(input.task_id)
+        cache = runtime.persistence_cache.get(input.task_id)
         if cache:
             video_ref = cache.get("video")
             last_frame_ref = cache.get("last_frame")
         else:
-            from modelark_mcp.server import get_artifact_store
-
-            store = get_artifact_store()
+            store = runtime.artifact_store
             source_expiry = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
 
             if task.video_url:
                 try:
                     video_ref = await store.copy_from_trusted_url(
                         url=task.video_url,
-                        media_type="video",
+                        media_type=MediaType.VIDEO,
                         mime_type="video/mp4",
                         source_expires_at=source_expiry,
+                        auth=owner,
                     )
                 except Exception as exc:
                     from modelark_mcp.observability.logger import warning as log_warning
@@ -119,9 +121,10 @@ async def seedance_get_task(input: SeedanceGetTaskInput, ctx: Context) -> Seedan
                 try:
                     last_frame_ref = await store.copy_from_trusted_url(
                         url=task.last_frame_url,
-                        media_type="image",
+                        media_type=MediaType.IMAGE,
                         mime_type="image/jpeg",
                         source_expires_at=source_expiry,
+                        auth=owner,
                     )
                 except Exception as exc:
                     from modelark_mcp.observability.logger import warning as log_warning
@@ -137,7 +140,7 @@ async def seedance_get_task(input: SeedanceGetTaskInput, ctx: Context) -> Seedan
             # Only cache if at least one artifact was persisted.
             # Don't cache failures — allow retry on next poll.
             if video_ref is not None or last_frame_ref is not None:
-                _persistence_cache[input.task_id] = {
+                runtime.persistence_cache[input.task_id] = {
                     "video": video_ref,
                     "last_frame": last_frame_ref,
                 }
@@ -151,7 +154,7 @@ async def seedance_get_task(input: SeedanceGetTaskInput, ctx: Context) -> Seedan
     )
 
     # Normalize settings from the generation config.
-    settings_dict: dict[str, Any] = dict(task.content) if task.content else {}
+    settings_dict = SeedanceTaskSettings.model_validate(task.content or {})
 
     return SeedanceTaskOutput(
         task_id=task.id,

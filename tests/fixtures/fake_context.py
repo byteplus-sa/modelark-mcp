@@ -7,6 +7,7 @@ needed by tool handlers, without requiring a live MCP connection.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -15,6 +16,7 @@ class FakeContext:
 
     messages: list[str] = field(default_factory=list)
     progress_reports: list[tuple[int, int]] = field(default_factory=list)
+    lifespan_context: dict[str, Any] = field(default_factory=dict)
 
     async def info(self, message: str, **kwargs: object) -> None:
         self.messages.append(f"INFO: {message}")

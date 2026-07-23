@@ -49,6 +49,14 @@ class TestSettings:
         with pytest.raises(ValueError):
             Settings(_env_file=None, MCP_TRANSPORT="invalid")
 
+    def test_non_loopback_http_requires_jwt(self) -> None:
+        with pytest.raises(ValueError, match="requires MCP_AUTH_MODE=jwt"):
+            Settings(_env_file=None, MCP_TRANSPORT="http", MCP_HOST="0.0.0.0")
+
+    def test_jwt_requires_verifier_configuration(self) -> None:
+        with pytest.raises(ValueError, match="JWT auth requires"):
+            Settings(_env_file=None, MCP_AUTH_MODE="jwt")
+
     def test_timeout_defaults(self) -> None:
         settings = Settings(_env_file=None)
         assert settings.connect_timeout_ms == 10000
@@ -59,6 +67,23 @@ class TestSettings:
             _env_file=None,
             SEEDREAM_DEFAULT_MODEL="custom-model",
             SEEDANCE_DEFAULT_MODEL="custom-video",
+            SEEDREAM_MODEL_FAMILY="lite",
+            SEEDANCE_MODEL_FAMILY="fast",
         )
         assert settings.seedream_default_model == "custom-model"
         assert settings.seedance_default_model == "custom-video"
+
+    def test_custom_model_requires_explicit_family(self) -> None:
+        with pytest.raises(ValueError, match="custom SEEDREAM_DEFAULT_MODEL"):
+            Settings(_env_file=None, SEEDREAM_DEFAULT_MODEL="custom-model")
+
+    def test_json_model_bindings_are_explicit(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            SEEDREAM_DEFAULT_MODEL="image-a",
+            SEEDREAM_MODEL_BINDINGS=[{"model_id": "image-a", "family": "4x"}],
+            SEEDANCE_DEFAULT_MODEL="video-a",
+            SEEDANCE_MODEL_BINDINGS=[{"model_id": "video-a", "family": "mini"}],
+        )
+        assert settings.seedream_model_bindings[0].family == "4x"
+        assert settings.seedance_model_bindings[0].family == "mini"

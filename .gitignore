@@ -79,8 +79,8 @@ build/
 .pytest_cache/
 
 # Artifacts
-.artifacts/
-artifacts/
+/.artifacts/
+/artifacts/
 
 # Logs
 *.log

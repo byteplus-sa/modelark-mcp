@@ -101,6 +101,20 @@ Check:
 
 Run `make check-env` to validate configuration.
 
+## HTTP Server Refuses to Start
+
+A non-loopback HTTP bind is rejected in `local` auth mode. Set
+`MCP_AUTH_MODE=jwt` and configure `MCP_JWT_JWKS_URI`, `MCP_JWT_ISSUER`, and
+`MCP_JWT_AUDIENCE`. Add the public hostname to `MCP_ALLOWED_HOSTS` and browser
+origins to `MCP_ALLOWED_ORIGINS`.
+
+## Unknown Tool over HTTP
+
+FastMCP hides tools whose required scopes are absent. Verify the Bearer token
+has the appropriate `seed:audio:generate`, `seedream:generate`,
+`seedance:create`, `seedance:read`, `seedance:delete`, or `artifacts:read`
+scope and contains both a principal (`sub`) and configured tenant claim.
+
 ## Running Tests
 
 ```bash
@@ -109,4 +123,4 @@ make lint          # ruff check
 make typecheck     # mypy
 ```
 
-Tests use `respx` to mock HTTP — no real API calls are made in CI.
+Tests use `respx` and an autouse socket guard—real network calls fail the suite.

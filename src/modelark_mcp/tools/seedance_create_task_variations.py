@@ -7,8 +7,7 @@ caller polls each task ID via ``seedance_get_task``.
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any
+from typing import Annotated, Any
 
 from fastmcp import Context
 from pydantic import BaseModel, Field, model_validator
@@ -16,11 +15,13 @@ from pydantic import BaseModel, Field, model_validator
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import get_capability_registry
 from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.domain.models import VariationResult, VariationSummary
+from modelark_mcp.domain.models import VariationError, VariationResult, VariationSummary
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedance import SeedanceService
-from modelark_mcp.tools._cost import log_cost_estimate
-from modelark_mcp.tools._parallel import gather_with_timeout, resolve_prompts
+from modelark_mcp.providers.retry import call_with_retry
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
+from modelark_mcp.tools._cost import DEFAULT_MAX_CONCURRENT, estimate_cost, log_cost_estimate
+from modelark_mcp.tools._parallel import resolve_prompts, run_variation_batch
 from modelark_mcp.tools.seedance_create_task import SeedanceCreateTaskInput
 
 
@@ -33,10 +34,15 @@ class SeedanceVariationsInput(SeedanceCreateTaskInput):
     """
 
     prompt: str | None = Field(
-        None, description="Base prompt. Required if variation_prompts is None."
+        None,
+        min_length=1,
+        max_length=4000,
+        description="Base prompt. Required if variation_prompts is None.",
     )
     variations: int = Field(1, ge=1, le=5, description="Number of variations.")
-    variation_prompts: list[str] | None = Field(None, description="Explicit prompts per variation.")
+    variation_prompts: list[Annotated[str, Field(min_length=1, max_length=4000)]] | None = Field(
+        None, description="Explicit prompts per variation."
+    )
 
     @model_validator(mode="after")
     def validate_prompt_required(self) -> SeedanceVariationsInput:
@@ -119,96 +125,77 @@ async def seedance_create_task_variations(
 
     timeout = settings.request_timeout_ms / 1000
     service = SeedanceService()
-    limiter = asyncio.Semaphore(5)
 
     async def _create_single(idx: int) -> VariationResult:
-        async with limiter:
-            try:
-                content = SeedanceService.build_content(
-                    prompt=prompts[idx],
-                    images=images_data,
-                    videos=videos_data,
-                    audios=audios_data,
-                )
+        try:
+            content = SeedanceService.build_content(
+                prompt=prompts[idx],
+                images=images_data,
+                videos=videos_data,
+                audios=audios_data,
+            )
 
-                request = SeedanceService.build_request(
-                    model=caps.model_id,
-                    content=content,
-                    resolution=input.resolution,
-                    ratio=input.ratio,
-                    duration=input.duration,
-                    generate_audio=input.generate_audio,
-                    watermark=input.watermark,
-                    return_last_frame=input.return_last_frame,
-                    execution_expires_after=input.execution_expires_after,
-                    priority=input.priority,
-                    safety_identifier=input.safety_identifier,
-                )
+            request = SeedanceService.build_request(
+                model=caps.model_id,
+                content=content,
+                resolution=input.resolution,
+                ratio=input.ratio,
+                duration=input.duration,
+                generate_audio=input.generate_audio,
+                watermark=input.watermark,
+                return_last_frame=input.return_last_frame,
+                execution_expires_after=input.execution_expires_after,
+                priority=input.priority,
+                safety_identifier=input.safety_identifier,
+            )
 
-                task_id, request_id = await service.create_task(request)
+            async with billed_provider_slot(
+                ctx,
+                provider="modelark",
+                product="video",
+                estimated_cost_usd=estimate_cost(product="video", variations=1),
+            ):
+                task_id, request_id = await call_with_retry(lambda: service.create_task(request))
+            await get_runtime(ctx).ownership_store.record(task_id, get_principal(ctx))
 
-                return VariationResult(index=idx, task_id=task_id, request_id=request_id)
-            except ProviderError as exc:
-                return VariationResult(
-                    index=idx,
-                    error={
-                        "code": exc.code or "PROVIDER_ERROR",
-                        "message": exc.message,
-                    },
+            return VariationResult(index=idx, task_id=task_id, request_id=request_id)
+        except ProviderError as exc:
+            return VariationResult(
+                index=idx,
+                error=VariationError(
+                    code=exc.code or "PROVIDER_ERROR",
+                    message=exc.message,
                     request_id=exc.request_id,
-                )
-            except Exception as exc:
-                return VariationResult(
-                    index=idx,
-                    error={"code": "UNEXPECTED_ERROR", "message": str(exc)},
-                )
-
-    coros = [_create_single(i) for i in range(input.variations)]
+                    retryable=exc.retryable,
+                    ambiguous_completion=bool(exc.ambiguous_completion),
+                ),
+                request_id=exc.request_id,
+            )
+        except Exception as exc:
+            return VariationResult(
+                index=idx,
+                error=VariationError(code="UNEXPECTED_ERROR", message=str(exc)),
+            )
 
     try:
-        results = await gather_with_timeout(coros, timeout=timeout)
+        summary = await run_variation_batch(
+            count=input.variations,
+            timeout=timeout,
+            factory=_create_single,
+            max_concurrent=DEFAULT_MAX_CONCURRENT,
+        )
     finally:
         await service.close()
-
-    variation_results: list[VariationResult] = []
-    for i, result in enumerate(results):
-        if isinstance(result, asyncio.TimeoutError):
-            variation_results.append(
-                VariationResult(
-                    index=i,
-                    error={
-                        "code": "TIMEOUT",
-                        "message": f"Variation {i} timed out",
-                    },
-                )
-            )
-        elif isinstance(result, Exception):
-            variation_results.append(
-                VariationResult(
-                    index=i,
-                    error={"code": "GATHER_ERROR", "message": str(result)},
-                )
-            )
-        else:
-            variation_results.append(result)
-
-    succeeded = sum(1 for r in variation_results if r.artifact is not None or r.task_id is not None)
-    failed = input.variations - succeeded
 
     await ctx.report_progress(progress=100, total=100)
     log_info(
         "seedance_variations_complete",
-        total=input.variations,
-        succeeded=succeeded,
-        failed=failed,
+        total=summary.total,
+        succeeded=summary.succeeded,
+        failed=summary.failed,
     )
 
     return SeedanceVariationsOutput(
-        summary=VariationSummary(
-            total=input.variations,
-            succeeded=succeeded,
-            failed=failed,
-            variations=variation_results,
-        ),
+        summary=summary,
         recommended_poll_after_ms=5000,
     )
