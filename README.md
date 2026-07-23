@@ -54,6 +54,16 @@ accepts as reference input:
 > `seedance_create_task_variations`, `seed_audio_generate_variations`) accept
 > the same input modalities as their base tools.
 
+> [!NOTE]
+> **Video references must be pre-hosted.** `seedance_create_task` accepts
+> video references as a **public HTTPS URL only** — there is no inline Base64
+> option and the server provides no bucket-upload helper. You must upload the
+> video to your own accessible host (e.g. BytePlus TOS, S3, or any public
+> HTTPS endpoint) before calling the tool. The URL must resolve to a public
+> IP (private/loopback/link-local addresses are rejected by the SSRF policy).
+> A plan to add an integrated upload helper is tracked in
+> [plans/PLAN_SEEDANCE_VIDEO_UPLOAD.md](plans/PLAN_SEEDANCE_VIDEO_UPLOAD.md).
+
 ## Architecture
 
 The server uses two provider gateways behind one normalized domain layer, a

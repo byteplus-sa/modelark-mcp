@@ -393,6 +393,20 @@ Extends `MediaSource` with a `role` field:
 |---|---|---|
 | `role` | `"first_frame"` \| `"last_frame"` \| `"reference_image"` | Image purpose |
 
+### SeedanceVideoInput
+
+Video references are URL-only. Unlike image and audio references, there is no
+Base64 path — videos must be uploaded to a publicly reachable HTTPS endpoint
+(e.g. BytePlus TOS, S3) before the tool is called. The URL must resolve to a
+public IP (loopback, private, and link-local addresses are rejected by the
+SSRF policy).
+
+| Field | Type | Description |
+|---|---|---|
+| `kind` | `"url"` | Always `url` (hard-coded) |
+| `url` | string | Public HTTPS URL of the reference video |
+| `role` | `"reference_video"` | Always `reference_video` |
+
 ### Output
 
 | Field | Type | Description |
