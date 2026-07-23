@@ -95,6 +95,7 @@ class TestToolDiscovery:
             assert tool_names == {
                 "seed_audio_generate",
                 "seed_audio_generate_variations",
+                "seedream_edit_image",
                 "seedream_generate_image",
                 "seedream_generate_image_variations",
                 "seedance_create_task",

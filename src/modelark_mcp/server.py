@@ -119,6 +119,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
     from modelark_mcp.tools.seedance_get_task import SeedanceTaskOutput, seedance_get_task
     from modelark_mcp.tools.seedance_list_tasks import TOOL_ANNOTATIONS as list_annotations
     from modelark_mcp.tools.seedance_list_tasks import SeedanceTaskPage, seedance_list_tasks
+    from modelark_mcp.tools.seedream_edit_image import (
+        TOOL_ANNOTATIONS as seedream_edit_annotations,
+    )
+    from modelark_mcp.tools.seedream_edit_image import (
+        SeedreamEditOutput,
+        seedream_edit_image,
+    )
     from modelark_mcp.tools.seedream_generate_image import (
         TOOL_ANNOTATIONS as seedream_annotations,
     )
@@ -141,6 +148,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             SeedreamGenerateOutput,
             "seedream:generate",
             seedream_generate_image,
+        ),
+        (
+            "seedream_edit_image",
+            seedream_edit_annotations,
+            SeedreamEditOutput,
+            "seedream:generate",
+            seedream_edit_image,
         ),
         (
             "seedream_generate_image_variations",
