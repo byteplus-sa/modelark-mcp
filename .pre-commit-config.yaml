@@ -35,7 +35,7 @@ repos:
     hooks:
       - id: pip-audit
         name: pip-audit (uv)
-        entry: uv run pip-audit --strict
+        entry: bash scripts/audit_dependencies.sh
         language: system
         types: [python]
         pass_filenames: false

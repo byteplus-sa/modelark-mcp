@@ -86,7 +86,7 @@ secrets-baseline: ## Regenerate .secrets.baseline from the current codebase
 	$(UV) run detect-secrets scan > .secrets.baseline
 
 audit: ## Audit dependencies for known vulnerabilities
-	$(UV) run pip-audit --strict
+	bash scripts/audit_dependencies.sh
 
 # --- MCP inspection -------------------------------------------------------
 

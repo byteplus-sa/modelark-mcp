@@ -52,7 +52,7 @@ jobs:
         run: uv run bandit -q -r src/modelark_mcp
 
       - name: Dependency vulnerability audit
-        run: uv run pip-audit --strict
+        run: bash scripts/audit_dependencies.sh
 
       - name: Secret scan
         run: uv run detect-secrets scan --baseline .secrets.baseline
