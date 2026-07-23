@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from modelark_mcp.artifacts.store import ArtifactStore
     from modelark_mcp.domain.artifacts import ArtifactRef
 
-ProviderKey = Literal["modelark", "seed-speech"]
+ProviderKey = Literal["modelark", "seed-speech", "tos"]
 
 
 class ProviderLimiters:
@@ -51,6 +51,7 @@ class ProviderLimiters:
         self._provider = {
             "modelark": asyncio.Semaphore(provider_limit),
             "seed-speech": asyncio.Semaphore(provider_limit),
+            "tos": asyncio.Semaphore(provider_limit),
         }
         self._principal_limit = principal_limit
         self._principals: TTLCache[str, asyncio.Semaphore] = TTLCache(

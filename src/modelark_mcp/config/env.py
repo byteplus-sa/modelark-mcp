@@ -161,6 +161,24 @@ class Settings(BaseSettings):
         validation_alias="MCP_HTTP_MAX_BODY_BYTES",
     )
 
+    # --- TOS object storage -------------------------------------------------
+
+    tos_access_key: str = Field(default="", validation_alias="TOS_ACCESS_KEY")
+    tos_secret_key: str = Field(default="", validation_alias="TOS_SECRET_KEY")
+    tos_security_token: str = Field(default="", validation_alias="TOS_SECURITY_TOKEN")
+    tos_bucket: str = Field(default="", validation_alias="TOS_BUCKET")
+    tos_region: str = Field(default="ap-southeast-1", validation_alias="TOS_REGION")
+    tos_endpoint: str = Field(
+        default="tos-ap-southeast-1.bytepluses.com",
+        validation_alias="TOS_ENDPOINT",
+    )
+    tos_presign_ttl_seconds: int = Field(
+        default=86400,
+        ge=60,
+        le=604800,
+        validation_alias="TOS_PRESIGN_TTL_SECONDS",
+    )
+
     # --- HTTP timeouts (milliseconds) ---------------------------------------
 
     connect_timeout_ms: int = Field(default=10000, validation_alias="BYTEPLUS_CONNECT_TIMEOUT_MS")
@@ -200,6 +218,11 @@ class Settings(BaseSettings):
     def has_seed_audio(self) -> bool:
         """Whether Seed Audio credentials are configured."""
         return bool(self.seed_audio_api_key)
+
+    @property
+    def has_tos(self) -> bool:
+        """Whether TOS object storage credentials are configured."""
+        return bool(self.tos_access_key and self.tos_secret_key and self.tos_bucket)
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -319,6 +342,10 @@ class Settings(BaseSettings):
             and self.mcp_host not in {"127.0.0.1", "::1", "localhost"}
         ):
             raise ValueError("HTTP on a non-loopback host requires MCP_AUTH_MODE=jwt.")
+        if bool(self.tos_access_key) != bool(self.tos_secret_key):
+            raise ValueError("TOS_ACCESS_KEY and TOS_SECRET_KEY must both be set or both be empty.")
+        if self.tos_access_key and not self.tos_endpoint:
+            raise ValueError("TOS_ENDPOINT is required when TOS credentials are set.")
         return self
 
 

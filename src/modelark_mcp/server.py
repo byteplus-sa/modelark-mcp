@@ -74,6 +74,22 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             auth=component_auth(settings, "seed:audio:generate"),
         )(seed_audio_generate_variations)
 
+    if settings.has_tos:
+        from modelark_mcp.tools.media_upload import (
+            TOOL_ANNOTATIONS as upload_annotations,
+        )
+        from modelark_mcp.tools.media_upload import (
+            MediaUploadOutput,
+            media_upload,
+        )
+
+        server.tool(
+            name="media_upload",
+            annotations={**upload_annotations},
+            output_schema=MediaUploadOutput.model_json_schema(),
+            auth=component_auth(settings, "media:upload"),
+        )(media_upload)
+
     if not settings.has_modelark:
         log_info("tools_skipped", reason="BYTEPLUS_MODELARK_API_KEY not configured")
         return
@@ -237,6 +253,7 @@ def create_server(
             "Status: healthy\n"
             f"ModelArk configured: {resolved_settings.has_modelark}\n"
             f"Seed Audio configured: {resolved_settings.has_seed_audio}\n"
+            f"TOS configured: {resolved_settings.has_tos}\n"
             f"Artifact backend: {resolved_settings.artifact_backend}\n"
             f"Transport: {resolved_settings.mcp_transport}\n"
         )

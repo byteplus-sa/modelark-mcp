@@ -28,6 +28,9 @@ def test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SEEDANCE_DEFAULT_MODEL", "dreamina-seedance-2-0-260128")
     monkeypatch.setenv("ARTIFACT_DIR", str(tmp_path / ".artifacts"))
     monkeypatch.setenv("ARTIFACT_BACKEND", "filesystem")
+    monkeypatch.setenv("TOS_ACCESS_KEY", "ak-test-tos")
+    monkeypatch.setenv("TOS_SECRET_KEY", "sk-test-tos")
+    monkeypatch.setenv("TOS_BUCKET", "test-bucket")
 
     # Clear cached settings and capability registry.
     from modelark_mcp.config.env import get_settings
