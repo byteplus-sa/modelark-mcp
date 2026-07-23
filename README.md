@@ -35,6 +35,25 @@ Key features:
 - **459 offline tests** — unit, contract, integration, HTTP security, E2E, and
   MCP conformance with 88.08% branch coverage
 
+## Supported Input Modalities
+
+All input media is validated through an SSRF-safe URL policy and size-checked
+Base64 before reaching the provider. The table below shows what each tool
+accepts as reference input:
+
+| Tool | Modality | URL | Base64 | Speaker ID | Roles | Max | Constraints |
+|---|---|:---:|:---:|:---:|---|:---:|---|
+| `seedream_generate_image` | Image | ✓ | ✓ | — | reference | 10 PRO / 14 LITE·4X | — |
+| `seedance_create_task` | Image | ✓ | ✓ | — | `first_frame` · `last_frame` · `reference_image` | 9 | — |
+| `seedance_create_task` | Video | ✓ | — | — | `reference_video` | 3 | URL only |
+| `seedance_create_task` | Audio | ✓ | ✓ | — | `reference_audio` | 3 | Not sole input |
+| `seed_audio_generate` | Audio | ✓ | ✓ | ✓ | — | 3 | Exclusive w/ image |
+| `seed_audio_generate` | Image | ✓ | ✓ | — | — | 1 | Exclusive w/ audio |
+
+> The `_variations` siblings (`seedream_generate_image_variations`,
+> `seedance_create_task_variations`, `seed_audio_generate_variations`) accept
+> the same input modalities as their base tools.
+
 ## Architecture
 
 The server uses two provider gateways behind one normalized domain layer, a
