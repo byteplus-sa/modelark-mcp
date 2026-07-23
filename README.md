@@ -35,6 +35,79 @@ Key features:
 - **459 offline tests** — unit, contract, integration, HTTP security, E2E, and
   MCP conformance with 88.08% branch coverage
 
+## Architecture
+
+The server uses two provider gateways behind one normalized domain layer, a
+lifespan-owned runtime for concurrency/budget/ownership, and a durable
+artifact store. See [docs/architecture.md](docs/architecture.md) for the full
+overview.
+
+**Components**
+
+```mermaid
+flowchart TB
+  subgraph Client["MCP clients"]
+    CD[Claude Desktop]
+    CX[Codex CLI]
+    OC[OpenCode]
+    TR[TRAE IDE]
+  end
+  subgraph Server["ModelArk MCP Server (FastMCP)"]
+    Tools["Tools (9)<br/>Seedream · Seedance · Seed Audio"]
+    Domain["Domain layer<br/>models · capability registry · errors"]
+    Runtime["Runtime services<br/>concurrency · budget · ownership · retry"]
+    Store["Artifact store<br/>filesystem + .meta.json"]
+    Sec["Security<br/>JWT · SSRF-safe downloads · body limits"]
+    Obs["Observability<br/>structured logs · metrics · traces"]
+  end
+  subgraph Providers["BytePlus"]
+    MA["ModelArk gateway<br/>Bearer auth"]
+    SS["Seed Speech gateway<br/>X-Api-Key"]
+  end
+  Client <-->|"stdio / HTTP"| Tools
+  Tools --> Domain
+  Tools --> Runtime
+  Tools --> Store
+  Domain --> Providers
+  Sec -. guards .-> Tools
+  Obs -. observes .-> Tools
+```
+
+**Layered view**
+
+```mermaid
+flowchart LR
+  L1["Transport<br/>stdio · Streamable HTTP"] --> L2["Server<br/>FastMCP tools · resources · routes"]
+  L2 --> L3["Domain<br/>typed models · capability registry"]
+  L3 --> L4["Provider gateways<br/>ModelArk · Seed Speech"]
+  L4 --> L5["BytePlus<br/>Seedream · Seedance · Seed Audio"]
+  L2 -.-> X["Cross-cutting<br/>security · runtime · observability · artifacts"]
+```
+
+**Request sequence (a billable generate call)**
+
+```mermaid
+sequenceDiagram
+  participant C as MCP Client
+  participant T as Tool handler
+  participant R as Runtime services
+  participant P as Provider gateway
+  participant B as BytePlus
+  participant A as Artifact store
+  C->>T: call tool (Pydantic inputs)
+  T->>T: validate inputs + capability registry
+  T->>R: reserve budget + acquire provider/principal semaphores
+  R-->>T: budget reservation
+  T->>P: call_with_retry(provider request)
+  P->>B: HTTPS (Bearer / X-Api-Key)
+  B-->>P: media URL (2h audio / 24h image·video)
+  P-->>T: provider result
+  T->>A: persist artifact (durable copy)
+  A-->>T: seed-media://artifacts/{id}
+  T->>R: commit budget
+  T-->>C: ArtifactRef (stable resource URI)
+```
+
 ## Quick Start
 
 ```bash
@@ -94,6 +167,70 @@ The server runs as a `stdio` process. Configure it in your MCP client:
 }
 ```
 
+### Codex CLI
+
+Codex reads MCP servers from `~/.codex/config.toml` (global) or
+`.codex/config.toml` (project-scoped, trusted projects). The format is TOML
+with one `[mcp_servers.<name>]` table per server:
+
+```toml
+[mcp_servers.modelark-seed]
+command = "uv"
+args = ["--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark_mcp"]
+
+[mcp_servers.modelark-seed.env]
+BYTEPLUS_MODELARK_API_KEY = "your_modelark_key"
+BYTEPLUS_SEED_AUDIO_API_KEY = "your_seed_audio_key"
+```
+
+### OpenCode
+
+OpenCode reads MCP servers from `opencode.json` / `opencode.jsonc` at the
+project root, or `~/.config/opencode/opencode.json` globally. Use the
+top-level `mcp` key with `type: "local"` and `command` as an array:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "modelark-seed": {
+      "type": "local",
+      "command": ["uv", "--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark_mcp"],
+      "enabled": true,
+      "environment": {
+        "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
+        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+      }
+    }
+  }
+}
+```
+
+### TRAE IDE
+
+TRAE uses the standard `mcpServers` JSON shape, added either via
+**Settings → MCP → Add → Manual** in the IDE, or declared in a project-level
+`.trae/mcp.json` (enable project-level MCP in Settings → MCP). The
+`${workspaceFolder}` variable resolves to the project root:
+
+```json
+{
+  "mcpServers": {
+    "modelark-seed": {
+      "command": "uv",
+      "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "modelark_mcp"],
+      "env": {
+        "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
+        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+      }
+    }
+  }
+}
+```
+
+> The same `mcpServers` JSON can be pasted directly into TRAE's **Manual
+> configuration** window if you already run this server in another IDE.
+
 ### Cursor, VS Code, MCP Inspector
 
 See the [Integration Guide](docs/integration-guide.md) for configuration
@@ -119,11 +256,17 @@ make check-env     # Validate environment configuration
 | Document | Description |
 |---|---|
 | [Getting Started](docs/getting-started.md) | Installation, configuration, and first run |
+| [Architecture](docs/architecture.md) | System structure, two-gateway domain layer, request flow |
 | [Configuration](docs/configuration.md) | Full environment variable reference |
 | [Integration Guide](docs/integration-guide.md) | MCP client setup (Claude, Cursor, VS Code, Inspector) |
 | [API Reference](docs/api-reference.md) | Complete tool schemas, inputs, outputs, and examples |
 | [Use Cases](docs/use-cases.md) | Common scenarios with example tool calls |
 | [Tools](docs/tools.md) | Tool reference with input/output tables |
+| [Security](docs/security.md) | Consolidated security model (auth, SSRF, body limits) |
+| [Runtime](docs/runtime.md) | Concurrency, budget, ownership, retry |
+| [Observability](docs/observability.md) | Structured logging, metrics, tracing |
+| [Models](docs/models.md) | Model capability registry and validation |
+| [Artifacts](docs/artifacts.md) | Durable artifact lifecycle and store |
 | [Transports](docs/transports.md) | stdio vs HTTP deployment |
 | [Deployment](docs/deployment.md) | Container, Kubernetes, and remote HTTP deployment |
 | [Troubleshooting](docs/troubleshooting.md) | Common errors and fixes |

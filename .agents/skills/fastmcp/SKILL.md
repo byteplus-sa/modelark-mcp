@@ -973,7 +973,6 @@ For stdio-only hosts connecting to remote servers, use the `fastmcp-remote` brid
 
 - `fastmcp-docs` — research the official FastMCP docs index (bundled `llms.txt`).
 - `mcp-builder` — MCP server development guide (TypeScript & Python).
-- `byteplus-docs` — BytePlus product/API docs.
 
 ---
 

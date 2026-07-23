@@ -31,12 +31,34 @@ modelark-mcp/
 ├── pyproject.toml     # project metadata and dependencies (uv)
 ├── uv.lock            # locked dependencies for reproducible installs
 ├── fastmcp.json       # declarative FastMCP server configuration
+├── .agents/skills/    # canonical project skills (source of truth)
+├── .claude/skills/    # per-skill symlinks mirroring .agents/skills/
 ├── plans/             # implementation plans for features
 ├── specs/             # future-looking specs and design docs
 ├── docs/              # project documentation
 ├── src/modelark_mcp/  # server source (Python package)
 └── tests/             # tests (pytest)
 ```
+
+## Skills and Agent Configuration
+
+Agent skills and the agent rule files must stay aligned across the tools
+that read this repository:
+
+- **`.agents/skills/` is the canonical source of truth** for project
+  skills. Add and edit skills here. `skills-lock.json` pins externally
+  sourced skills (e.g. `mcp-builder` from `anthropics/skills`); locally
+  authored skills (`fastmcp`, `fastmcp-docs`) are committed directly.
+- **`.claude/skills/` mirrors `.agents/skills/`** through one relative
+  symlink per skill (e.g. `.claude/skills/mcp-builder` →
+  `../../.agents/skills/mcp-builder`). When you add a skill under
+  `.agents/skills/<name>/`, also create the matching
+  `.claude/skills/<name>` symlink so Claude Code discovers the same skill.
+  Never edit files through the `.claude/skills/` symlinks — change
+  `.agents/skills/` and both trees update.
+- **`CLAUDE.md` imports `AGENTS.md`.** `CLAUDE.md` contains a single
+  `@AGENTS.md` import so Claude Code loads the same rules. Edit `AGENTS.md`
+  only; never duplicate content into `CLAUDE.md`, so the two stay in sync.
 
 ## Documentation Standard
 
