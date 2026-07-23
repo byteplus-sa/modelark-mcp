@@ -36,15 +36,24 @@ class SeedanceImageInput(MediaSource):
     """Image input with an optional role for Seedance."""
 
     MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.IMAGE
-    role: Literal["first_frame", "last_frame", "reference_image"] | None = None
+    role: Literal["first_frame", "last_frame", "reference_image"] | None = Field(
+        None,
+        description="Role of this image: first_frame, last_frame, or reference_image. If omitted, provider default applies.",
+    )
 
 
 class SeedanceVideoInput(BaseModel):
     """Video reference input for Seedance."""
 
-    kind: Literal["url"] = "url"
-    url: str
-    role: Literal["reference_video"] = "reference_video"
+    kind: Literal["url"] = Field(
+        "url",
+        description="Media source kind. Always 'url' for video references.",
+    )
+    url: str = Field(..., description="HTTPS URL of the reference video.")
+    role: Literal["reference_video"] = Field(
+        "reference_video",
+        description="Role of this input. Always 'reference_video'.",
+    )
 
     @model_validator(mode="after")
     def validate_video_url(self) -> SeedanceVideoInput:
@@ -56,26 +65,73 @@ class SeedanceAudioInput(MediaSource):
     """Audio reference input for Seedance."""
 
     MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.AUDIO
-    role: Literal["reference_audio"] = "reference_audio"
+    role: Literal["reference_audio"] = Field(
+        "reference_audio",
+        description="Role of this input. Always 'reference_audio'.",
+    )
 
 
 class SeedanceCreateTaskInput(BaseModel):
     """Input model for ``seedance_create_task``."""
 
-    prompt: str | None = Field(None, min_length=1, max_length=4000)
-    images: list[SeedanceImageInput] | None = None
-    videos: list[SeedanceVideoInput] | None = None
-    audios: list[SeedanceAudioInput] | None = None
-    model: str | None = None
-    resolution: Literal["480p", "720p", "1080p", "4k"] | None = None
-    ratio: str | None = None
-    duration: int | None = Field(None, ge=-1, le=15)
-    generate_audio: bool | None = None
-    watermark: bool | None = None
-    return_last_frame: bool | None = None
-    execution_expires_after: int | None = Field(None, ge=3600, le=259200)
-    priority: int | None = Field(None, ge=0, le=9)
-    safety_identifier: str | None = Field(None, max_length=64)
+    prompt: str | None = Field(
+        None,
+        min_length=1,
+        max_length=4000,
+        description="Text prompt describing the video to generate (up to 4,000 characters). Optional when media inputs are provided.",
+    )
+    images: list[SeedanceImageInput] | None = Field(
+        None,
+        description="Reference images with optional roles (first_frame, last_frame, reference_image). Max 9.",
+    )
+    videos: list[SeedanceVideoInput] | None = Field(None, description="Reference videos. Max 3.")
+    audios: list[SeedanceAudioInput] | None = Field(
+        None,
+        description="Reference audio for audio-driven generation. Max 3. Cannot be the sole media input.",
+    )
+    model: str | None = Field(
+        None,
+        description="Model ID to use (e.g. 'seedance-2.0'). Defaults to the configured default model.",
+    )
+    resolution: Literal["480p", "720p", "1080p", "4k"] | None = Field(
+        None, description="Output video resolution. Must be supported by the selected model."
+    )
+    ratio: str | None = Field(
+        None,
+        description="Output aspect ratio (e.g. '16:9', '9:16'). Must be supported by the selected model.",
+    )
+    duration: int | None = Field(
+        None,
+        ge=-1,
+        le=15,
+        description="Video duration in seconds (-1 for auto). Max 15. Must be within the selected model's supported range.",
+    )
+    generate_audio: bool | None = Field(
+        None, description="Whether to generate an audio track for the video."
+    )
+    watermark: bool | None = Field(
+        None, description="Whether to apply an AIGC watermark to the video."
+    )
+    return_last_frame: bool | None = Field(
+        None, description="Whether to return the last frame as a separate image output."
+    )
+    execution_expires_after: int | None = Field(
+        None,
+        ge=3600,
+        le=259200,
+        description="Maximum execution time in seconds before the task expires (3600-259200, i.e. 1 hour to 3 days).",
+    )
+    priority: int | None = Field(
+        None,
+        ge=0,
+        le=9,
+        description="Task priority (0-9). Higher values may incur additional cost. Range depends on the selected model.",
+    )
+    safety_identifier: str | None = Field(
+        None,
+        max_length=64,
+        description="Optional identifier for content safety tracking (max 64 characters).",
+    )
 
     @model_validator(mode="after")
     def validate_media_required(self) -> SeedanceCreateTaskInput:

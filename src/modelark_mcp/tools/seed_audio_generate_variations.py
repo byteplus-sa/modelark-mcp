@@ -38,11 +38,24 @@ class SeedAudioVariationsInput(BaseModel):
     )
     variations: int = Field(1, ge=1, le=5, description="Number of variations.")
     variation_prompts: list[str] | None = Field(None, description="Explicit prompts per variation.")
-    audio_references: list[AudioReference] = Field(default_factory=list, max_length=3)
-    image_reference: MediaSource | None = None
-    output: AudioOutputOptions | None = None
-    watermark: AudioWatermarkOptions | None = None
-    persist: bool = True
+    audio_references: list[AudioReference] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Reference audio for voice cloning or scene control (max 3). Mutually exclusive with image_reference.",
+    )
+    image_reference: MediaSource | None = Field(
+        None,
+        description="Reference image for visual-guided audio generation. Mutually exclusive with audio_references.",
+    )
+    output: AudioOutputOptions | None = Field(
+        None, description="Optional output format, sample rate, and rate controls."
+    )
+    watermark: AudioWatermarkOptions | None = Field(
+        None, description="Optional AIGC watermark settings."
+    )
+    persist: bool = Field(
+        True, description="Whether to persist generated audio as durable MCP resources."
+    )
 
     @model_validator(mode="after")
     def validate_prompt_required(self) -> SeedAudioVariationsInput:

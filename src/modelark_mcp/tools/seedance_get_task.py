@@ -31,8 +31,14 @@ from modelark_mcp.tools._errors import provider_error_result
 class SeedanceGetTaskInput(BaseModel):
     """Input model for ``seedance_get_task``."""
 
-    task_id: str
-    persist_output: bool = True
+    task_id: str = Field(
+        ...,
+        description="The task ID returned by seedance_create_task or seedance_create_task_variations.",
+    )
+    persist_output: bool = Field(
+        True,
+        description="Whether to copy provider output URLs into durable artifact storage on first successful retrieval.",
+    )
 
 
 class SeedanceTaskOutput(BaseModel):

@@ -36,19 +36,49 @@ from modelark_mcp.tools._errors import provider_error_result
 class SeedreamGenerateInput(BaseModel):
     """Input model for ``seedream_generate_image``."""
 
-    prompt: str = Field(..., min_length=1, max_length=4000)
-    images: list[MediaSource] | None = None
-    model: str | None = None
-    size: str | None = None
+    prompt: str = Field(
+        ...,
+        min_length=1,
+        max_length=4000,
+        description="Text prompt describing the image to generate (up to 4,000 characters).",
+    )
+    images: list[MediaSource] | None = Field(
+        None,
+        description="Reference images for image-to-image or editing. Count limited by model capabilities.",
+    )
+    model: str | None = Field(
+        None,
+        description="Model ID to use (e.g. 'seedream-4.0', 'seedream-lite'). Defaults to the configured default model.",
+    )
+    size: str | None = Field(
+        None,
+        description="Output image size (e.g. '1024x1024', '2048x1152'). Must be valid for the selected model.",
+    )
     seed: int | None = Field(
         None, ge=-1, le=2147483647, description="Random seed. -1 = random, 0+ = fixed."
     )
-    max_images: int | None = Field(None, ge=1, le=15)
-    output_format: Literal["png", "jpeg"] | None = None
-    response_format: Literal["url", "b64_json"] | None = None
-    watermark: bool | None = None
-    prompt_optimization: Literal["standard", "fast"] | None = None
-    persist: bool = True
+    max_images: int | None = Field(
+        None,
+        ge=1,
+        le=15,
+        description="Number of images to generate in a single call (1-15). Only supported by Lite and 4.x models. Pro models are limited to 1.",
+    )
+    output_format: Literal["png", "jpeg"] | None = Field(
+        None, description="Output image format. Not supported by 4.x models."
+    )
+    response_format: Literal["url", "b64_json"] | None = Field(
+        None, description="Response format for generated images: URL or Base64 JSON."
+    )
+    watermark: bool | None = Field(
+        None, description="Whether to apply an AIGC watermark to generated images."
+    )
+    prompt_optimization: Literal["standard", "fast"] | None = Field(
+        None,
+        description="Prompt optimization mode: standard (higher quality) or fast (lower latency).",
+    )
+    persist: bool = Field(
+        True, description="Whether to persist generated images as durable MCP resources."
+    )
 
 
 class SeedreamGenerateOutput(BaseModel):

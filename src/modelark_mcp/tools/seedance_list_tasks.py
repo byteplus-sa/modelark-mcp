@@ -25,12 +25,30 @@ from modelark_mcp.tools._errors import provider_error_result
 class SeedanceListTasksInput(BaseModel):
     """Input model for ``seedance_list_tasks``."""
 
-    page: int | None = Field(None, ge=1, le=500)
-    page_size: int | None = Field(None, ge=1, le=100)  # server policy caps at 100
-    status: SeedanceTaskStatus | None = None
-    task_ids: list[str] | None = None
-    model: str | None = None
-    service_tier: Literal["default", "flex"] | None = None
+    page: int | None = Field(
+        None,
+        ge=1,
+        le=500,
+        description="Page number for paginated results (1-based). Defaults to 1.",
+    )
+    page_size: int | None = Field(
+        None,
+        ge=1,
+        le=100,
+        description="Number of tasks per page. Server caps at 100. Defaults to 20.",
+    )
+    status: SeedanceTaskStatus | None = Field(
+        None,
+        description="Filter tasks by status (queued, running, succeeded, failed, cancelled, expired).",
+    )
+    task_ids: list[str] | None = Field(
+        None,
+        description="Filter to specific task IDs. Non-owner users can only query their own tasks.",
+    )
+    model: str | None = Field(None, description="Filter tasks by model ID (e.g. 'seedance-2.0').")
+    service_tier: Literal["default", "flex"] | None = Field(
+        None, description="Filter tasks by service tier: default or flex."
+    )
 
 
 class SeedanceTaskPage(BaseModel):

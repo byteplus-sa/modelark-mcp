@@ -48,14 +48,34 @@ class SeedreamVariationsInput(BaseModel):
         le=2147483647,
         description="Base seed. None = provider-randomized. -1 = client-randomized. N = deterministic (N+i per variation).",
     )
-    images: list[MediaSource] | None = None
-    model: str | None = None
-    size: str | None = None
-    output_format: Literal["png", "jpeg"] | None = None
-    response_format: Literal["url", "b64_json"] | None = None
-    watermark: bool | None = None
-    prompt_optimization: Literal["standard", "fast"] | None = None
-    persist: bool = True
+    images: list[MediaSource] | None = Field(
+        None,
+        description="Reference images for image-to-image or editing. Count limited by model capabilities.",
+    )
+    model: str | None = Field(
+        None,
+        description="Model ID to use (e.g. 'seedream-4.0', 'seedream-lite'). Defaults to the configured default model.",
+    )
+    size: str | None = Field(
+        None,
+        description="Output image size (e.g. '1024x1024', '2048x1152'). Must be valid for the selected model.",
+    )
+    output_format: Literal["png", "jpeg"] | None = Field(
+        None, description="Output image format. Not supported by 4.x models."
+    )
+    response_format: Literal["url", "b64_json"] | None = Field(
+        None, description="Response format for generated images: URL or Base64 JSON."
+    )
+    watermark: bool | None = Field(
+        None, description="Whether to apply an AIGC watermark to generated images."
+    )
+    prompt_optimization: Literal["standard", "fast"] | None = Field(
+        None,
+        description="Prompt optimization mode: standard (higher quality) or fast (lower latency).",
+    )
+    persist: bool = Field(
+        True, description="Whether to persist generated images as durable MCP resources."
+    )
 
     @model_validator(mode="after")
     def validate_prompt_required(self) -> SeedreamVariationsInput:

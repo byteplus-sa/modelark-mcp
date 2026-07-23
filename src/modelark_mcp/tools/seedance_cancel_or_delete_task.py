@@ -35,8 +35,11 @@ _DELETABLE_STATES: frozenset[str] = frozenset({"succeeded", "failed", "expired"}
 class SeedanceCancelOrDeleteInput(BaseModel):
     """Input model for ``seedance_cancel_or_delete_task``."""
 
-    task_id: str
-    mode: Literal["cancel", "delete"]
+    task_id: str = Field(..., description="The task ID to cancel or delete.")
+    mode: Literal["cancel", "delete"] = Field(
+        ...,
+        description="Action to perform: 'cancel' stops a queued task; 'delete' removes the record of a terminal task.",
+    )
     expected_status: Literal["queued", "succeeded", "failed", "expired"] = Field(
         ...,
         description=(
@@ -45,7 +48,10 @@ class SeedanceCancelOrDeleteInput(BaseModel):
             "preventing accidental cancellation or deletion."
         ),
     )
-    confirm: Literal[True] = True
+    confirm: Literal[True] = Field(
+        True,
+        description="Must be True to confirm the destructive action. This is a safety guard.",
+    )
 
     @model_validator(mode="after")
     def validate_mode_status_consistency(self) -> SeedanceCancelOrDeleteInput:

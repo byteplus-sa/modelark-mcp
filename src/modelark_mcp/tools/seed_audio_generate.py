@@ -36,31 +36,68 @@ from modelark_mcp.tools._errors import provider_error_result
 class AudioOutputOptions(BaseModel):
     """Optional output controls for Seed Audio generation."""
 
-    format: Literal["wav", "mp3", "pcm", "ogg"] | None = None
-    sample_rate: Literal[8000, 16000, 24000, 32000, 44100, 48000] | None = None
-    speech_rate: int | None = Field(None, ge=-50, le=100)
-    loudness_rate: int | None = Field(None, ge=-50, le=100)
-    pitch_rate: int | None = Field(None, ge=-12, le=12)
-    subtitle: bool | None = None
-    subtitle_type: Literal["utterance", "word"] | None = None
+    format: Literal["wav", "mp3", "pcm", "ogg"] | None = Field(
+        None, description="Output audio format. Defaults to wav if not specified."
+    )
+    sample_rate: Literal[8000, 16000, 24000, 32000, 44100, 48000] | None = Field(
+        None, description="Output sample rate in Hz. Defaults to provider setting if not specified."
+    )
+    speech_rate: int | None = Field(
+        None, ge=-50, le=100, description="Speech speed adjustment. -50 (slowest) to 100 (fastest)."
+    )
+    loudness_rate: int | None = Field(
+        None,
+        ge=-50,
+        le=100,
+        description="Volume/loudness adjustment. -50 (quietest) to 100 (loudest).",
+    )
+    pitch_rate: int | None = Field(
+        None, ge=-12, le=12, description="Pitch adjustment in semitones. -12 to +12."
+    )
+    subtitle: bool | None = Field(
+        None, description="Whether to return timestamped subtitles in the response."
+    )
+    subtitle_type: Literal["utterance", "word"] | None = Field(
+        None, description="Subtitle granularity: utterance-level or word-level timestamps."
+    )
 
 
 class AudioWatermarkOptions(BaseModel):
     """AIGC watermark controls for Seed Audio."""
 
-    enable: bool | None = None
-    metadata: bool | None = None
+    enable: bool | None = Field(None, description="Enable or disable AIGC audio watermarking.")
+    metadata: bool | None = Field(
+        None, description="Whether to embed AIGC metadata in the audio file."
+    )
 
 
 class SeedAudioGenerateInput(BaseModel):
     """Input model for ``seed_audio_generate``."""
 
-    text_prompt: str = Field(..., min_length=1, max_length=3000)
-    audio_references: list[AudioReference] = Field(default_factory=list, max_length=3)
-    image_reference: MediaSource | None = None
-    output: AudioOutputOptions | None = None
-    watermark: AudioWatermarkOptions | None = None
-    persist: bool = True
+    text_prompt: str = Field(
+        ...,
+        min_length=1,
+        max_length=3000,
+        description="Text describing the audio to generate (up to 3,000 characters).",
+    )
+    audio_references: list[AudioReference] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Reference audio for voice cloning or scene control (max 3). Mutually exclusive with image_reference.",
+    )
+    image_reference: MediaSource | None = Field(
+        None,
+        description="Reference image for visual-guided audio generation. Mutually exclusive with audio_references.",
+    )
+    output: AudioOutputOptions | None = Field(
+        None, description="Optional output format, sample rate, and rate controls."
+    )
+    watermark: AudioWatermarkOptions | None = Field(
+        None, description="Optional AIGC watermark settings."
+    )
+    persist: bool = Field(
+        True, description="Whether to persist the generated audio as a durable MCP resource."
+    )
 
     @model_validator(mode="after")
     def validate_no_media_mixing(self) -> SeedAudioGenerateInput:
