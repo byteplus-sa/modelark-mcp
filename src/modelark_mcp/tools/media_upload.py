@@ -149,7 +149,8 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
             )
         raw_size = file_size
     else:
-        assert input.data is not None
+        if input.data is None:
+            raise ValueError("data is required when file_path is not provided.")
         raw = decode_base64_safely(input.data, max_bytes, label=input.media_type)
         raw_size = len(raw)
 
@@ -174,7 +175,8 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
                     )
                 )
             else:
-                assert raw is not None
+                if raw is None:
+                    raise ValueError("data is required for Base64 upload.")
                 data_bytes = raw
                 await call_with_retry(
                     lambda: gateway.upload_bytes(

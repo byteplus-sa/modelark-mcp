@@ -54,7 +54,27 @@ claim. Tool scopes are enforced by FastMCP:
 - `seed:audio:generate`
 - `seedream:generate`
 - `seedance:create`, `seedance:read`, `seedance:delete`
+- `media:upload`
 - `artifacts:read`
+
+## TOS object storage (optional)
+
+The `media_upload` tool is registered only when all three of `TOS_ACCESS_KEY`,
+`TOS_SECRET_KEY`, and `TOS_BUCKET` are set. It uploads media to a **private**
+bucket and returns a presigned HTTPS GET URL.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TOS_ACCESS_KEY` | empty | TOS access key (AK) |
+| `TOS_SECRET_KEY` | empty | TOS secret key (SK) |
+| `TOS_SECURITY_TOKEN` | empty | Optional temporary security token |
+| `TOS_BUCKET` | empty | Target bucket name |
+| `TOS_REGION` | `ap-southeast-1` | TOS region |
+| `TOS_ENDPOINT` | `tos-ap-southeast-1.bytepluses.com` | TOS API endpoint |
+| `TOS_PRESIGN_TTL_SECONDS` | `86400` | Presigned URL validity (60–604800) |
+
+AK and SK must both be set or both be empty. The bucket must remain private;
+presigned URLs grant temporary read access to individual objects.
 
 ## Persistence and runtime policy
 

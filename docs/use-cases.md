@@ -1,7 +1,8 @@
 # Use Cases
 
 The ModelArk Seed MCP server exposes BytePlus multimodal generation through
-nine MCP tools. Here are common scenarios and how to achieve them.
+ten MCP tools (nine core plus an optional media upload helper). Here are
+common scenarios and how to achieve them.
 
 ## 1. Text-to-Image Generation
 
@@ -338,3 +339,54 @@ mode (not parallel variations — these share visual continuity).
 
 This uses `sequential_image_generation: "auto"` — the provider generates a
 coherent storyboard, not independent variations.
+
+## 17. Reference Video Upload via TOS
+
+Upload a video to BytePlus TOS, then use the presigned URL as a video
+reference for Seedance. Requires `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` /
+`TOS_BUCKET`.
+
+**Step 1 — Upload:**
+
+**Tool:** `media_upload`
+
+```json
+{
+  "media_type": "video",
+  "mime_type": "video/mp4",
+  "data": "base64-encoded-video-bytes"
+}
+```
+
+Returns:
+
+```json
+{
+  "url": "https://bucket.tos-ap-southeast-1.bytepluses.com/references/video/abc?...",
+  "expires_at": "2026-07-24T07:30:00+00:00",
+  "object_key": "references/video/abc",
+  "bytes": 5242880
+}
+```
+
+**Step 2 — Use as a reference:**
+
+**Tool:** `seedance_create_task`
+
+```json
+{
+  "prompt": "A cat walking through the garden, cinematic shot",
+  "videos": [
+    {
+      "kind": "url",
+      "url": "<url from step 1>"
+    }
+  ],
+  "resolution": "480p",
+  "duration": 5
+}
+```
+
+The presigned URL is valid for 24 hours by default (configurable via
+`TOS_PRESIGN_TTL_SECONDS`). The bucket remains private; the presigned URL
+is the only way for BytePlus to read the object.

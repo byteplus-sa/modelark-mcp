@@ -6,13 +6,15 @@ generation through a typed, safe tool surface.
 
 ## What It Does
 
-The server provides **9 MCP tools** across three BytePlus products:
+The server provides **10 MCP tools** across three BytePlus products plus an
+optional media upload helper:
 
 | Product | Tools | Description |
 |---|---|---|
 | **Seed Audio** | `seed_audio_generate`, `seed_audio_generate_variations` | Full-scene audio generation through Seed Speech |
 | **Seedream** | `seedream_generate_image`, `seedream_generate_image_variations` | Image generation and editing through ModelArk |
 | **Seedance** | `seedance_create_task`, `seedance_create_task_variations`, `seedance_get_task`, `seedance_list_tasks`, `seedance_cancel_or_delete_task` | Async video generation and task management through ModelArk |
+| **TOS** (optional) | `media_upload` | Upload Base64 or local-file media to BytePlus TOS, return a presigned HTTPS URL for use as a reference |
 
 Key features:
 
@@ -57,12 +59,13 @@ accepts as reference input:
 > [!NOTE]
 > **Video references must be pre-hosted.** `seedance_create_task` accepts
 > video references as a **public HTTPS URL only** — there is no inline Base64
-> option and the server provides no bucket-upload helper. You must upload the
-> video to your own accessible host (e.g. BytePlus TOS, S3, or any public
-> HTTPS endpoint) before calling the tool. The URL must resolve to a public
-> IP (private/loopback/link-local addresses are rejected by the SSRF policy).
-> A plan to add an integrated upload helper is tracked in
-> [plans/PLAN_SEEDANCE_VIDEO_UPLOAD.md](plans/PLAN_SEEDANCE_VIDEO_UPLOAD.md).
+> option. Use the `media_upload` tool to upload Base64 or a local file path
+> (stdio only) to BytePlus TOS and receive a presigned HTTPS GET URL you can
+> pass directly to `seedance_create_task`. Alternatively, host the video on
+> your own accessible HTTPS endpoint (S3, TOS, etc.). The URL must resolve to
+> a public IP (private/loopback/link-local addresses are rejected by the SSRF
+> policy). `media_upload` requires `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` /
+> `TOS_BUCKET` env vars; see [Configuration](docs/configuration.md).
 
 ## Architecture
 

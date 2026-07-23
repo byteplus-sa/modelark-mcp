@@ -1,6 +1,7 @@
 # API Reference
 
-Complete tool schemas, inputs, outputs, and examples for all nine MCP tools.
+Complete tool schemas, inputs, outputs, and examples for all ten MCP tools
+(nine core plus an optional media upload helper).
 
 ## Tool Inventory
 
@@ -15,6 +16,7 @@ Complete tool schemas, inputs, outputs, and examples for all nine MCP tools.
 | 7 | `seedance_get_task` | Seedance | Poll | ModelArk |
 | 8 | `seedance_list_tasks` | Seedance | Read-only | ModelArk |
 | 9 | `seedance_cancel_or_delete_task` | Seedance | Destructive | ModelArk |
+| 10 | `media_upload` | TOS (optional) | Synchronous | TOS |
 
 ## Tool Annotations
 
@@ -29,6 +31,7 @@ Complete tool schemas, inputs, outputs, and examples for all nine MCP tools.
 | `seedance_get_task` | true | false | true | false |
 | `seedance_list_tasks` | true | false | true | false |
 | `seedance_cancel_or_delete_task` | false | true | false | true |
+| `media_upload` | false | false | false | true |
 
 ---
 
@@ -397,9 +400,11 @@ Extends `MediaSource` with a `role` field:
 
 Video references are URL-only. Unlike image and audio references, there is no
 Base64 path — videos must be uploaded to a publicly reachable HTTPS endpoint
-(e.g. BytePlus TOS, S3) before the tool is called. The URL must resolve to a
-public IP (loopback, private, and link-local addresses are rejected by the
-SSRF policy).
+before the tool is called. Use the `media_upload` tool to upload Base64 or
+a local file (stdio only) to BytePlus TOS and receive a presigned HTTPS GET
+URL. Alternatively, host the video on your own HTTPS endpoint (S3, TOS, etc.).
+The URL must resolve to a public IP (loopback, private, and link-local
+addresses are rejected by the SSRF policy).
 
 | Field | Type | Description |
 |---|---|---|
@@ -644,6 +649,51 @@ Returns persisted media by artifact ID with the correct MIME type.
 ### seed-health://status
 
 Returns server health and configuration status as plain text.
+
+## 10. media_upload
+
+Upload media to BytePlus TOS and return a presigned HTTPS GET URL. Registered
+only when `TOS_ACCESS_KEY`, `TOS_SECRET_KEY`, and `TOS_BUCKET` are set.
+
+### Input
+
+| Field | Type | Required | Default | Constraints |
+|---|---|---|---|---|
+| `media_type` | `"image"` \| `"audio"` \| `"video"` | yes | — | Media category |
+| `mime_type` | string | yes | — | Must be in the allowed MIME list for the category |
+| `data` | string | one of | — | Base64-encoded bytes. Mutually exclusive with `file_path` |
+| `file_path` | string | one of | — | Local file path (stdio only). Mutually exclusive with `data` |
+| `key_prefix` | string | no | `"references"` | Alphanumeric, `-`, `_`, `/` only |
+
+### Output
+
+| Field | Type | Description |
+|---|---|---|
+| `url` | string | Presigned HTTPS GET URL |
+| `expires_at` | string | ISO-8601 expiry timestamp |
+| `object_key` | string | TOS object key |
+| `bytes` | integer | Uploaded byte count |
+
+### Example
+
+```json
+// Input
+{
+  "media_type": "video",
+  "mime_type": "video/mp4",
+  "data": "AAAAIGZ0cBAAA..."
+}
+
+// Output
+{
+  "url": "https://test-bucket.tos-ap-southeast-1.bytepluses.com/references/video/abc?X-Tos-Signature=...",
+  "expires_at": "2026-07-24T07:30:00+00:00",
+  "object_key": "references/video/abc",
+  "bytes": 1048576
+}
+```
+
+---
 
 ## Operational HTTP endpoints
 
