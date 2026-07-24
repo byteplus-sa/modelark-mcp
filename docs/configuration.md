@@ -46,6 +46,9 @@ registered.
 | `MCP_JWT_AUDIENCE` | empty | Required token audience |
 | `MCP_TENANT_CLAIM` | `tenant_id` | Claim used for tenant isolation |
 
+`FASTMCP_TRANSPORT`, `FASTMCP_HOST`, and `FASTMCP_PORT` are accepted as
+aliases for the corresponding `MCP_*` transport settings.
+
 `local` auth is accepted only for stdio or loopback HTTP. Binding HTTP to a
 non-loopback address fails closed unless JWT mode and all verifier settings are
 present. JWT tokens must contain a principal (`sub`) and the configured tenant
@@ -81,7 +84,7 @@ presigned URLs grant temporary read access to individual objects.
 | Variable | Default | Purpose |
 |---|---|---|
 | `ARTIFACT_BACKEND` | `filesystem` | Only implemented backend |
-| `ARTIFACT_DIR` | `.artifacts` | Media, metadata, ownership, and budget state |
+| `ARTIFACT_DIR` | `~/.modelark-mcp/artifacts` | Media, metadata, ownership, and budget state |
 | `ARTIFACT_TTL_SECONDS` | `604800` | Artifact retention, in seconds |
 | `MCP_INLINE_MEDIA_MAX_BYTES` | `8388608` | Maximum inline MCP media size |
 | `PROVIDER_MAX_CONCURRENCY` | `5` | Process-wide slots per provider |
@@ -97,7 +100,7 @@ budget, cache, and limiter implementations before horizontal scaling is safe.
 | Variable | Default | Purpose |
 |---|---|---|
 | `BYTEPLUS_CONNECT_TIMEOUT_MS` | `10000` | Provider connection timeout |
-| `BYTEPLUS_REQUEST_TIMEOUT_MS` | `300000` | Full provider request timeout |
+| `BYTEPLUS_REQUEST_TIMEOUT_MS` | `600000` | Full provider request timeout |
 | `MODELARK_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
 
 Logs are structured JSON on stderr. Provider credentials and sensitive media

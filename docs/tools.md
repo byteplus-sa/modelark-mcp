@@ -1,8 +1,29 @@
 # Tools Reference
 
-The server exposes nine typed tools. Each accepts a Pydantic input model and
-returns a Pydantic output model as structured content. All tools accept a
-`ctx: Context` parameter for progress reporting and logging.
+The server exposes a conditional set of typed tools. `seed_media_get_artifact`
+is always available, provider tools are registered only when their credentials
+are configured, and `media_upload` is registered only when TOS credentials are
+present. Each tool accepts a Pydantic input model and returns a Pydantic output
+model as structured content. All tools accept a `ctx: Context` parameter for
+progress reporting and logging.
+
+## seed_media_get_artifact
+
+Retrieve persisted media inline by artifact ID.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `artifact_id` | string | Yes | Artifact ID returned by a previous generation call |
+
+### Output
+
+Returns `SeedMediaGetArtifactOutput` with `artifact_id`, `media_type`,
+`mime_type`, `sha256`, `bytes`, and Base64 `data`.
 
 ## seed_audio_generate
 
@@ -24,8 +45,9 @@ Generate full-scene audio through Seed Speech.
 
 ### Output
 
-Returns a `SeedAudioGenerateOutput` with duration, billing duration, artifact
-reference, optional subtitle, and provider log ID.
+Returns a `SeedAudioGenerateOutput` with `duration_seconds`,
+`billing_duration_seconds`, `artifact`, optional `subtitle`, `request_id`,
+`provider_log_id`, and optional `source_url`.
 
 ### Example
 
@@ -62,6 +84,35 @@ Generate or edit an image through ModelArk Seedream.
 Returns a `SeedreamGenerateOutput` with model, created timestamp, artifact
 list, per-item errors, and usage info.
 
+## seedream_edit_image
+
+Edit an image through ModelArk Seedream with point or bounding-box targeting.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | Natural-language edit instruction |
+| `images` | list[MediaSource] | Yes | Reference images to edit |
+| `point` | EditCoordinate | No* | Point coordinate in normalized `0..999` space |
+| `bbox` | EditBbox | No* | Bounding box in normalized `0..999` space |
+| `model` | string | No | Override configured model ID |
+| `size` | string | No | Image dimensions |
+| `output_format` | "png" \| "jpeg" | No | Output format |
+| `response_format` | "url" \| "b64_json" | No | Response format |
+| `watermark` | boolean | No | AIGC watermark |
+| `prompt_optimization` | "standard" \| "fast" | No | Prompt optimization mode |
+| `persist` | boolean | No | Whether to persist output (default: true) |
+
+\* Provide either `point` or `bbox`.
+
+### Output
+
+Returns `SeedreamEditOutput` with artifact list and usage information.
+
 ## seedance_create_task
 
 Create an asynchronous Seedance video generation task.
@@ -94,7 +145,7 @@ media input.
 ### Output
 
 Returns a `SeedanceCreateTaskOutput` with task ID, status, and recommended
-polling interval.
+poll delay in `recommended_poll_after_ms`.
 
 ## seedance_get_task
 
@@ -236,3 +287,28 @@ for async polling via `seedance_get_task`.
 \* Either `prompt` or `variation_prompts` must be provided.
 
 **Output:** `VariationSummary` + `recommended_poll_after_ms`.
+
+## media_upload
+
+Upload image, audio, or video media to BytePlus TOS and receive a presigned
+HTTPS URL.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `media_type` | "image" \| "audio" \| "video" | Yes | Media category for validation |
+| `mime_type` | string | Yes | MIME type such as `video/mp4` or `image/png` |
+| `data` | string | No* | Base64-encoded media bytes |
+| `file_path` | string | No* | Absolute local path; intended for stdio transport |
+| `key_prefix` | string | No | Optional object key prefix |
+
+\* Provide exactly one of `data` or `file_path`.
+
+### Output
+
+Returns `MediaUploadOutput` with presigned `url`, `expires_at`, `object_key`,
+and uploaded `bytes`.

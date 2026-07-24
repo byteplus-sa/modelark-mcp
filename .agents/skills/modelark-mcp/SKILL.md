@@ -1,611 +1,332 @@
 ---
 name: modelark-mcp
-description: Guide for using the ModelArk Seed Multimodal MCP server to generate images (Seedream), audio (Seed Audio), and video (Seedance) through BytePlus APIs. Invoke when the user wants to generate or edit media, check generation task status, list or cancel video tasks, or retrieve generated media artifacts.
+description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video, poll and manage Seedance tasks, upload reference media to TOS, and fetch persisted artifacts.
 ---
 
 # ModelArk Seed Multimodal MCP Server
 
-The ModelArk Seed MCP server exposes BytePlus multimodal generation through a
-typed, safe MCP tool surface. It wraps three BytePlus AI products behind one
-server:
+Use this skill when the user wants to work with the local `modelark-mcp`
+server and its typed BytePlus multimodal tool surface.
 
-- **Seedream** — image generation and editing (text-to-image, reference-based
-  editing, batch generation).
-- **Seed Audio** — full-scene audio generation with voice cloning, subtitles,
-  and watermarking.
-- **Seedance** — asynchronous video generation with task-based lifecycle
-  (create, poll, list, cancel/delete).
+The server is built on FastMCP v3 and wraps three provider families behind one
+local MCP server:
 
-The server is built on FastMCP v3 and runs locally via `stdio` or as a
-deployable Streamable HTTP service. Generated media is persisted to a local
-artifact store with stable `seed-media://` resource URIs that survive provider
-URL expiry (2 hours for audio, 24 hours for image/video).
+- **Seedream** for image generation and editing.
+- **Seed Audio** for full-scene audio generation.
+- **Seedance** for asynchronous video generation.
+- **Artifacts** for durable media access after provider URLs expire.
+- **TOS upload** for URL-only media workflows such as Seedance video
+  references.
+
+## When To Use
+
+Invoke this skill when the user wants to:
+
+- generate or edit an image;
+- generate audio, voice-clone from references, or request several variations;
+- create, poll, list, cancel, or delete Seedance video tasks;
+- fetch a previously persisted artifact by ID;
+- upload local or Base64 media to TOS to obtain a presigned HTTPS URL;
+- verify which products are configured on the running server.
+
+## Registration Model
+
+Do not assume a fixed tool count. Registration is conditional:
+
+### Always registered
+
+- `seed_media_get_artifact`
+- `seed-health://status` resource
+
+### Requires `BYTEPLUS_SEED_AUDIO_API_KEY`
+
+- `seed_audio_generate`
+- `seed_audio_generate_variations`
+
+### Requires `BYTEPLUS_MODELARK_API_KEY`
+
+- `seedream_generate_image`
+- `seedream_edit_image`
+- `seedream_generate_image_variations`
+- `seedance_create_task`
+- `seedance_create_task_variations`
+- `seedance_get_task`
+- `seedance_list_tasks`
+- `seedance_cancel_or_delete_task`
+
+### Requires `TOS_ACCESS_KEY`, `TOS_SECRET_KEY`, and `TOS_BUCKET`
+
+- `media_upload`
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python >= 3.12
-- `uv` package manager
-- BytePlus API keys for the products you intend to use
+- Python 3.12+
+- `uv`
+- BytePlus credentials for the product surfaces you need
 
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure at minimum:
+### Minimum environment
 
 ```bash
-BYTEPLUS_MODELARK_API_KEY=your-modelark-key   # required for Seedream + Seedance
-BYTEPLUS_SEED_AUDIO_API_KEY=your-audio-key    # required for Seed Audio
+BYTEPLUS_MODELARK_API_KEY=your-modelark-key
+BYTEPLUS_SEED_AUDIO_API_KEY=your-seed-audio-key
 ```
 
-Tools for a product are only registered when its API key is set. The server
-gracefully degrades: if only one key is provided, only that product's tools
-appear.
+Optional TOS upload support:
+
+```bash
+TOS_ACCESS_KEY=your-ak
+TOS_SECRET_KEY=your-sk
+TOS_BUCKET=your-private-bucket
+```
 
 ### Running
 
 ```bash
-uv run modelark-mcp          # stdio transport (default, for local MCP clients)
-MCP_TRANSPORT=http uv run modelark-mcp  # Streamable HTTP on 127.0.0.1:3000
+uv run modelark-mcp
+MCP_TRANSPORT=http uv run modelark-mcp
 ```
 
-Verify with the `seed-health://status` resource or the `/health` HTTP endpoint.
+Verify configuration with `seed-health://status`, `/health`, or `/ready`.
 
----
+## Tool Guide
 
-## Tool Reference
+### Artifact access
 
-All nine tools are Pydantic-validated and return structured outputs. Below is
-the complete reference organized by product.
+#### `seed_media_get_artifact`
 
-### Seed Audio Tools
+Use when the client needs inline artifact content instead of reading the
+resource URI directly.
 
-Requires `BYTEPLUS_SEED_AUDIO_API_KEY`. Auth scope: `seed:audio:generate`.
+- Input: `artifact_id`
+- Returns: `artifact_id`, `media_type`, `mime_type`, `sha256`, `bytes`,
+  Base64 `data`
+- Behavior: read-only, idempotent, ownership-checked
+
+#### `seed-media://artifacts/{artifact_id}`
+
+Use when the client can consume an MCP resource directly.
+
+- Returns the persisted media bytes with the correct MIME type
+- Best for durable access to generated media after provider URLs expire
+
+### Seed Audio
 
 #### `seed_audio_generate`
 
-Generate a full-scene audio clip from a text prompt. Supports voice cloning via
-audio references, optional image input for context-aware audio, subtitle
-generation, and watermarking.
+Generate full-scene audio from a text prompt.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `text_prompt` | `str` | Yes | 1–3000 characters |
-| `audio_references` | `list[AudioReference]` | No | Up to 3 references (speaker ID, URL, or Base64) |
-| `image_reference` | `MediaSource` | No | Image for context-aware audio |
-| `output` | `AudioOutputOptions` | No | Format (wav/mp3/pcm/ogg), sample_rate, speech_rate, loudness_rate, pitch_rate, subtitle options |
-| `watermark` | `AudioWatermarkOptions` | No | Enable watermark and optional metadata |
-| `persist` | `bool` | Yes (default `true`) | Persist to artifact store |
-
-Returns `SeedAudioGenerateOutput` with `artifact: ArtifactRef`, `duration`,
-`subtitles`, `request_id`, `provider_log_id`.
-
-**Example — basic audio generation:**
-
-```json
-{
-  "text_prompt": "A gentle rain falling on a tin roof, with distant thunder rumbling every few seconds",
-  "output": {
-    "format": "wav",
-    "sample_rate": 44100
-  },
-  "persist": true
-}
-```
-
-**Example — voice cloning with a speaker ID:**
-
-```json
-{
-  "text_prompt": "Hello, welcome to our presentation. Today we will discuss the quarterly results.",
-  "audio_references": [
-    { "kind": "speaker", "speaker_id": "zh_female_qingxin" }
-  ],
-  "output": {
-    "format": "mp3",
-    "subtitle": true,
-    "subtitle_type": "word"
-  },
-  "persist": true
-}
-```
+- Supports: voice cloning via `audio_references`, image-guided audio via
+  `image_reference`, subtitles, watermarking, durable persistence
+- Constraint: `audio_references` and `image_reference` are mutually exclusive
+- Returns: `artifact`, `duration_seconds`, `billing_duration_seconds`,
+  optional `subtitle`, `request_id`, `provider_log_id`, optional `source_url`
 
 #### `seed_audio_generate_variations`
 
-Generate 1–5 audio variations in parallel. Each variation is an independent
-generation (no seeds are supported for audio).
+Generate 1 to 5 audio variations in parallel.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `text_prompt` | `str` | Yes | Base prompt (1–3000 chars) |
-| `variations` | `int` | Yes | 1–5 |
-| `variation_prompts` | `list[str]` | No | Per-variation prompts (one per variation) |
-| All other audio params | — | No | Same as `seed_audio_generate` |
+- Use when the user wants multiple options from one prompt family
+- Supports `variation_prompts` for fully customized per-variation prompts
+- Returns a variation summary with per-variation success or error capture
 
-Returns `SeedAudioVariationsOutput` with `VariationSummary` (total, succeeded,
-failed, per-variation results with partial failure capture).
-
-**Example — 3 variations with per-variation prompts:**
-
-```json
-{
-  "variation_prompts": [
-    "A calm ocean waves soundscape",
-    "A busy city street ambient noise",
-    "A quiet forest with birds chirping"
-  ],
-  "variations": 3,
-  "output": { "format": "mp3" },
-  "persist": true
-}
-```
-
----
-
-### Seedream (Image) Tools
-
-Requires `BYTEPLUS_MODELARK_API_KEY`. Auth scope: `seedream:generate`.
-
-#### `seedream_edit_image`
-
-Interactive image editing with spatial precision. Supports point-based and
-bounding-box editing through structured coordinate inputs. At least one
-reference image and one coordinate (point or bbox) are required.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `prompt` | `str` | Yes | 1–4000 characters. Natural-language edit instruction. |
-| `images` | `list[MediaSource]` | Yes | Reference images to edit (at least 1). |
-| `point` | `EditCoordinate` | No* | Point coordinate `{x, y}` (0–999). *Required if bbox not provided. |
-| `bbox` | `EditBbox` | No* | Bounding-box `{x1, y1, x2, y2}` (0–999). *Required if point not provided. |
-| All other image params | — | No | Same as `seedream_generate_image` |
-
-Returns `SeedreamEditOutput` with `artifacts: list[ArtifactRef]` and
-`usage: SeedreamUsage`.
-
-**Example — replace an object near a point:**
-
-```json
-{
-  "prompt": "Replace the object with a crown.",
-  "images": [{"kind": "url", "url": "https://example.com/photo.png"}],
-  "point": {"x": 520, "y": 460}
-}
-```
-
-**Example — replace a region with a bounding box:**
-
-```json
-{
-  "prompt": "Replace with a garden.",
-  "images": [{"kind": "url", "url": "https://example.com/photo.png"}],
-  "bbox": {"x1": 120, "y1": 180, "x2": 640, "y2": 760}
-}
-```
-
-Coordinates are normalized to 0–999 (top-left = `0,0`, bottom-right =
-`999,999`). Convert pixel coordinates: `normalized = round(pixel / dimension * 1000)`.
-
----
+### Seedream
 
 #### `seedream_generate_image`
 
-Generate images from text prompts. Supports text-to-image, reference-based
-generation, batch generation (Lite/4x models), seed-based reproducibility, and
-prompt optimization. For interactive editing with spatial coordinates, prefer
-`seedream_edit_image`.
+Generate or reference-edit images.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `prompt` | `str` | Yes | 1–4000 characters |
-| `images` | `list[MediaSource]` | No | Reference images for editing |
-| `model` | `str` | No | Model ID. Default: `dola-seedream-5-0-pro-260628` (Pro). Lite and 4x IDs are configured via `SEEDREAM_MODEL_BINDINGS`. |
-| `size` | `str` | No | e.g. `1024x1024` |
-| `seed` | `int` | No | -1 to 2147483647; -1 = client-randomized |
-| `max_images` | `int` | No | 1–15 (batch for Lite/4x models only) |
-| `output_format` | `"png"` \| `"jpeg"` | No | Default: `png` |
-| `response_format` | `"url"` \| `"b64_json"` | No | Default: `url` |
-| `watermark` | `bool` | No | Provider watermark |
-| `prompt_optimization` | `"standard"` \| `"fast"` | No | Prompt enhancement |
-| `persist` | `bool` | Yes (default `true`) | Persist to artifact store |
+- Supports: prompt-only generation, reference-image generation, seeds for
+  reproducibility, batch generation on batch-capable families, prompt
+  optimization, persistence
+- Use this for general text-to-image and non-spatial reference editing
+- Returns: `artifacts` plus usage data
 
-Returns `SeedreamGenerateOutput` with `artifacts: list[ArtifactRef]` and
-`usage: SeedreamUsage`.
+#### `seedream_edit_image`
 
-**Example — text-to-image:**
+Use for coordinate-based editing with explicit spatial targeting.
 
-```json
-{
-  "prompt": "A serene mountain landscape at sunset, digital art style",
-  "size": "1024x1024",
-  "output_format": "jpeg",
-  "persist": true
-}
-```
-
-**Example — image editing with a reference:**
-
-```json
-{
-  "prompt": "Change the background to a beach scene while keeping the subject unchanged",
-  "images": [
-    { "kind": "url", "url": "https://cdn.example.com/original.png" }
-  ],
-  "size": "1024x1024",
-  "persist": true
-}
-```
-
-**Example — reproducible generation with a seed:**
-
-```json
-{
-  "prompt": "A cat sitting on a windowsill looking outside",
-  "seed": 42,
-  "size": "1024x1024",
-  "persist": true
-}
-```
+- Requires at least one input image
+- Requires either `point` or `bbox`
+- Coordinates are normalized to `0..999`
+- Use this instead of `seedream_generate_image` when the instruction depends on
+  an exact point or region
+- Returns: `artifacts` plus usage data
 
 #### `seedream_generate_image_variations`
 
-Generate 1–10 image variations in parallel. Each variation gets a distinct
-seed, making every result different. Supports per-variation prompts and
-deterministic seed sequences.
+Generate 1 to 10 image variations in parallel.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `prompt` | `str` | Yes | Base prompt (1–4000 chars) |
-| `variations` | `int` | Yes | 1–10 |
-| `variation_prompts` | `list[str]` | No | Per-variation prompts |
-| `base_seed` | `int` | No | None=random, -1=client-randomized, N=deterministic sequence |
-| All other image params | — | No | Same as `seedream_generate_image` |
+- Supports `base_seed` for deterministic seed sequences
+- Supports `variation_prompts` when each variation should differ semantically
+- Returns a variation summary with per-variation artifact or error details
 
-Returns `SeedreamVariationsOutput` with `VariationSummary`.
+### Seedance
 
-**Example — 4 variations with deterministic seeds:**
+Seedance is asynchronous. The standard pattern is create, wait, poll, then
+optionally clean up.
 
-```json
-{
-  "prompt": "A futuristic city skyline, cyberpunk aesthetic",
-  "variations": 4,
-  "base_seed": 100,
-  "size": "1024x1024",
-  "persist": true
-}
+Task lifecycle:
+
+```text
+queued -> running -> succeeded | failed | cancelled | expired
 ```
-
-This produces 4 images with seeds [100, 101, 102, 103].
-
-**Example — per-variation seasonal prompts:**
-
-```json
-{
-  "variation_prompts": [
-    "A cat in spring, cherry blossoms",
-    "A cat in summer, sunny garden",
-    "A cat in autumn, fallen leaves",
-    "A cat in winter, snow"
-  ],
-  "variations": 4,
-  "persist": true
-}
-```
-
----
-
-### Seedance (Video) Tools
-
-Requires `BYTEPLUS_MODELARK_API_KEY`. Auth scopes: `seedance:create`,
-`seedance:read`, `seedance:delete`.
-
-Video generation is **asynchronous**. You create a task, then poll for
-completion. Tasks transition through states: `queued` → `running` →
-`succeeded` / `failed` / `cancelled` / `expired`.
 
 #### `seedance_create_task`
 
-Create an async video generation task. Returns a task ID for subsequent
-polling.
+Create a video generation task.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `prompt` | `str` | No | 1–4000 characters |
-| `images` | `list[SeedanceImageInput]` | No | Up to 9 images with roles: `first_frame`, `last_frame`, `reference_image` |
-| `videos` | `list[SeedanceVideoInput]` | No | Up to 3 videos with role: `reference_video` |
-| `audios` | `list[SeedanceAudioInput]` | No | Up to 3 audios with role: `reference_audio` |
-| `model` | `str` | No | Model ID. Default: `dreamina-seedance-2-0-260128` (Standard). Fast and Mini IDs are configured via `SEEDANCE_MODEL_BINDINGS`. |
-| `resolution` | `"480p"` \| `"720p"` \| `"1080p"` \| `"4k"` | No | |
-| `ratio` | `str` | No | Aspect ratio |
-| `duration` | `int` | No | -1 to 15 seconds |
-| `generate_audio` | `bool` | No | Generate audio track |
-| `watermark` | `bool` | No | Provider watermark |
-| `return_last_frame` | `bool` | No | Include last frame image in output |
-| `execution_expires_after` | `int` | No | 3600–259200 seconds |
-| `priority` | `int` | No | 0–9 |
-| `safety_identifier` | `str` | No | Max 64 characters |
-
-Returns `SeedanceCreateTaskOutput` with `task_id` and `polling_interval`.
-
-**Example — text-to-video:**
-
-```json
-{
-  "prompt": "A drone flying over a tropical island, crystal clear water, aerial view",
-  "resolution": "1080p",
-  "duration": 8,
-  "generate_audio": true
-}
-```
-
-**Example — image-to-video with first and last frame:**
-
-```json
-{
-  "prompt": "Smooth transition between the two scenes",
-  "images": [
-    { "role": "first_frame", "kind": "url", "url": "https://cdn.example.com/start.png" },
-    { "role": "last_frame", "kind": "url", "url": "https://cdn.example.com/end.png" }
-  ],
-  "resolution": "720p",
-  "duration": 5
-}
-```
+- Supports prompt plus image, video, and audio references
+- Important constraint: at least one image or video is required; audio cannot
+  be the sole media input
+- Supports `return_last_frame`, `generate_audio`, `priority`, and task TTL
+- Returns: `task_id`, `status="queued"`, `recommended_poll_after_ms`
 
 #### `seedance_create_task_variations`
 
-Create 1–5 video generation tasks in parallel. Each variation creates a
-separate task.
+Create 1 to 5 Seedance tasks in parallel.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| Same as `seedance_create_task` | — | — | — |
-| `variations` | `int` | Yes | 1–5 |
-| `variation_prompts` | `list[str]` | No | Per-variation prompts |
-
-Returns `SeedanceVariationsOutput` with task IDs and polling intervals per
-variation.
+- Use when the user wants multiple candidate videos
+- Returns per-variation task IDs and recommended poll delays
 
 #### `seedance_get_task`
 
-Retrieve the status and output of a video generation task. On success,
-automatically persists the video (and optional last frame) to the artifact
-store. Results are cached for 24 hours.
+Poll a Seedance task and retrieve outputs.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `task_id` | `str` | Yes | Task ID from `seedance_create_task` |
-| `persist_output` | `bool` | Yes (default `true`) | Persist to artifact store |
-
-Returns `SeedanceTaskOutput` with `status`, `artifacts: list[ArtifactRef]`,
-`usage`, `error`, `settings`.
-
-**Typical polling pattern:**
-
-```json
-{"task_id": "task_abc123", "persist_output": true}
-```
-
-Call this repeatedly (respecting the `polling_interval` from creation) until
-`status` is `succeeded`, `failed`, `cancelled`, or `expired`.
+- Input: `task_id`, optional `persist_output=true`
+- On first successful retrieval, persists the returned video and optional last
+  frame into the artifact store
+- Returns: `task_id`, `model`, timestamps, `status`, optional `error`,
+  optional `video`, optional `last_frame`, optional `usage`, `settings`
+- Respect `recommended_poll_after_ms` from creation responses
 
 #### `seedance_list_tasks`
 
-List recent video generation tasks (last 7 days). Supports filtering by status,
-model, and service tier.
+List recent tasks from the last 7 days.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `page` | `int` | No | 1–500 |
-| `page_size` | `int` | No | 1–100 |
-| `status` | `SeedanceTaskStatus` | No | Filter by status |
-| `task_ids` | `list[str]` | No | Filter by specific task IDs |
-| `model` | `str` | No | Filter by model |
-| `service_tier` | `"default"` \| `"flex"` | No | Filter by tier |
-
-Returns `SeedanceTaskPage` with paginated task summaries.
+- Supports filtering by `status`, `task_ids`, `model`, and `service_tier`
+- Use this for operational review, not output retrieval
 
 #### `seedance_cancel_or_delete_task`
 
-Cancel a queued task or delete a terminal task. **Destructive** — requires
-explicit confirmation.
+Destructive task cleanup.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `task_id` | `str` | Yes | Task to act on |
-| `mode` | `"cancel"` \| `"delete"` | Yes | Action to perform |
-| `expected_status` | `SeedanceTaskStatus` | Yes | Must match current status |
-| `confirm` | `Literal[true]` | Yes | Must be `true` |
+- `mode="cancel"` only applies to `expected_status="queued"`
+- `mode="delete"` applies to terminal tasks such as `succeeded`, `failed`, or
+  `expired`
+- Requires `confirm=true`
 
-- `mode=cancel` + `expected_status=queued`: Cancel a pending task.
-- `mode=delete` + `expected_status=succeeded|failed|expired`: Delete a completed
-  task.
+### TOS upload helper
 
-Returns `SeedanceCancelOrDeleteOutput`.
+#### `media_upload`
 
----
+Upload media to BytePlus TOS and receive a presigned HTTPS URL.
 
-## Resources
+- Supports `media_type` of `image`, `audio`, or `video`
+- Accepts either Base64 `data` or absolute `file_path`
+- `file_path` is intended for local `stdio` use
+- Especially useful for URL-only workflows such as Seedance video references
+- Returns: `url`, `expires_at`, `object_key`, `bytes`
 
-The server exposes two MCP resources:
+## Recommended Workflows
 
-### `seed-media://artifacts/{artifact_id}`
+### Durable generation
 
-Retrieves a persisted media artifact by its UUID. Requires `artifacts:read`
-scope in JWT mode. Returns the media content with the correct MIME type.
+1. Call a generate tool with `persist=true` unless the user explicitly wants an
+   ephemeral provider URL.
+2. Save the returned `ArtifactRef.uri`.
+3. Use the artifact URI or `seed_media_get_artifact` for later retrieval.
 
-Artifacts are the durable, locally-persisted copies of generated media. Provider
-URLs expire (2h for audio, 24h for image/video), but artifacts survive for 7
-days (configurable via `ARTIFACT_TTL_SECONDS`). Always use `persist=true` (the
-default) and reference the returned `ArtifactRef.uri` for long-lived access.
+### Seedance polling
 
-### `seed-health://status`
+1. Call `seedance_create_task`.
+2. Wait at least `recommended_poll_after_ms`.
+3. Poll with `seedance_get_task` until the task reaches a terminal state.
+4. Use the returned `video` and `last_frame` artifact refs when present.
 
-Returns a health summary with no authentication required. Lists which products
-are configured (ModelArk, Seed Audio), the artifact backend, and the active
-transport.
+### URL-only video references
 
----
+1. If the user has Base64 video or a local video file, call `media_upload`.
+2. Pass the returned presigned HTTPS URL into `seedance_create_task`.
 
-## Architecture
+### Choosing the right image tool
 
-### Two-Provider Design
+- Use `seedream_generate_image` for prompt-based generation or broad
+  reference-based editing.
+- Use `seedream_edit_image` for point or bounding-box edits.
+- Use the `_variations` tool when the user asks for multiple options.
 
-The server normalizes two distinct BytePlus APIs:
+## Environment Essentials
 
-| Provider | Auth | Base URL | Products |
-|---|---|---|---|
-| **ModelArk** | `Authorization: Bearer <key>` | `https://ark.ap-southeast.bytepluses.com/api/v3` | Seedream, Seedance |
-| **Seed Speech** | `X-Api-Key: <key>` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Audio |
+### Provider credentials
 
-Tools for a product are only registered when its provider API key is set.
+- `BYTEPLUS_MODELARK_API_KEY` enables Seedream and Seedance
+- `BYTEPLUS_SEED_AUDIO_API_KEY` enables Seed Audio
 
-### Runtime Services
+### Model selection
 
-Each server process maintains shared runtime services:
+- `SEEDREAM_DEFAULT_MODEL`
+- `SEEDANCE_DEFAULT_MODEL`
+- `SEEDREAM_MODEL_FAMILY`
+- `SEEDANCE_MODEL_FAMILY`
+- `SEEDREAM_MODEL_BINDINGS`
+- `SEEDANCE_MODEL_BINDINGS`
 
-- **Artifact Store** — Filesystem-backed durable media persistence with
-  ownership metadata and TTL-based cleanup.
-- **Budget Ledger** — SQLite-backed per-principal daily spend tracking.
-- **Task Ownership Store** — SQLite-backed task ID to principal mapping for
-  Seedance ownership enforcement.
-- **Provider Limiters** — Dual-layer concurrency control: per-provider (default
-  5) and per-principal (default 3) semaphores.
-- **Safe Downloader** — SSRF-safe URL downloads with IP pinning and redirect
-  validation.
+Use bindings when a custom model ID is not one of the built-in defaults.
 
-### Model Capability Registry
+### Transport and auth
 
-The server validates inputs against known model capabilities before spending
-quota. Six model families, with these default model IDs:
+- `MCP_TRANSPORT` or `FASTMCP_TRANSPORT`
+- `MCP_HOST` or `FASTMCP_HOST`
+- `MCP_PORT` or `FASTMCP_PORT`
+- `MCP_AUTH_MODE`
+- `MCP_JWT_JWKS_URI`
+- `MCP_JWT_ISSUER`
+- `MCP_JWT_AUDIENCE`
+- `MCP_TENANT_CLAIM`
 
-| Family | Default Model ID | Key Traits |
-|---|---|---|
-| **Seedream Pro** | `dola-seedream-5-0-pro-260628` | 10 refs, no batch, PNG/JPEG |
-| **Seedream Lite** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, PNG/JPEG |
-| **Seedream 4.x** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, JPEG only |
-| **Seedance 2 Standard** | `dreamina-seedance-2-0-260128` | 9 imgs / 3 vids / 3 audios, 480p–4K, 0–15s |
-| **Seedance 2 Fast** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
-| **Seedance 2 Mini** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
+### Persistence and runtime
 
-Custom model IDs must be explicitly bound via `SEEDREAM_MODEL_BINDINGS` or
-`SEEDANCE_MODEL_BINDINGS` JSON. When a client omits the `model` parameter, the
-default model for that product is used.
+- `ARTIFACT_BACKEND`
+- `ARTIFACT_DIR`
+- `ARTIFACT_TTL_SECONDS`
+- `MCP_INLINE_MEDIA_MAX_BYTES`
+- `MCP_HTTP_MAX_BODY_BYTES`
+- `PROVIDER_MAX_CONCURRENCY`
+- `PRINCIPAL_MAX_CONCURRENCY`
+- `DAILY_BUDGET_USD`
+- `MODELARK_LOG_LEVEL`
 
----
+### TOS upload
 
-## Usage Patterns
+- `TOS_ACCESS_KEY`
+- `TOS_SECRET_KEY`
+- `TOS_SECURITY_TOKEN`
+- `TOS_BUCKET`
+- `TOS_REGION`
+- `TOS_ENDPOINT`
+- `TOS_PRESIGN_TTL_SECONDS`
 
-### Standard Generation Workflow
+## Guardrails And Pitfalls
 
-1. Call the generate tool with `persist=true` (default).
-2. The tool returns an `ArtifactRef` with `uri` (e.g.
-   `seed-media://artifacts/abc123`).
-3. Use the artifact URI as a stable reference to the media. The artifact
-   survives provider URL expiry.
+- Generated provider URLs expire quickly. Persist outputs unless the user only
+  needs immediate access.
+- Tool availability depends on configuration. If a tool is missing, check
+  `seed-health://status` and the relevant env vars before assuming a bug.
+- Do not poll Seedance aggressively. Respect `recommended_poll_after_ms`.
+- Use `seedream_edit_image` for spatial edits; do not force point or bbox logic
+  into `seedream_generate_image`.
+- Video references are URL-only. Use `media_upload` when the user starts with
+  local or Base64 video input.
+- Custom model IDs must be explicitly bound to a supported family.
+- Budget enforcement is optional. `DAILY_BUDGET_USD=0` records usage without
+  blocking.
 
-### Seedance Async Workflow
+## Server Notes
 
-1. Call `seedance_create_task` to create a task. Save the returned `task_id`.
-2. Poll `seedance_get_task` with the `task_id` until the status is terminal.
-   Respect the `polling_interval` from the creation response.
-3. On success, the video is automatically persisted to the artifact store.
-4. Optionally call `seedance_list_tasks` to browse recent tasks.
-5. Call `seedance_cancel_or_delete_task` to clean up.
-
-### Parallel Variations
-
-Use variation tools when you want to give the user multiple options:
-
-- `seedream_generate_image_variations` — up to 10 distinct images in one call.
-- `seed_audio_generate_variations` — up to 5 audio clips in one call.
-- `seedance_create_task_variations` — up to 5 parallel video tasks.
-
-Each variation is independent. Partial failures are captured — if 4 of 5
-succeed, the tool returns 4 results and 1 error. The `VariationSummary` reports
-`total`, `succeeded`, and `failed` counts.
-
-### Deterministic Reproduction
-
-For Seedream images, pass a `seed` to reproduce the same output with the same
-prompt. For variation tools, pass `base_seed` to get a deterministic sequence
-(e.g., `base_seed=100` with `variations=4` produces seeds [100, 101, 102,
-103]).
-
-### Image Editing
-
-For interactive, coordinate-based editing, use `seedream_edit_image` with
-structured `point` or `bbox` coordinates. The tool constructs the `<point>`
-and `<bbox>` markup automatically.
-
-For reference-based generation without spatial targeting, use
-`seedream_generate_image` with the `images` parameter.
-
----
-
-## Error Handling
-
-### Provider Errors
-
-Provider errors are normalized into `ProviderError` with a structured message.
-The error includes the provider's HTTP status, error code, and a human-readable
-description.
-
-### Retry Policy
-
-The server retries only explicitly retryable, non-ambiguous errors:
-- Connection/transport errors are retried (up to 3 attempts with exponential
-  backoff and jitter: 0.25s base, 4s max).
-- Timeouts are NOT retried (the operation may have succeeded server-side).
-- Provider errors with `retryable=true` are retried.
-
-### Budget Rejections
-
-If `DAILY_BUDGET_USD` is configured (non-zero), the server tracks per-principal
-daily spend. Requests exceeding the budget are rejected with a clear message.
-Set to `0` (default) for record-only mode with no enforcement.
-
-### Common Issues
-
-| Symptom | Cause | Resolution |
-|---|---|---|
-| Tool not appearing | Missing API key | Set the corresponding `BYTEPLUS_*_API_KEY` |
-| Model not found | Unbound custom model ID | Add to `*_MODEL_BINDINGS` JSON |
-| URL expired | Provider URL TTL elapsed | Use `persist=true` and reference `ArtifactRef.uri` |
-| Auth error (JWT mode) | Missing or invalid token | Check JWT configuration and scopes |
-| Budget rejected | Daily limit exceeded | Wait for UTC day rollover or increase budget |
-
----
-
-## Best Practices
-
-1. **Always persist.** Set `persist=true` (the default) so generated media
-   survives provider URL expiry. Reference the returned `ArtifactRef.uri` for
-   durable access.
-
-2. **Poll with backoff for Seedance.** Use the `polling_interval` from
-   `seedance_create_task` output. Don't poll faster than the interval — it wastes
-   quota and can hit rate limits.
-
-3. **Use variation tools for choice.** When the user needs options (e.g., "show
-   me a few versions"), use a variation tool rather than calling the single
-   generate tool multiple times. Variations run in parallel and handle partial
-   failures gracefully.
-
-4. **Set seeds for reproducibility.** When the user wants consistent or
-   reproducible output, pass a fixed `seed` to `seedream_generate_image` or a
-   `base_seed` to `seedream_generate_image_variations`.
-
-5. **Check health first.** Call `seed-health://status` to verify which products
-   are configured before attempting generation.
-
-6. **Respect model capabilities.** Different models support different features
-   (batch generation, resolutions, reference counts). Check the capability
-   registry before passing unsupported parameters.
-
-7. **Clean up Seedance tasks.** Use `seedance_cancel_or_delete_task` to clean up
-   completed or queued tasks when they are no longer needed.
-
-8. **Validate input sizes.** Audio and image references are limited to 10 MiB
-   each; video references are limited to 200 MiB. Base64 inputs are validated
-   before submission.
+- ModelArk uses Bearer auth and powers Seedream plus Seedance.
+- Seed Audio uses `X-Api-Key` and a separate Seed Speech endpoint.
+- The server persists outputs locally and exposes them as durable MCP
+  artifacts.
+- HTTP mode also exposes `/health`, `/ready`, and `/metrics`.

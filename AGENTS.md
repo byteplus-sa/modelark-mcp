@@ -56,6 +56,12 @@ that read this repository:
   `.claude/skills/<name>` symlink so Claude Code discovers the same skill.
   Never edit files through the `.claude/skills/` symlinks — change
   `.agents/skills/` and both trees update.
+- **Keep project skills current with the MCP server.** When a code change
+  adds, removes, renames, or materially changes MCP tools, resources,
+  configuration, auth scopes, transport behavior, or output schemas, update
+  the affected skill docs in `.agents/skills/` in the same unit of work.
+  Treat agent-facing skills as shipped documentation for the current server,
+  not as optional follow-up polish.
 - **`CLAUDE.md` imports `AGENTS.md`.** `CLAUDE.md` contains a single
   `@AGENTS.md` import so Claude Code loads the same rules. Edit `AGENTS.md`
   only; never duplicate content into `CLAUDE.md`, so the two stay in sync.
@@ -123,6 +129,11 @@ troubleshoot the server.
   plan and then let the two drift; link instead.
 - **Docs reflect shipped work.** Do not document a feature in `docs/` until it
   is built. Use `plans/` and `specs/` for not-yet-shipped work.
+- **Keep docs and skills in lockstep with shipped MCP changes.** If a server
+  change affects tool inventory, resources, schemas, env vars, or user-facing
+  workflows, update the relevant files in `docs/`, `README.md`, and
+  `.agents/skills/` before considering the work complete. If full reconciliation
+  is too large for the current task, document the remaining drift explicitly.
 - **Frontmatter.** Plans and specs use YAML frontmatter. Docs may use
   frontmatter for title and weight/order but are not required to.
 - **Diagrams.** Use Mermaid for architecture, sequence, and flow diagrams. Keep
