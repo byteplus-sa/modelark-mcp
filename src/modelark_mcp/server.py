@@ -8,6 +8,8 @@ declarative server surface.
 from __future__ import annotations
 
 import os
+import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -45,6 +47,22 @@ from modelark_mcp.security.http_auth import (  # noqa: E402
 
 def register_tools(server: FastMCP, settings: Settings) -> None:
     """Register configured tools on one server instance."""
+
+    from modelark_mcp.tools.seed_media_get_artifact import (
+        TOOL_ANNOTATIONS as get_artifact_annotations,
+    )
+    from modelark_mcp.tools.seed_media_get_artifact import (
+        SeedMediaGetArtifactOutput,
+        seed_media_get_artifact,
+    )
+
+    server.tool(
+        name="seed_media_get_artifact",
+        annotations={**get_artifact_annotations},
+        output_schema=SeedMediaGetArtifactOutput.model_json_schema(),
+        auth=component_auth(settings, "artifacts:read"),
+    )(seed_media_get_artifact)
+
     if settings.has_seed_audio:
         from modelark_mcp.tools.seed_audio_generate import (
             TOOL_ANNOTATIONS as audio_annotations,
@@ -262,8 +280,10 @@ def create_server(
     @server.resource("seed-health://status")
     async def health_status() -> str:
         """Return a credential-free MCP health summary."""
+        stamp = _build_stamp()
         return (
             "ModelArk Seed MCP Server\n"
+            f"Build: {stamp}\n"
             "Status: healthy\n"
             f"ModelArk configured: {resolved_settings.has_modelark}\n"
             f"Seed Audio configured: {resolved_settings.has_seed_audio}\n"
@@ -299,3 +319,29 @@ def create_server(
 
 
 mcp: FastMCP = create_server()
+
+
+def _build_stamp() -> str:
+    """Return a short build-identity stamp (git SHA + import time)."""
+    sha = _git_sha()
+    installed = datetime.now(UTC).isoformat()
+    if sha:
+        return f"git:{sha} installed:{installed}"
+    return f"installed:{installed}"
+
+
+def _git_sha() -> str | None:
+    """Return the short (7-char) git SHA of HEAD, or None on failure."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=7", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=Path(__file__).resolve().parent.parent,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None

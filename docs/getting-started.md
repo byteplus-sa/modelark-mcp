@@ -62,6 +62,16 @@ Host, and Origin configuration. See [Transports](transports.md).
 make dev
 ```
 
+Auto-reload watches `src/` and re-imports changed modules on every tool call.
+Use this when iterating on server code.
+
+> **Important — restart after editing source.** Without `make dev` (which
+> runs `fastmcp run --reload`), the server is a long-lived Python process
+> that **does not** hot-reload changed source files. After editing any file
+> under `src/`, restart the server for the changes to take effect. Use the
+> `seed-health://status` MCP resource to verify the running build stamp
+> matches your expectations.
+
 ## Verifying Your Setup
 
 Run the Phase 0 verification script to confirm your credentials and model

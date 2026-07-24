@@ -169,4 +169,7 @@ class TestSeedAudioGenerateTool:
         result = await seed_audio_generate(SeedAudioGenerateInput(text_prompt="test"), fake_ctx)
         assert isinstance(result, ToolResult)
         assert result.is_error
-        assert result.structured_content["error"]["code"] == "INVALID_PARAM"
+        assert result.structured_content is None
+        text = result.content[0].text
+        assert "seed-speech generate_audio failed" in text
+        assert "code=INVALID_PARAM" in text

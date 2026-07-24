@@ -239,5 +239,6 @@ class TestMediaUploadErrors:
 
         assert isinstance(result, ToolResult)
         assert result.is_error
-        assert result.structured_content["error"]["http_status"] == 500
+        assert result.structured_content is None
+        assert "http_status=500" in result.content[0].text
         mock_gw.close.assert_called_once()

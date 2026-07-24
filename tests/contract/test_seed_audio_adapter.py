@@ -12,6 +12,7 @@ import respx
 
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.providers.seed_speech.client import SeedSpeechGateway
+from modelark_mcp.providers.seed_speech.schemas import SeedAudioProviderRequest
 from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
 
 SPEECH_BASE = "https://voice.ap-southeast-1.bytepluses.com"
@@ -52,6 +53,72 @@ class TestSeedAudioRequestBuilding:
         watermark = {"enable": True, "metadata": True}
         request = SeedAudioService.build_request(text_prompt="Hello", watermark=watermark)
         assert request.watermark == watermark
+
+
+class TestSeedAudioProviderRequestSerialization:
+    """Tests for ``SeedAudioProviderRequest.to_api_dict()`` wire flattening."""
+
+    def test_to_api_dict_text_only(self) -> None:
+        request = SeedAudioProviderRequest(model="seed-audio-1.0", text_prompt="Hello")
+        result = request.to_api_dict()
+        assert result == {"model": "seed-audio-1.0", "text_prompt": "Hello"}
+
+    def test_to_api_dict_flattens_output(self) -> None:
+        request = SeedAudioProviderRequest(
+            model="seed-audio-1.0",
+            text_prompt="Hello",
+            output={"format": "mp3", "sample_rate": 44100},
+        )
+        result = request.to_api_dict()
+        assert "output" not in result
+        assert result["format"] == "mp3"
+        assert result["sample_rate"] == 44100
+        assert result["model"] == "seed-audio-1.0"
+        assert result["text_prompt"] == "Hello"
+
+    def test_to_api_dict_flattens_watermark(self) -> None:
+        request = SeedAudioProviderRequest(
+            model="seed-audio-1.0",
+            text_prompt="Hello",
+            watermark={"enable": True, "metadata": False},
+        )
+        result = request.to_api_dict()
+        assert "watermark" not in result
+        assert result["enable"] is True
+        assert result["metadata"] is False
+
+    def test_to_api_dict_flattens_both(self) -> None:
+        request = SeedAudioProviderRequest(
+            model="seed-audio-1.0",
+            text_prompt="Hello",
+            output={"format": "mp3"},
+            watermark={"enable": True},
+        )
+        result = request.to_api_dict()
+        assert "output" not in result
+        assert "watermark" not in result
+        assert result["format"] == "mp3"
+        assert result["enable"] is True
+
+    def test_to_api_dict_excludes_none_output(self) -> None:
+        request = SeedAudioProviderRequest(
+            model="seed-audio-1.0", text_prompt="Hello", output=None, watermark=None
+        )
+        result = request.to_api_dict()
+        assert "output" not in result
+        assert "watermark" not in result
+        assert result == {"model": "seed-audio-1.0", "text_prompt": "Hello"}
+
+    def test_to_api_dict_with_references_preserved(self) -> None:
+        request = SeedAudioProviderRequest(
+            model="seed-audio-1.0",
+            text_prompt="Hello",
+            references=[{"speaker": "voice_001"}],
+            output={"format": "wav"},
+        )
+        result = request.to_api_dict()
+        assert result["references"] == [{"speaker": "voice_001"}]
+        assert result["format"] == "wav"
 
 
 class TestSeedAudioReferenceMapping:
@@ -199,6 +266,26 @@ class TestSeedAudioResponseParsing:
         request = SeedAudioService.build_request(text_prompt="Hello")
         await service.generate(request, request_id="req-abc")
         assert route.calls.last.request.headers["X-Api-Request-Id"] == "req-abc"
+
+    @respx.mock
+    async def test_output_flattened_on_wire(self, service: SeedAudioService) -> None:
+        import json
+
+        route = respx.post(f"{SPEECH_BASE}/api/v3/tts/create").mock(
+            return_value=httpx.Response(200, json={"code": 0, "audio": "aGk="})
+        )
+        request = SeedAudioService.build_request(
+            text_prompt="Hello",
+            output={"format": "mp3", "sample_rate": 44100},
+            watermark={"enable": True},
+        )
+        await service.generate(request)
+        body = json.loads(route.calls.last.request.content)
+        assert "output" not in body
+        assert "watermark" not in body
+        assert body["format"] == "mp3"
+        assert body["sample_rate"] == 44100
+        assert body["enable"] is True
 
 
 class TestSeedAudioErrorPropagation:

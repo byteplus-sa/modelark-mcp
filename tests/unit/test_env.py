@@ -60,7 +60,7 @@ class TestSettings:
     def test_timeout_defaults(self) -> None:
         settings = Settings(_env_file=None)
         assert settings.connect_timeout_ms == 10000
-        assert settings.request_timeout_ms == 300000
+        assert settings.request_timeout_ms == 600000
 
     def test_model_bindings(self) -> None:
         settings = Settings(

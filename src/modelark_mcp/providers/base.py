@@ -49,6 +49,7 @@ class BaseHttpGateway(ABC):
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self._timeout, connect=self._connect_timeout),
                 follow_redirects=False,
+                trust_env=False,
             )
         return self._client
 

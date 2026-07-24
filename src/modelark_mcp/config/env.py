@@ -150,7 +150,7 @@ class Settings(BaseSettings):
     artifact_backend: Literal["filesystem"] = Field(
         default="filesystem", validation_alias="ARTIFACT_BACKEND"
     )
-    artifact_dir: str = Field(default=".artifacts", validation_alias="ARTIFACT_DIR")
+    artifact_dir: str = Field(default="~/.modelark-mcp/artifacts", validation_alias="ARTIFACT_DIR")
     artifact_ttl_seconds: int = Field(default=604800, validation_alias="ARTIFACT_TTL_SECONDS")
     mcp_inline_media_max_bytes: int = Field(
         default=8388608, validation_alias="MCP_INLINE_MEDIA_MAX_BYTES"
@@ -182,7 +182,14 @@ class Settings(BaseSettings):
     # --- HTTP timeouts (milliseconds) ---------------------------------------
 
     connect_timeout_ms: int = Field(default=10000, validation_alias="BYTEPLUS_CONNECT_TIMEOUT_MS")
-    request_timeout_ms: int = Field(default=300000, validation_alias="BYTEPLUS_REQUEST_TIMEOUT_MS")
+    request_timeout_ms: int = Field(
+        default=600000,
+        validation_alias="BYTEPLUS_REQUEST_TIMEOUT_MS",
+        description=(
+            "10-minute request timeout covers long synchronous generations "
+            "(Seedream Pro can take 60-150s, longer under cold start or queue)."
+        ),
+    )
 
     # --- Runtime policy -----------------------------------------------------
 

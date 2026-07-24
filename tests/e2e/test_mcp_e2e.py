@@ -21,6 +21,7 @@ from fastmcp import Client
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import refresh_capability_registry
+from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.providers.modelark.schemas import (
     SeedanceTaskListResponse,
     SeedanceTaskResponse,
@@ -95,6 +96,7 @@ class TestToolDiscovery:
             assert tool_names == {
                 "seed_audio_generate",
                 "seed_audio_generate_variations",
+                "seed_media_get_artifact",
                 "seedream_edit_image",
                 "seedream_generate_image",
                 "seedream_generate_image_variations",
@@ -243,9 +245,11 @@ class TestSeedreamGenerateImageE2E:
                 )
 
         assert result.is_error
-        assert result.structured_content["error"]["code"] == "FORBIDDEN"
-        assert result.structured_content["error"]["request_id"] == "req-err-001"
-        assert "modelark generate_image failed" in result.content[0].text
+        assert result.structured_content is None
+        text = result.content[0].text
+        assert "modelark generate_image failed" in text
+        assert "code=FORBIDDEN" in text
+        assert "request_id=req-err-001" in text
 
     async def test_batch_rejected_for_pro_model(self, e2e_server: object) -> None:
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
@@ -360,6 +364,58 @@ class TestSeedAudioE2E:
         assert data["provider_log_id"] == "seed-speech-log-e2e"
         assert data["artifact"]["media_type"] == "audio"
         assert base64.b64decode(content[0].blob) == b"e2e-audio-data"
+
+    async def test_provider_error_returns_no_structured_content(
+        self, e2e_server: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Error results must not carry structured content.
+
+        Strict MCP clients (e.g. TRAE) validate ``structuredContent`` against
+        the tool's declared ``outputSchema``. The success-shaped schema
+        requires ``duration_seconds`` / ``billing_duration_seconds`` /
+        ``artifact``, so an error payload like ``{"error": ...}`` would be
+        rejected and mask the real provider error. The error path therefore
+        returns text-only content with ``isError=true``.
+        """
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+
+        async def mock_generate(
+            self: SeedAudioService,
+            request: object,
+            *,
+            request_id: str | None = None,
+        ) -> tuple[SeedAudioProviderResponse, str | None]:
+            raise ProviderError(
+                NormalizedProviderError(
+                    provider="seed-speech",
+                    operation="generate_audio",
+                    http_status=400,
+                    code="INVALID_PARAM",
+                    message="text too long",
+                    request_id="req-audio-err-001",
+                    retryable=False,
+                )
+            )
+
+        async def mock_close(self: SeedAudioService) -> None:
+            return None
+
+        monkeypatch.setattr(SeedAudioService, "generate", mock_generate)
+        monkeypatch.setattr(SeedAudioService, "close", mock_close)
+
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "seed_audio_generate",
+                {"input": {"text_prompt": "a short ambient scene"}},
+                raise_on_error=False,
+            )
+
+        assert result.is_error
+        assert result.structured_content is None
+        text = result.content[0].text
+        assert "seed-speech generate_audio failed" in text
+        assert "code=INVALID_PARAM" in text
+        assert "request_id=req-audio-err-001" in text
 
 
 class TestSeedanceLifecycleE2E:

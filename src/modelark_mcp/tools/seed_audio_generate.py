@@ -8,7 +8,8 @@ controls. The adapter maps discriminated unions to the provider's ``speaker``,
 
 from __future__ import annotations
 
-from datetime import UTC
+import re
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import uuid4
 
@@ -121,6 +122,32 @@ class SeedAudioGenerateOutput(BaseModel):
     subtitle: Subtitle | None = None
     request_id: str | None = None
     provider_log_id: str | None = None
+    source_url: str | None = Field(
+        None, description="Provider HTTP URL (2-hour expiry) for direct download."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_DURATION_RE = re.compile(r"Max\s+duration\s*:\s*(\d+(?:\.\d+)?)\s*seconds?", re.IGNORECASE)
+_MAX_MODEL_DURATION = 120.0
+
+
+def _parse_duration_hint(text_prompt: str, *, default: float = 15.0) -> float:
+    """Extract a duration hint from the prompt's ``Max duration: N seconds`` line.
+
+    Falls back to ``default`` (15 s) if no hint is found. Capped at
+    ``_MAX_MODEL_DURATION`` (120 s) to prevent runaway estimates.
+    """
+    match = _DURATION_RE.search(text_prompt)
+    if not match:
+        return default
+    value = float(match.group(1))
+    if value <= 0:
+        return default
+    return min(value, _MAX_MODEL_DURATION)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +208,10 @@ async def seed_audio_generate(
 
     await ctx.report_progress(progress=50, total=100)
 
-    estimated_cost = log_cost_estimate(product="audio", variations=1, duration_seconds=15.0)
+    duration_hint = _parse_duration_hint(input.text_prompt, default=15.0)
+    estimated_cost = log_cost_estimate(
+        product="audio", variations=1, duration_seconds=duration_hint
+    )
     client_request_id = str(uuid4())
 
     try:
@@ -204,20 +234,22 @@ async def seed_audio_generate(
 
     # Persist the audio output.
     artifact: ArtifactRef
+    source_url: str | None = None
+    provider_expiry: str | None = (
+        (datetime.now(UTC) + timedelta(hours=2)).isoformat() if response.url else None
+    )
+
     if input.persist and response.audio:
         store = get_runtime(ctx).artifact_store
         artifact = await store.put_base64(
             data=response.audio,
             media_type=MediaType.AUDIO,
             mime_type="audio/wav",
-            source_expires_at=None,  # 2-hour expiry, but we don't have exact timestamp
+            source_expires_at=provider_expiry,
             auth=get_principal(ctx),
         )
+        source_url = response.url
     elif response.url:
-        # If we only have a URL (no Base64), return a reference to the
-        # provider URL directly. This will expire in 2 hours.
-        from datetime import datetime, timedelta
-
         expiry = (datetime.now(UTC) + timedelta(hours=2)).isoformat()
         artifact = ArtifactRef(
             id="provider-url",
@@ -227,6 +259,7 @@ async def seed_audio_generate(
             created_at=datetime.now(UTC).isoformat(),
             source_expires_at=expiry,
         )
+        source_url = response.url
     else:
         raise ValueError("Provider returned neither Base64 audio nor URL.")
 
@@ -245,6 +278,7 @@ async def seed_audio_generate(
         subtitle=SeedAudioService.extract_subtitle(response),
         request_id=client_request_id,
         provider_log_id=log_id,
+        source_url=source_url,
     )
 
 

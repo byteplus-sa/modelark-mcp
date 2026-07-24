@@ -173,7 +173,8 @@ class TestSeedreamEditImageTool:
         )
         assert isinstance(result, ToolResult)
         assert result.is_error
-        assert result.structured_content["error"]["http_status"] == 403
+        assert result.structured_content is None
+        assert "http_status=403" in result.content[0].text
 
     async def test_too_many_references_rejected(
         self,

@@ -39,7 +39,7 @@ class SeedAudioService:
         try:
             response = await self._gateway.post(
                 "/api/v3/tts/create",
-                request.model_dump(exclude_none=True),
+                request.to_api_dict(),
                 request_id=request_id,
             )
         except httpx.TimeoutException:

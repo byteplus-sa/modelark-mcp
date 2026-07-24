@@ -57,6 +57,24 @@ def _mime_to_media_type(mime_type: str) -> MediaType:
     return MediaType.IMAGE  # Conservative default
 
 
+_MIME_TO_EXT: dict[str, str] = {
+    "audio/wav": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/ogg": ".ogg",
+    "audio/pcm": ".pcm",
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+}
+
+
+def _mime_to_ext(mime_type: str) -> str:
+    return _MIME_TO_EXT.get(mime_type, "")
+
+
 class FilesystemArtifactStore(ArtifactStore):
     """Filesystem-backed artifact store for local ``stdio`` deployment."""
 
@@ -81,9 +99,9 @@ class FilesystemArtifactStore(ArtifactStore):
         if str(parsed) != artifact_id:
             raise ValueError(f"Invalid artifact ID format: '{artifact_id}'")
 
-    def _artifact_path(self, artifact_id: str) -> Path:
+    def _artifact_path(self, artifact_id: str, ext: str = "") -> Path:
         self._validate_artifact_id(artifact_id)
-        return self._safe_path(artifact_id[:2], artifact_id)
+        return self._safe_path(artifact_id[:2], f"{artifact_id}{ext}")
 
     def _metadata_path(self, artifact_id: str) -> Path:
         self._validate_artifact_id(artifact_id)
@@ -190,7 +208,8 @@ class FilesystemArtifactStore(ArtifactStore):
         shard_dir = self._artifact_path(artifact_id).parent
         shard_dir.mkdir(parents=True, exist_ok=True)
 
-        self._atomic_write(self._artifact_path(artifact_id), raw)
+        ext = _mime_to_ext(mime_type)
+        self._atomic_write(self._artifact_path(artifact_id, ext=ext), raw)
 
         ref = ArtifactRef(
             id=artifact_id,
@@ -243,9 +262,19 @@ class FilesystemArtifactStore(ArtifactStore):
                 os.unlink(tmp_path)
             raise
 
+    def _find_artifact(self, artifact_id: str) -> Path:
+        """Find an artifact file, trying known extensions and bare UUID."""
+        self._validate_artifact_id(artifact_id)
+        shard = artifact_id[:2]
+        for ext in ("", *sorted(_MIME_TO_EXT.values())):
+            candidate = self._safe_path(shard, f"{artifact_id}{ext}")
+            if candidate.exists():
+                return candidate
+        return self._artifact_path(artifact_id)
+
     async def get(self, artifact_id: str, auth: AuthContext | None = None) -> StoredArtifact:
         """Retrieve a stored artifact by ID."""
-        path = self._artifact_path(artifact_id)
+        path = self._find_artifact(artifact_id)
         meta_path = self._metadata_path(artifact_id)
 
         if not path.exists():
@@ -303,7 +332,7 @@ class FilesystemArtifactStore(ArtifactStore):
                     expires_dt = datetime.fromisoformat(expires_str)
                     if expires_dt <= now:
                         artifact_id = metadata.ref.id
-                        artifact_path = self._artifact_path(artifact_id)
+                        artifact_path = self._find_artifact(artifact_id)
                         if artifact_path.exists():
                             artifact_path.unlink()
                         meta_file.unlink()

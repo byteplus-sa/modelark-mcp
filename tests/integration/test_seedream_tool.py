@@ -200,4 +200,5 @@ class TestSeedreamGenerateImageTool:
         result = await seedream_generate_image(SeedreamGenerateInput(prompt="test"), fake_ctx)
         assert isinstance(result, ToolResult)
         assert result.is_error
-        assert result.structured_content["error"]["http_status"] == 403
+        assert result.structured_content is None
+        assert "http_status=403" in result.content[0].text

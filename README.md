@@ -263,6 +263,40 @@ TRAE uses the standard `mcpServers` JSON shape, added either via
 > The same `mcpServers` JSON can be pasted directly into TRAE's **Manual
 > configuration** window if you already run this server in another IDE.
 
+### TRAE Work
+
+[TRAE Work](https://www.trae.cn/work) is the standalone AI-native workspace
+(web, desktop, mobile) with Work and Code dual modes. It reads the same
+`mcpServers` JSON shape as TRAE IDE and resolves `${workspaceFolder}` to the
+project root. On the desktop app you also pick a **runtime environment** —
+**本地 (local)** or **云端 (cloud)** — when adding the server.
+
+Add the server via **Avatar → Settings → MCP → Create → Manual configuration**,
+then paste:
+
+```json
+{
+  "mcpServers": {
+    "modelark-seed": {
+      "command": "uv",
+      "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "modelark_mcp"],
+      "env": {
+        "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
+        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+      }
+    }
+  }
+}
+```
+
+> **Runtime environment.** Pick **本地** to run the server on your machine
+> (the repo must be cloned locally, as above). Pick **云端** to run it in a
+> TRAE-managed cloud sandbox; in that case sync the repository to the cloud
+> environment first (for example via the GitHub integration) so
+> `${workspaceFolder}` resolves to a path that actually contains the project.
+> See the official
+> [TRAE Work MCP guide](https://docs.trae.cn/work/remote-mcp-server).
+
 ### Cursor, VS Code, MCP Inspector
 
 See the [Integration Guide](docs/integration-guide.md) for configuration
