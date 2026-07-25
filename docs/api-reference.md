@@ -370,7 +370,7 @@ Create an asynchronous Seedance video generation task.
 
 | Field | Type | Required | Default | Constraints |
 |---|---|---|---|---|
-| `prompt` | string | No | — | — |
+| `prompt` | string | No | — | 1-32,000 chars |
 | `images` | list[SeedanceImageInput] | No | — | Max 9 |
 | `videos` | list[SeedanceVideoInput] | No | — | Max 3 |
 | `audios` | list[SeedanceAudioInput] | No | — | Max 3 |
@@ -453,9 +453,9 @@ Inherits all fields from `seedance_create_task`, plus:
 
 | Field | Type | Required | Default | Constraints |
 |---|---|---|---|---|
-| `prompt` | string | No* | — | — |
+| `prompt` | string | No* | — | 1-32,000 chars |
 | `variations` | integer | No | 1 | 1-5 |
-| `variation_prompts` | list[string] | No | — | Must have `variations` entries |
+| `variation_prompts` | list[string] | No | — | Must have `variations` entries; each 1-32,000 chars |
 
 \* Either `prompt` or `variation_prompts` must be provided.
 
