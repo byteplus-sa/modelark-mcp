@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub PR QA"
+  short_description: "Run independent QA before finalizing a GitHub PR"
+  default_prompt: "Use $github-pr-qa to run an independent read-only QA pass on this pull request, triage the findings, and verify the final head."
