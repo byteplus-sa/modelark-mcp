@@ -1,0 +1,4 @@
+interface:
+  display_name: "Subagent Workflows"
+  short_description: "Orchestrate autonomous Codex subagents"
+  default_prompt: "Use $subagent-workflows to split this complex task across focused Codex subagents and consolidate their results."
