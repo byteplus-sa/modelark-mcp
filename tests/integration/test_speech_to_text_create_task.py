@@ -6,7 +6,9 @@ call (mocked) → task ownership → structured output.
 
 from __future__ import annotations
 
+import base64
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastmcp.tools import ToolResult
@@ -185,6 +187,107 @@ class TestSpeechToTextCreateTask:
                 ),
                 fake_ctx,
             )
+
+    async def test_base64_input_with_tos(
+        self,
+        test_env: None,
+        fake_ctx: FakeContext,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Base64 with TOS configured — uploads then submits."""
+        _patch_las_service(monkeypatch)
+
+        mock_gw = AsyncMock()
+        mock_gw.upload_bytes = AsyncMock(return_value=None)
+        mock_gw.presign_get = AsyncMock(
+            return_value="https://tos.example.com/presigned-audio.wav"
+        )
+        mock_gw.close = AsyncMock()
+
+        with patch(
+            "modelark_mcp.tools.speech_to_text_create_task.TosGateway",
+            return_value=mock_gw,
+        ):
+            result = await speech_to_text_create_task(
+                SpeechToTextCreateTaskInput(
+                    audio={
+                        "audio_data": base64.b64encode(b"fake-audio").decode(),
+                        "audio_format": "wav",
+                    }
+                ),
+                fake_ctx,
+            )
+
+        assert isinstance(result, SpeechToTextCreateTaskOutput)
+        assert result.task_id == "task-test-123"
+        mock_gw.upload_bytes.assert_called_once()
+        mock_gw.presign_get.assert_called_once()
+        mock_gw.close.assert_called_once()
+
+    async def test_file_path_stdio_only(
+        self,
+        test_env: None,
+        fake_ctx: FakeContext,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """file_path rejected on non-stdio transport."""
+        from modelark_mcp.config.env import get_settings
+
+        http_settings = get_settings().model_copy(update={"mcp_transport": "http"})
+        monkeypatch.setattr(
+            "modelark_mcp.tools.speech_to_text_create_task.get_settings",
+            lambda: http_settings,
+        )
+
+        with pytest.raises(ValueError, match="stdio transport"):
+            await speech_to_text_create_task(
+                SpeechToTextCreateTaskInput(
+                    audio={
+                        "audio_file_path": "/tmp/audio.wav",
+                        "audio_format": "wav",
+                    }
+                ),
+                fake_ctx,
+            )
+
+    async def test_tos_upload_error_returns_tool_result(
+        self,
+        test_env: None,
+        fake_ctx: FakeContext,
+    ) -> None:
+        """TOS upload failure is caught and returned as a ToolResult, not raised."""
+        mock_gw = AsyncMock()
+        mock_gw.upload_bytes = AsyncMock(
+            side_effect=ProviderError(
+                NormalizedProviderError(
+                    provider="tos",
+                    operation="upload",
+                    http_status=500,
+                    code="INTERNAL",
+                    message="TOS internal error",
+                    retryable=False,
+                )
+            )
+        )
+        mock_gw.close = AsyncMock()
+
+        with patch(
+            "modelark_mcp.tools.speech_to_text_create_task.TosGateway",
+            return_value=mock_gw,
+        ):
+            result = await speech_to_text_create_task(
+                SpeechToTextCreateTaskInput(
+                    audio={
+                        "audio_data": base64.b64encode(b"data").decode(),
+                        "audio_format": "wav",
+                    }
+                ),
+                fake_ctx,
+            )
+
+        assert isinstance(result, ToolResult)
+        assert result.is_error
+        mock_gw.close.assert_called_once()
 
     async def test_exactly_one_input_required(
         self,

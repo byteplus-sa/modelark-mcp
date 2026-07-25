@@ -202,7 +202,11 @@ async def speech_to_text_create_task(
 
     await ctx.report_progress(progress=30, total=100)
 
-    audio_url = await _resolve_audio_url(input.audio, settings, ctx)
+    try:
+        audio_url = await _resolve_audio_url(input.audio, settings, ctx)
+    except ProviderError as exc:
+        await ctx.error(f"Audio resolution failed: {exc.message}")
+        return provider_error_result(exc)
 
     await ctx.report_progress(progress=50, total=100)
 
