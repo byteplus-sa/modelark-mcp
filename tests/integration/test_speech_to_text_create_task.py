@@ -199,9 +199,7 @@ class TestSpeechToTextCreateTask:
 
         mock_gw = AsyncMock()
         mock_gw.upload_bytes = AsyncMock(return_value=None)
-        mock_gw.presign_get = AsyncMock(
-            return_value="https://tos.example.com/presigned-audio.wav"
-        )
+        mock_gw.presign_get = AsyncMock(return_value="https://tos.example.com/presigned-audio.wav")
         mock_gw.close = AsyncMock()
 
         with patch(

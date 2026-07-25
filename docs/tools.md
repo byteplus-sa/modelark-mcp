@@ -124,7 +124,7 @@ Create an asynchronous Seedance video generation task.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `prompt` | string | No | Text prompt |
+| `prompt` | string | No | Text prompt (1-32,000 chars) |
 | `images` | list[SeedanceImageInput] | No | Image inputs with roles |
 | `videos` | list[SeedanceVideoInput] | No | Reference videos (max 3) |
 | `audios` | list[SeedanceAudioInput] | No | Reference audio (max 3) |
@@ -282,7 +282,7 @@ for async polling via `seedance_get_task`.
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `variations` | integer | No | 1 | Number of variations (1-5) |
-| `variation_prompts` | list[string] | No | — | Explicit prompts per variation |
+| `variation_prompts` | list[string] | No | — | Explicit prompts per variation (each 1-32,000 chars) |
 
 \* Either `prompt` or `variation_prompts` must be provided.
 
