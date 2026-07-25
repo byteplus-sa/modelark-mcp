@@ -77,8 +77,8 @@ class SeedanceCreateTaskInput(BaseModel):
     prompt: str | None = Field(
         None,
         min_length=1,
-        max_length=4000,
-        description="Text prompt describing the video to generate (up to 4,000 characters). Optional when media inputs are provided.",
+        max_length=32000,
+        description="Text prompt describing the video to generate (up to 32,000 characters). Optional when media inputs are provided.",
     )
     images: list[SeedanceImageInput] | None = Field(
         None,
