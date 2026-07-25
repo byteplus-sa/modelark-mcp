@@ -60,6 +60,26 @@ claim. Tool scopes are enforced by FastMCP:
 - `media:upload`
 - `artifacts:read`
 
+## LAS speech-to-text (optional)
+
+The `speech_to_text_create_task` and `speech_to_text_get_result` tools are
+registered only when `BYTEPLUS_LAS_API_KEY` is set. LAS ASR is an asynchronous
+submit/poll API that transcribes audio (and video) into timestamped,
+speaker-diarized text. Audio input requires a URL — Base64 or `file_path`
+input also needs TOS configured.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BYTEPLUS_LAS_API_KEY` | empty | Enables speech-to-text; sent as bare `Authorization` header |
+| `BYTEPLUS_LAS_BASE_URL` | LAS operator URL | HTTPS service base URL |
+| `LAS_DEFAULT_OPERATOR` | `las_asr_pro` | Operator: `las_asr_pro` (enhanced) or `las_asr` (standard) |
+| `LAS_DEFAULT_RESOURCE` | `bigasr` | Model resource for `las_asr_pro`: `bigasr` or `seedasr` |
+
+JWT tool scopes for speech-to-text:
+
+- `las:asr:create`
+- `las:asr:read`
+
 ## TOS object storage (optional)
 
 The `media_upload` tool is registered only when all three of `TOS_ACCESS_KEY`,

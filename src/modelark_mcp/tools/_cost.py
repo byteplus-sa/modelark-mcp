@@ -13,6 +13,7 @@ from modelark_mcp.observability.logger import info as log_info
 COST_PER_IMAGE = 0.03
 COST_PER_AUDIO_SECOND = 0.0031
 COST_PER_VIDEO_TASK = 0.07
+COST_PER_STT_SECOND = 0.0006
 
 # Default max concurrent provider calls.
 DEFAULT_MAX_CONCURRENT = 5
@@ -40,6 +41,8 @@ def estimate_cost(
         return round(variations * max(duration_seconds, 10) * COST_PER_AUDIO_SECOND, 2)
     if product == "video":
         return round(variations * COST_PER_VIDEO_TASK, 2)
+    if product == "stt":
+        return round(variations * max(duration_seconds, 10) * COST_PER_STT_SECOND, 2)
     return 0.0
 
 

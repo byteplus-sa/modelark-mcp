@@ -22,8 +22,12 @@ def test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Set test environment variables with fake credentials."""
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test-modelark")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test-speech")
+    monkeypatch.setenv("BYTEPLUS_LAS_API_KEY", "las-test-key")
     monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "https://ark.test.example.com/api/v3")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.test.example.com")
+    monkeypatch.setenv("BYTEPLUS_LAS_BASE_URL", "https://las.test.example.com")
+    monkeypatch.setenv("LAS_DEFAULT_OPERATOR", "las_asr_pro")
+    monkeypatch.setenv("LAS_DEFAULT_RESOURCE", "bigasr")
     monkeypatch.setenv("SEEDREAM_DEFAULT_MODEL", "dola-seedream-5-0-pro-260628")
     monkeypatch.setenv("SEEDANCE_DEFAULT_MODEL", "dreamina-seedance-2-0-260128")
     monkeypatch.setenv("ARTIFACT_DIR", str(tmp_path / ".artifacts"))

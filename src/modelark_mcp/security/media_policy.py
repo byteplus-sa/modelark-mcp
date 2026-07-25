@@ -29,6 +29,8 @@ _ALLOWED_AUDIO_MIMES: frozenset[str] = frozenset(
         "audio/ogg",
         "audio/ogg;codecs=opus",
         "audio/webm",
+        "audio/flac",
+        "audio/x-flac",
     }
 )
 
@@ -45,6 +47,7 @@ _ALLOWED_VIDEO_MIMES: frozenset[str] = frozenset(
     {
         "video/mp4",
         "video/quicktime",
+        "video/x-matroska",
     }
 )
 
