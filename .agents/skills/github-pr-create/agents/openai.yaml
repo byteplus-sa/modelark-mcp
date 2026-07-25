@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub PR Create"
+  short_description: "Open a PR with gh CLI and converge it through iterative subagent review"
+  default_prompt: "Use $github-pr-create to open a pull request with gh, review it through a read-only subagent, fix valid findings, push, and loop until the PR is clean."
