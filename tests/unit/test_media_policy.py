@@ -27,7 +27,7 @@ class TestMimeValidation:
 
     def test_invalid_audio_mime_rejected(self) -> None:
         with pytest.raises(MediaValidationError, match="not allowed"):
-            validate_audio_mime("audio/flac")
+            validate_audio_mime("audio/aiff")
 
     def test_valid_image_mime_png(self) -> None:
         validate_image_mime("image/png")

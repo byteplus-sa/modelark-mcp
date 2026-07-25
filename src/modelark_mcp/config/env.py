@@ -73,6 +73,7 @@ class Settings(BaseSettings):
 
     modelark_api_key: str = Field(default="", validation_alias="BYTEPLUS_MODELARK_API_KEY")
     seed_audio_api_key: str = Field(default="", validation_alias="BYTEPLUS_SEED_AUDIO_API_KEY")
+    las_api_key: str = Field(default="", validation_alias="BYTEPLUS_LAS_API_KEY")
 
     # --- Provider base URLs --------------------------------------------------
 
@@ -83,6 +84,23 @@ class Settings(BaseSettings):
     seed_audio_base_url: str = Field(
         default="https://voice.ap-southeast-1.bytepluses.com",
         validation_alias="BYTEPLUS_SEED_AUDIO_BASE_URL",
+    )
+    las_base_url: str = Field(
+        default="https://operator.las.ap-southeast-1.bytepluses.com",
+        validation_alias="BYTEPLUS_LAS_BASE_URL",
+    )
+
+    # --- LAS (Lake AI Service) configuration ---------------------------------
+
+    las_default_operator: str = Field(
+        default="las_asr_pro",
+        validation_alias="LAS_DEFAULT_OPERATOR",
+        description="LAS ASR operator: 'las_asr_pro' (enhanced) or 'las_asr' (standard).",
+    )
+    las_default_resource: str = Field(
+        default="bigasr",
+        validation_alias="LAS_DEFAULT_RESOURCE",
+        description="Model resource for las_asr_pro: 'bigasr' or 'seedasr'.",
     )
 
     # --- Model bindings ------------------------------------------------------
@@ -232,6 +250,11 @@ class Settings(BaseSettings):
         return bool(self.tos_access_key and self.tos_secret_key and self.tos_bucket)
 
     @property
+    def has_las(self) -> bool:
+        """Whether LAS (Lake AI Service) credentials are configured."""
+        return bool(self.las_api_key)
+
+    @property
     def allowed_origins(self) -> list[str]:
         """Parse the comma-separated allowed origins list."""
         if not self.mcp_allowed_origins:
@@ -255,7 +278,7 @@ class Settings(BaseSettings):
     def normalize_log_level(cls, value: object) -> object:
         return value.upper() if isinstance(value, str) else value
 
-    @field_validator("modelark_base_url", "seed_audio_base_url")
+    @field_validator("modelark_base_url", "seed_audio_base_url", "las_base_url")
     @classmethod
     def validate_provider_url(cls, value: str) -> str:
         parsed = urlsplit(value)
@@ -263,12 +286,30 @@ class Settings(BaseSettings):
             variable = (
                 "BYTEPLUS_MODELARK_BASE_URL"
                 if "ark" in value.lower()
+                else "BYTEPLUS_LAS_BASE_URL"
+                if "las" in value.lower() or "operator" in value.lower()
                 else "BYTEPLUS_SEED_AUDIO_BASE_URL"
             )
             raise ValueError(f"{variable} must use HTTPS and include a host")
         if parsed.username or parsed.password:
             raise ValueError("Provider base URLs must not contain credentials")
         return value.rstrip("/")
+
+    @field_validator("las_default_operator")
+    @classmethod
+    def validate_las_operator(cls, value: str) -> str:
+        allowed = {"las_asr_pro", "las_asr"}
+        if value not in allowed:
+            raise ValueError(f"LAS_DEFAULT_OPERATOR must be one of {allowed}, got '{value}'")
+        return value
+
+    @field_validator("las_default_resource")
+    @classmethod
+    def validate_las_resource(cls, value: str) -> str:
+        allowed = {"bigasr", "seedasr"}
+        if value not in allowed:
+            raise ValueError(f"LAS_DEFAULT_RESOURCE must be one of {allowed}, got '{value}'")
+        return value
 
     @model_validator(mode="after")
     def validate_model_bindings(self) -> Settings:
@@ -381,6 +422,8 @@ def validate() -> None:
         raise ValueError("BYTEPLUS_MODELARK_BASE_URL must use HTTPS")
     if not settings.seed_audio_base_url.startswith("https://"):
         raise ValueError("BYTEPLUS_SEED_AUDIO_BASE_URL must use HTTPS")
+    if not settings.las_base_url.startswith("https://"):
+        raise ValueError("BYTEPLUS_LAS_BASE_URL must use HTTPS")
     if settings.artifact_ttl_seconds <= 0:
         raise ValueError("ARTIFACT_TTL_SECONDS must be positive")
     if settings.mcp_inline_media_max_bytes <= 0:

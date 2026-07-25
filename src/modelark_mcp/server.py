@@ -7,8 +7,9 @@ declarative server surface.
 
 from __future__ import annotations
 
+import contextlib
 import os
-import subprocess
+import subprocess  # nosec B404
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -107,6 +108,35 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             output_schema=MediaUploadOutput.model_json_schema(),
             auth=component_auth(settings, "media:upload"),
         )(media_upload)
+
+    if settings.has_las:
+        from modelark_mcp.tools.speech_to_text_create_task import (
+            TOOL_ANNOTATIONS as stt_create_annotations,
+        )
+        from modelark_mcp.tools.speech_to_text_create_task import (
+            SpeechToTextCreateTaskOutput,
+            speech_to_text_create_task,
+        )
+        from modelark_mcp.tools.speech_to_text_get_result import (
+            TOOL_ANNOTATIONS as stt_get_annotations,
+        )
+        from modelark_mcp.tools.speech_to_text_get_result import (
+            SpeechToTextGetResultOutput,
+            speech_to_text_get_result,
+        )
+
+        server.tool(
+            name="speech_to_text_create_task",
+            annotations={**stt_create_annotations},
+            output_schema=SpeechToTextCreateTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "las:asr:create"),
+        )(speech_to_text_create_task)
+        server.tool(
+            name="speech_to_text_get_result",
+            annotations={**stt_get_annotations},
+            output_schema=SpeechToTextGetResultOutput.model_json_schema(),
+            auth=component_auth(settings, "las:asr:read"),
+        )(speech_to_text_get_result)
 
     if not settings.has_modelark:
         log_info("tools_skipped", reason="BYTEPLUS_MODELARK_API_KEY not configured")
@@ -240,7 +270,8 @@ def create_server(
         "ModelArk Seed Multimodal",
         instructions=(
             "BytePlus multimodal generation server. Provides Seed Audio, Seedream, "
-            "and Seedance tools. Generated media is persisted as durable MCP resources."
+            "Seedance, and Speech-to-Text tools. Generated media is persisted as "
+            "durable MCP resources."
         ),
         auth=auth_provider or build_auth_provider(resolved_settings),
         lifespan=build_lifespan(resolved_settings, runtime_factory, runtime_state),
@@ -288,6 +319,7 @@ def create_server(
             f"ModelArk configured: {resolved_settings.has_modelark}\n"
             f"Seed Audio configured: {resolved_settings.has_seed_audio}\n"
             f"TOS configured: {resolved_settings.has_tos}\n"
+            f"LAS configured: {resolved_settings.has_las}\n"
             f"Artifact backend: {resolved_settings.artifact_backend}\n"
             f"Transport: {resolved_settings.mcp_transport}\n"
         )
@@ -332,8 +364,8 @@ def _build_stamp() -> str:
 
 def _git_sha() -> str | None:
     """Return the short (7-char) git SHA of HEAD, or None on failure."""
-    try:
-        result = subprocess.run(
+    with contextlib.suppress(Exception):
+        result = subprocess.run(  # nosec B603, B607
             ["git", "rev-parse", "--short=7", "HEAD"],
             capture_output=True,
             text=True,
@@ -342,6 +374,4 @@ def _git_sha() -> str | None:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except Exception:
-        pass
     return None

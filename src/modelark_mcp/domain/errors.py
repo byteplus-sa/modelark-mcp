@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-ProviderName = Literal["modelark", "seed-speech", "tos"]
+ProviderName = Literal["modelark", "seed-speech", "tos", "las"]
 
 
 class NormalizedProviderError(BaseModel):

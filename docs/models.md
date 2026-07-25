@@ -59,6 +59,22 @@ Only `supported_resolutions` differs:
 > `ratio` field exists only on `SeedanceTaskSettings` and the tool input
 > layer; the registry does not validate ratios.
 
+## LAS ASR operators
+
+Speech-to-text uses the BytePlus LAS ASR Service, which offers two operators
+with distinct capabilities. Configured via `LAS_DEFAULT_OPERATOR`.
+
+| Operator | Version | Resource | Formats | Duration limit | Languages |
+|---|---|---|---|---|---|
+| `las_asr` (standard) | `v2` | — | raw, wav, mp3, ogg | ≤ 2 hours | limited |
+| `las_asr_pro` (enhanced) | `v1` | `bigasr` or `seedasr` | + mp4, mov, mkv, flac | no limit | 99 |
+
+**Default:** `las_asr_pro` with `resource: bigasr`. The `seedasr` resource uses
+the SeedASR model (same family as Seed Audio TTS).
+
+The `operator_version` is derived from the operator ID (`las_asr_pro` → `v1`,
+`las_asr` → `v2`) — it is not a separate configuration value.
+
 ## Default model IDs
 
 | Field | Env var | Default | Implied family |
