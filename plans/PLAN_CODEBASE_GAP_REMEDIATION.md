@@ -593,7 +593,7 @@ declared setting unused.
 ### 3.4 Finish input constraints and configuration validation
 
 - Seedream prompt: 1–4,000 characters.
-- Seedance prompt: `None` or 1–4,000 characters; reject empty strings.
+- Seedance prompt: `None` or 1–32,000 characters; reject empty strings.
 - Validate configured URL schemes/hosts, positive TTLs/timeouts/limits, writable
   artifact directory during lifespan readiness, valid auth mode, and mutually
   compatible transport/auth settings.

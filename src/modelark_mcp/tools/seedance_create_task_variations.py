@@ -36,11 +36,11 @@ class SeedanceVariationsInput(SeedanceCreateTaskInput):
     prompt: str | None = Field(
         None,
         min_length=1,
-        max_length=4000,
+        max_length=32000,
         description="Base prompt. Required if variation_prompts is None.",
     )
     variations: int = Field(1, ge=1, le=5, description="Number of variations.")
-    variation_prompts: list[Annotated[str, Field(min_length=1, max_length=4000)]] | None = Field(
+    variation_prompts: list[Annotated[str, Field(min_length=1, max_length=32000)]] | None = Field(
         None, description="Explicit prompts per variation."
     )
 

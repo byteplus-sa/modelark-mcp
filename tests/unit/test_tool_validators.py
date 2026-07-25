@@ -11,6 +11,7 @@ from modelark_mcp.tools.seedance_cancel_or_delete_task import (
     SeedanceCancelOrDeleteInput,
 )
 from modelark_mcp.tools.seedance_create_task import SeedanceCreateTaskInput
+from modelark_mcp.tools.seedance_create_task_variations import SeedanceVariationsInput
 
 
 class TestSeedAudioGenerateInput:
@@ -120,6 +121,24 @@ class TestSeedanceCreateTaskInput:
                 videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             )
 
+    def test_prompt_at_max_length_valid(self) -> None:
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceCreateTaskInput(
+            prompt="x" * 32000,
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+        )
+        assert len(inp.prompt or "") == 32000
+
+    def test_prompt_too_long_raises(self) -> None:
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        with pytest.raises(ValidationError):
+            SeedanceCreateTaskInput(
+                prompt="x" * 32001,
+                videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            )
+
 
 class TestSeedanceCancelOrDeleteInput:
     """Tests for Seedance cancel/delete input validation."""
@@ -145,3 +164,27 @@ class TestSeedanceCancelOrDeleteInput:
     def test_delete_queued_raises(self) -> None:
         with pytest.raises(ValidationError, match="Delete mode requires"):
             SeedanceCancelOrDeleteInput(task_id="task-123", mode="delete", expected_status="queued")
+
+
+class TestSeedanceVariationsInput:
+    """Tests for Seedance variations input prompt-length validation."""
+
+    def test_variation_prompt_at_max_length_valid(self) -> None:
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceVariationsInput(
+            variation_prompts=["x" * 32000],
+            variations=1,
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+        )
+        assert len(inp.variation_prompts[0]) == 32000
+
+    def test_variation_prompt_too_long_raises(self) -> None:
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        with pytest.raises(ValidationError):
+            SeedanceVariationsInput(
+                variation_prompts=["x" * 32001],
+                variations=1,
+                videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            )
