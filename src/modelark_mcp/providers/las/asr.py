@@ -14,8 +14,11 @@ import httpx
 from modelark_mcp.providers.las.client import LasGateway
 from modelark_mcp.providers.las.schemas import (
     LasAsrPollResponse,
+    LasAsrRequestConfig,
+    LasAsrSubmitData,
     LasAsrSubmitRequest,
     LasAsrSubmitResponse,
+    LasAudioInput,
 )
 
 
@@ -103,12 +106,6 @@ class LasAsrService:
         operator_version: str = "v1",
     ) -> LasAsrSubmitRequest:
         """Build a submit request from domain-level parameters."""
-        from modelark_mcp.providers.las.schemas import (
-            LasAsrRequestConfig,
-            LasAsrSubmitData,
-            LasAudioInput,
-        )
-
         config = LasAsrRequestConfig(
             model_name=model_name,
             enable_punc=enable_punc,

@@ -55,17 +55,6 @@ class LasGateway(BaseHttpGateway):
         """POST to LAS and return the raw response."""
         return await self._request("POST", path, json=json_body)
 
-    @staticmethod
-    def extract_request_id(response: httpx.Response) -> str | None:
-        """Attempt to extract a diagnostic request ID from response headers.
-
-        LAS primarily returns ``request_id`` in the response body
-        (``metadata.request_id``), not in headers. This method is kept for
-        ``BaseHttpGateway`` contract compliance and may return ``None``.
-        """
-        value = response.headers.get("X-Request-Id") or response.headers.get("x-request-id")
-        return str(value) if value is not None else None
-
     @classmethod
     def normalize_error(cls, response: httpx.Response, operation: str) -> ProviderError:
         """Normalize an error HTTP response into a ``ProviderError``.

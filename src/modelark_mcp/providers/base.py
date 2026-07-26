@@ -35,9 +35,17 @@ class BaseHttpGateway(ABC):
         """Return the auth/content headers for a request."""
 
     @staticmethod
-    @abstractmethod
     def extract_request_id(response: httpx.Response) -> str | None:
-        """Extract the provider request/diagnostic ID from a response."""
+        """Extract the provider request/diagnostic ID from a response.
+
+        Default implementation returns ``None``. Providers that return a
+        diagnostic ID in response headers (e.g. ModelArk's ``X-Request-Id``,
+        Seed Speech's ``X-Tt-Logid``) override this. Providers that return
+        the ID in the response body (e.g. LAS's ``metadata.request_id``) do
+        not need to override — they extract it from the parsed body in their
+        service layer instead.
+        """
+        return None
 
     @classmethod
     @abstractmethod

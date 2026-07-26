@@ -78,10 +78,6 @@ BYTEPLUS_SEED_AUDIO_API_KEY=your-seed-audio-key-here
 
 ## LAS (Speech-to-Text)
 
-> **Upcoming.** The LAS speech-to-text tools are not yet shipped. The env vars
-> below are recognized once the speech-to-text release lands; on the current
-> build, setting `BYTEPLUS_LAS_API_KEY` has no effect until then.
-
 LAS (Lake AI Service) provides **ASR** — asynchronous speech-to-text with
 speaker diarization, word timestamps, and language identification. Its key is
 sent as a **bare** `Authorization` header value (no `Bearer` prefix), which is
