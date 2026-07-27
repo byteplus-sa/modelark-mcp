@@ -25,6 +25,7 @@ from modelark_mcp.tools.seedance_cancel_or_delete_task import (
     seedance_cancel_or_delete_task,
 )
 from modelark_mcp.tools.seedance_create_task import (
+    SeedanceAudioInput,
     SeedanceCreateTaskInput,
     SeedanceCreateTaskOutput,
     SeedanceVideoInput,
@@ -79,16 +80,60 @@ class TestSeedanceCreateTaskTool:
         assert result.status == "queued"
         assert result.recommended_poll_after_ms == 5000
 
-    async def test_create_task_no_media_raises(
+    async def test_text_only_create_task_succeeds(
         self,
         test_env: None,
         fake_ctx: FakeContext,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        with pytest.raises(ValueError, match="At least one media"):
-            await seedance_create_task(
-                SeedanceCreateTaskInput(prompt="just text"),
-                fake_ctx,
-            )
+        async def mock_create(self: SeedanceService, request: Any) -> tuple[str, str | None]:
+            return "task-text-001", "req-text"
+
+        monkeypatch.setattr(SeedanceService, "create_task", mock_create)
+        monkeypatch.setattr(SeedanceService, "close", _mock_close)
+
+        result = await seedance_create_task(
+            SeedanceCreateTaskInput(prompt="just text"),
+            fake_ctx,
+        )
+
+        assert isinstance(result, SeedanceCreateTaskOutput)
+        assert result.task_id == "task-text-001"
+        assert result.status == "queued"
+        assert result.recommended_poll_after_ms == 5000
+
+    async def test_create_task_prompt_with_video_and_audio_succeeds(
+        self,
+        test_env: None,
+        fake_ctx: FakeContext,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        captured_content: list[Any] = []
+
+        async def mock_create(self: SeedanceService, request: Any) -> tuple[str, str | None]:
+            captured_content.extend(request.content)
+            return "task-mix-001", "req-mix"
+
+        monkeypatch.setattr(SeedanceService, "create_task", mock_create)
+        monkeypatch.setattr(SeedanceService, "close", _mock_close)
+
+        result = await seedance_create_task(
+            SeedanceCreateTaskInput(
+                prompt="A dancer moving to music",
+                videos=[SeedanceVideoInput(url="https://example.com/dance.mp4")],
+                audios=[SeedanceAudioInput(kind="url", url="https://example.com/song.wav")],
+            ),
+            fake_ctx,
+        )
+
+        assert isinstance(result, SeedanceCreateTaskOutput)
+        assert result.task_id == "task-mix-001"
+        assert result.status == "queued"
+
+        content_types = [item.type for item in captured_content]
+        assert "text" in content_types
+        assert "video_url" in content_types
+        assert "audio_url" in content_types
 
     async def test_provider_error_propagates(
         self,

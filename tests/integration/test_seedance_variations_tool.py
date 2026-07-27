@@ -124,11 +124,12 @@ class TestSeedanceVariationsTool:
                 videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             )
 
-    async def test_no_media_raises(self) -> None:
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError, match="At least one media"):
-            SeedanceVariationsInput(prompt="test", variations=1)
+    async def test_text_only_variations_succeeds(self) -> None:
+        inp = SeedanceVariationsInput(prompt="test", variations=1)
+        assert inp.prompt == "test"
+        assert inp.images is None
+        assert inp.videos is None
+        assert inp.audios is None
 
     async def test_too_many_variations_raises(self) -> None:
         from pydantic import ValidationError

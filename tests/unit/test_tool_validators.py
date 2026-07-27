@@ -69,9 +69,28 @@ class TestSeedanceCreateTaskInput:
         )
         assert len(inp.videos or []) == 1
 
-    def test_no_media_raises(self) -> None:
-        with pytest.raises(ValidationError, match="At least one media input"):
-            SeedanceCreateTaskInput(prompt="Just text")
+    def test_text_only_valid(self) -> None:
+        inp = SeedanceCreateTaskInput(prompt="Just text")
+        assert inp.prompt == "Just text"
+        assert inp.images is None
+        assert inp.videos is None
+        assert inp.audios is None
+
+    def test_prompt_with_video_and_audio_valid(self) -> None:
+        from modelark_mcp.tools.seedance_create_task import (
+            SeedanceAudioInput,
+            SeedanceVideoInput,
+        )
+
+        inp = SeedanceCreateTaskInput(
+            prompt="A dancer moving to music",
+            videos=[SeedanceVideoInput(url="https://example.com/dance.mp4")],
+            audios=[SeedanceAudioInput(kind="url", url="https://example.com/song.wav")],
+        )
+        assert inp.prompt == "A dancer moving to music"
+        assert inp.images is None
+        assert len(inp.videos or []) == 1
+        assert len(inp.audios or []) == 1
 
     def test_audio_only_raises(self) -> None:
         from modelark_mcp.tools.seedance_create_task import SeedanceAudioInput
