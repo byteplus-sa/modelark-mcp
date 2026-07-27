@@ -61,21 +61,24 @@ async def main() -> None:
         raise SystemExit(f"Tool returned an error: {result.content[0].text}")
 
     data = result.structured_content
+    provider = str(data.get("provider", ""))
+    model_name = str(data.get("model", ""))
+    duration = float(data.get("duration_seconds", 0))
+    artifact = data.get("artifact", {})
+    artifact_uri = str(artifact.get("uri", ""))
+    artifact_media_type = str(artifact.get("media_type", ""))
+    artifact_bytes = int(artifact.get("bytes", 0))
     print("=== seed_audio_generate result ===")
-    print(f"provider           : {data['provider']}")
-    print(f"model              : {data['model']}")
-    print(f"duration_seconds   : {data['duration_seconds']}")
-    print(f"billing_seconds    : {data['billing_duration_seconds']}")
-    print(f"provider_log_id     : {data.get('provider_log_id')}")
-    print(f"source_url (2h)    : {data.get('source_url')}")
-    print(f"artifact.uri       : {data['artifact']['uri']}")
-    print(f"artifact.media_type: {data['artifact']['media_type']}")
-    print(f"artifact.mime_type : {data['artifact'].get('mime_type')}")
-    print(f"artifact.bytes     : {data['artifact'].get('bytes')}")
+    print(f"provider           : {provider}")
+    print(f"model              : {model_name}")
+    print(f"duration_seconds   : {duration}")
+    print(f"artifact.uri       : {artifact_uri}")
+    print(f"artifact.media_type: {artifact_media_type}")
+    print(f"artifact.bytes     : {artifact_bytes}")
 
     # Fetch the persisted bytes via the MCP resource and write to disk.
     async with Client(mcp) as client:
-        content = await client.read_resource(data["artifact"]["uri"])
+        content = await client.read_resource(artifact_uri)
 
     blob = content[0].blob
     audio_bytes = base64.b64decode(blob) if isinstance(blob, str) else blob
