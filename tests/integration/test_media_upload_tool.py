@@ -36,7 +36,9 @@ class TestMediaUploadBase64:
         data = base64.b64encode(b"fake-video-bytes").decode()
         mock_gw = _mock_gateway()
 
-        with patch("modelark_mcp.tools.media_upload.TosGateway", return_value=mock_gw):
+        with patch(
+            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
+        ):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="video",
@@ -60,7 +62,9 @@ class TestMediaUploadBase64:
         data = base64.b64encode(b"img").decode()
         mock_gw = _mock_gateway()
 
-        with patch("modelark_mcp.tools.media_upload.TosGateway", return_value=mock_gw):
+        with patch(
+            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
+        ):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="image",
@@ -85,7 +89,9 @@ class TestMediaUploadFilePath:
 
         mock_gw = _mock_gateway()
 
-        with patch("modelark_mcp.tools.media_upload.TosGateway", return_value=mock_gw):
+        with patch(
+            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
+        ):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="video",
@@ -190,17 +196,24 @@ class TestMediaUploadValidation:
 
 
 class TestMediaUploadErrors:
-    async def test_no_tos_credentials_raises(
+    async def test_no_object_storage_credentials_raises(
         self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from modelark_mcp.config.env import get_settings
 
-        no_tos = get_settings().model_copy(
-            update={"tos_access_key": "", "tos_secret_key": "", "tos_bucket": ""}
+        no_storage = get_settings().model_copy(
+            update={
+                "tos_access_key": "",
+                "tos_secret_key": "",
+                "tos_bucket": "",
+                "s3_access_key": "",
+                "s3_secret_key": "",
+                "s3_bucket": "",
+            }
         )
-        monkeypatch.setattr("modelark_mcp.tools.media_upload.get_settings", lambda: no_tos)
+        monkeypatch.setattr("modelark_mcp.tools.media_upload.get_settings", lambda: no_storage)
 
-        with pytest.raises(ValueError, match="TOS credentials"):
+        with pytest.raises(ValueError, match="Object storage is not configured"):
             await media_upload(
                 MediaUploadInput(
                     media_type="video",
@@ -227,7 +240,9 @@ class TestMediaUploadErrors:
             )
         )
 
-        with patch("modelark_mcp.tools.media_upload.TosGateway", return_value=mock_gw):
+        with patch(
+            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
+        ):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="video",

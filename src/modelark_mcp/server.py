@@ -93,7 +93,7 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             auth=component_auth(settings, "seed:audio:generate"),
         )(seed_audio_generate_variations)
 
-    if settings.has_tos:
+    if settings.has_object_storage:
         from modelark_mcp.tools.media_upload import (
             TOOL_ANNOTATIONS as upload_annotations,
         )
@@ -306,6 +306,8 @@ def create_server(
             f"ModelArk configured: {resolved_settings.has_modelark}\n"
             f"Seed Audio configured: {resolved_settings.has_seed_audio}\n"
             f"TOS configured: {resolved_settings.has_tos}\n"
+            f"S3 configured: {resolved_settings.has_s3}\n"
+            f"Object storage backend: {resolved_settings.object_storage_backend}\n"
             f"STT configured: {resolved_settings.has_stt}\n"
             f"Artifact backend: {resolved_settings.artifact_backend}\n"
             f"Transport: {resolved_settings.mcp_transport}\n"

@@ -1,7 +1,7 @@
-"""``media_upload`` tool — upload media to BytePlus TOS, return a presigned URL.
+"""``media_upload`` tool — upload media to object storage, return a presigned URL.
 
 Accepts Base64-encoded bytes or a local file path (stdio transport only),
-uploads to a configured TOS bucket, and returns a presigned HTTPS GET URL
+uploads to a configured TOS or S3 bucket, and returns a presigned HTTPS GET URL
 that can be passed to other tools (e.g. ``seedance_create_task`` video
 references).  This is the integrated path for media that cannot be inlined
 as Base64 — most notably Seedance video references, which are URL-only.
@@ -21,8 +21,8 @@ from pydantic import BaseModel, Field, model_validator
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.providers.object_storage import make_object_storage_gateway
 from modelark_mcp.providers.retry import call_with_retry
-from modelark_mcp.providers.tos.client import TosGateway
 from modelark_mcp.runtime import billed_provider_slot
 from modelark_mcp.security.media_policy import (
     MediaLimits,
@@ -59,8 +59,7 @@ class MediaUploadInput(BaseModel):
     key_prefix: str | None = Field(
         None,
         description=(
-            "Optional TOS object key prefix (default 'references'). "
-            "Alphanumeric, '-', '_', '/' only."
+            "Optional object key prefix (default 'references'). Alphanumeric, '-', '_', '/' only."
         ),
     )
 
@@ -99,7 +98,7 @@ class MediaUploadOutput(BaseModel):
 
     url: str = Field(..., description="Presigned HTTPS GET URL for the uploaded object.")
     expires_at: str = Field(..., description="ISO-8601 timestamp when the URL expires.")
-    object_key: str = Field(..., description="TOS object key of the uploaded media.")
+    object_key: str = Field(..., description="Object key of the uploaded media.")
     bytes: int = Field(..., description="Uploaded byte count.")
 
 
@@ -112,19 +111,20 @@ def _max_bytes(limits: MediaLimits, media_type: str) -> int:
 
 
 async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutput | ToolResult:
-    """Upload media to BytePlus TOS and return a presigned HTTPS GET URL.
+    """Upload media to object storage (TOS or S3) and return a presigned HTTPS GET URL.
 
     The returned URL can be passed directly to tools that accept media URLs,
     such as ``seedance_create_task`` (video references).  Video references are
     URL-only — this tool is the integrated upload path for them.
     """
-    await ctx.info("Starting TOS media upload")
+    await ctx.info("Starting media upload")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
-    if not settings.has_tos:
+    if not settings.has_object_storage:
         raise ValueError(
-            "TOS credentials are not configured. Set TOS_ACCESS_KEY and TOS_SECRET_KEY."
+            "Object storage is not configured. Set TOS_* or S3_* credentials and "
+            "OBJECT_STORAGE_BACKEND (tos|s3)."
         )
 
     limits = get_media_limits()
@@ -159,11 +159,11 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
     prefix = input.key_prefix or "references"
     key = f"{prefix}/{input.media_type}/{uuid4()}"
 
-    gateway = TosGateway()
+    gateway = make_object_storage_gateway(settings)
     try:
         async with billed_provider_slot(
             ctx,
-            provider="tos",
+            provider=settings.object_storage_backend,
             product="upload",
             estimated_cost_usd=0.0,
         ):
@@ -185,14 +185,12 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
                 )
             url = await gateway.presign_get(key=key)
     except ProviderError as exc:
-        await ctx.error(f"TOS upload failed: {exc.message}")
+        await ctx.error(f"Media upload failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await gateway.close()
 
-    expires_at = (
-        datetime.now(UTC) + timedelta(seconds=settings.tos_presign_ttl_seconds)
-    ).isoformat()
+    expires_at = (datetime.now(UTC) + timedelta(seconds=settings.presign_ttl_seconds)).isoformat()
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

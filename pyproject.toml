@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "boto3>=1.43,<2.0",
     "cachetools>=7.1.4,<8",
     "fastmcp>=3.4.4,<4.0",
     "httpx>=0.28.1,<1.0",
@@ -101,6 +102,10 @@ disable_error_code = ["call-arg"]
 
 [[tool.mypy.overrides]]
 module = "tos.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["boto3.*", "botocore.*"]
 ignore_missing_imports = true
 
 # --- Pytest -----------------------------------------------------------------
