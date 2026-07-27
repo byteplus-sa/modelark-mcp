@@ -213,6 +213,24 @@ class Settings(BaseSettings):
         validation_alias="TOS_PRESIGN_TTL_SECONDS",
     )
 
+    # --- S3 object storage (Amazon S3 / S3-compatible) -----------------------
+
+    s3_access_key: str = Field(default="", validation_alias="S3_ACCESS_KEY")
+    s3_secret_key: str = Field(default="", validation_alias="S3_SECRET_KEY")
+    s3_bucket: str = Field(default="", validation_alias="S3_BUCKET")
+    s3_region: str = Field(default="us-east-1", validation_alias="S3_REGION")
+    s3_endpoint: str = Field(default="", validation_alias="S3_ENDPOINT")
+    s3_presign_ttl_seconds: int = Field(
+        default=86400,
+        ge=60,
+        le=604800,
+        validation_alias="S3_PRESIGN_TTL_SECONDS",
+    )
+    object_storage_backend: Literal["tos", "s3"] = Field(
+        default="tos",
+        validation_alias="OBJECT_STORAGE_BACKEND",
+    )
+
     # --- HTTP timeouts (milliseconds) ---------------------------------------
 
     connect_timeout_ms: int = Field(default=10000, validation_alias="BYTEPLUS_CONNECT_TIMEOUT_MS")
@@ -264,6 +282,25 @@ class Settings(BaseSettings):
     def has_tos(self) -> bool:
         """Whether TOS object storage credentials are configured."""
         return bool(self.tos_access_key and self.tos_secret_key and self.tos_bucket)
+
+    @property
+    def has_s3(self) -> bool:
+        """Whether S3 object storage credentials are configured."""
+        return bool(self.s3_access_key and self.s3_secret_key and self.s3_bucket)
+
+    @property
+    def has_object_storage(self) -> bool:
+        """Whether the *selected* object-storage backend is configured."""
+        if self.object_storage_backend == "s3":
+            return self.has_s3
+        return self.has_tos
+
+    @property
+    def presign_ttl_seconds(self) -> int:
+        """Presign TTL of the *selected* backend."""
+        if self.object_storage_backend == "s3":
+            return self.s3_presign_ttl_seconds
+        return self.tos_presign_ttl_seconds
 
     @property
     def has_stt(self) -> bool:
@@ -393,6 +430,19 @@ class Settings(BaseSettings):
             raise ValueError("TOS_ACCESS_KEY and TOS_SECRET_KEY must both be set or both be empty.")
         if self.tos_access_key and not self.tos_endpoint:
             raise ValueError("TOS_ENDPOINT is required when TOS credentials are set.")
+        if bool(self.s3_access_key) != bool(self.s3_secret_key):
+            raise ValueError("S3_ACCESS_KEY and S3_SECRET_KEY must both be set or both be empty.")
+        if self.s3_access_key and not self.s3_bucket:
+            raise ValueError("S3_BUCKET is required when S3 credentials are set.")
+        if self.object_storage_backend == "s3" and not self.has_s3:
+            raise ValueError(
+                "OBJECT_STORAGE_BACKEND=s3 requires S3_ACCESS_KEY, S3_SECRET_KEY, and S3_BUCKET."
+            )
+        if self.object_storage_backend == "tos" and self.has_s3 and not self.has_tos:
+            raise ValueError(
+                "OBJECT_STORAGE_BACKEND=tos but TOS credentials are missing while S3 "
+                "credentials are set. Set OBJECT_STORAGE_BACKEND=s3 or provide TOS_*."
+            )
         return self
 
 

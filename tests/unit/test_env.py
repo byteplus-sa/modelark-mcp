@@ -87,3 +87,73 @@ class TestSettings:
         )
         assert settings.seedream_model_bindings[0].family == "4x"
         assert settings.seedance_model_bindings[0].family == "mini"
+
+
+class TestS3Config:
+    """Tests for S3 object storage configuration."""
+
+    def test_has_s3_false_when_empty(self) -> None:
+        settings = Settings(_env_file=None)
+        assert not settings.has_s3
+
+    def test_has_s3_true_when_set(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            S3_ACCESS_KEY="ak-test",
+            S3_SECRET_KEY="sk-test",  # pragma: allowlist secret
+            S3_BUCKET="test-bucket",
+            OBJECT_STORAGE_BACKEND="s3",
+        )
+        assert settings.has_s3
+
+    def test_object_storage_backend_defaults_to_tos(self) -> None:
+        settings = Settings(_env_file=None)
+        assert settings.object_storage_backend == "tos"
+
+    def test_has_object_storage_reflects_selected_backend(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            S3_ACCESS_KEY="ak",
+            S3_SECRET_KEY="sk",  # pragma: allowlist secret
+            S3_BUCKET="bucket",
+            OBJECT_STORAGE_BACKEND="s3",
+        )
+        assert settings.has_object_storage is True
+
+        settings_tos = Settings(
+            _env_file=None,
+            TOS_ACCESS_KEY="ak",
+            TOS_SECRET_KEY="sk",  # pragma: allowlist secret
+            TOS_BUCKET="bucket",
+            TOS_ENDPOINT="tos-test.example.com",
+        )
+        assert settings_tos.has_object_storage is True
+
+    def test_presign_ttl_seconds_returns_selected_backend_ttl(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            S3_ACCESS_KEY="ak",
+            S3_SECRET_KEY="sk",  # pragma: allowlist secret
+            S3_BUCKET="bucket",
+            S3_PRESIGN_TTL_SECONDS=3600,
+            OBJECT_STORAGE_BACKEND="s3",
+        )
+        assert settings.presign_ttl_seconds == 3600
+
+    def test_s3_ak_sk_must_both_be_set(self) -> None:
+        with pytest.raises(ValueError, match="S3_ACCESS_KEY and S3_SECRET_KEY"):
+            Settings(_env_file=None, S3_ACCESS_KEY="ak")
+
+    def test_backend_s3_requires_credentials(self) -> None:
+        with pytest.raises(ValueError, match="OBJECT_STORAGE_BACKEND=s3 requires"):
+            Settings(_env_file=None, OBJECT_STORAGE_BACKEND="s3")
+
+    def test_backend_tos_with_s3_creds_missing_tos_raises_guidance(self) -> None:
+        with pytest.raises(ValueError, match="OBJECT_STORAGE_BACKEND=tos but TOS credentials"):
+            Settings(
+                _env_file=None,
+                S3_ACCESS_KEY="ak",
+                S3_SECRET_KEY="sk",  # pragma: allowlist secret
+                S3_BUCKET="bucket",
+                OBJECT_STORAGE_BACKEND="tos",
+            )

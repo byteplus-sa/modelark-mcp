@@ -51,6 +51,26 @@ def no_creds_server(
     get_settings.cache_clear()
 
 
+@pytest.fixture
+def s3_only_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configure server with S3-only object storage creds."""
+    monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test")
+    monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test")
+    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak-s3-test")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk-s3-test")
+    monkeypatch.setenv("S3_BUCKET", "test-s3-bucket")
+    monkeypatch.setenv("OBJECT_STORAGE_BACKEND", "s3")
+
+    get_settings.cache_clear()
+
+    yield SimpleNamespace(mcp=create_server(get_settings()))
+
+    get_settings.cache_clear()
+
+
 class TestToolDiscovery:
     """Verify all six tools are discoverable when credentials are set."""
 
@@ -72,6 +92,12 @@ class TestToolDiscovery:
             "seedance_cancel_or_delete_task",
             "speech_to_text",
         }
+
+    async def test_media_upload_registered_with_s3_only(self, s3_only_server: None) -> None:
+        server = s3_only_server
+        tools = await server.mcp.list_tools()
+        tool_names = {t.name for t in tools}
+        assert "media_upload" in tool_names
 
 
 class TestToolAnnotations:
