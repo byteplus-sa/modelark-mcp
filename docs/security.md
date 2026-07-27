@@ -85,14 +85,17 @@ routes are **not** scope-protected at the FastMCP layer. Seed Audio tools are
 registered only when `BYTEPLUS_SEED_AUDIO_API_KEY` is set; Seedream/Seedance
 tools only when `BYTEPLUS_MODELARK_API_KEY` is set; speech-to-text tools only
 when `SEED_SPEECH_ASR_API_KEY` is set. The `media_upload` tool is
-registered only when TOS credentials are set (`TOS_ACCESS_KEY` /
-`TOS_SECRET_KEY` / `TOS_BUCKET`).
+registered only when object storage credentials are set (TOS:
+`TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `TOS_BUCKET`, or S3:
+`S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` with
+`OBJECT_STORAGE_BACKEND=s3`).
 
-### TOS credentials
+### Object storage credentials
 
-TOS access key and secret key are loaded from environment variables at startup
-(`TOS_ACCESS_KEY` / `TOS_SECRET_KEY`) and never accepted as tool arguments.
-The TOS bucket is **private** — presigned URLs grant temporary read access to
+Object storage access key and secret key are loaded from environment
+variables at startup (`TOS_ACCESS_KEY` / `TOS_SECRET_KEY` or
+`S3_ACCESS_KEY` / `S3_SECRET_KEY`) and never accepted as tool arguments.
+The bucket is **private** — presigned URLs grant temporary read access to
 individual objects. Object keys are server-generated UUIDs under a
 caller-supplied prefix; `key_prefix` is sanitized to alphanumeric, `-`, `_`,
 and `/`. File-path input is restricted to the `stdio` transport to prevent

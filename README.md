@@ -176,8 +176,7 @@ SEEDANCE_DEFAULT_MODEL=dreamina-seedance-2-0-260128
 If a credential is absent, the server skips registering that product's
 tools. `seed_media_get_artifact` is always available, provider tools appear only
 when their credentials are configured, `media_upload` appears only when object
-storage credentials (TOS or S3) are
-credentials are configured, and `speech_to_text` appears only when
+storage credentials (TOS or S3) are configured, and `speech_to_text` appears only when
 `SEED_SPEECH_ASR_API_KEY` is set.
 
 See [Configuration](docs/configuration.md) for the full environment

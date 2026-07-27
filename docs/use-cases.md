@@ -340,11 +340,10 @@ mode (not parallel variations — these share visual continuity).
 This uses `sequential_image_generation: "auto"` — the provider generates a
 coherent storyboard, not independent variations.
 
-## 17. Reference Video Upload via TOS
+## 17. Reference Video Upload via Object Storage
 
-Upload a video to BytePlus TOS, then use the presigned URL as a video
-reference for Seedance. Requires `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` /
-`TOS_BUCKET`.
+Upload a video to object storage (TOS or S3), then use the presigned URL as
+a video reference for Seedance. Requires TOS or S3 credentials.
 
 **Step 1 — Upload:**
 
