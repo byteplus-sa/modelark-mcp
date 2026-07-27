@@ -16,7 +16,7 @@ Complete tool schemas, inputs, outputs, and examples for all ten MCP tools
 | 7 | `seedance_get_task` | Seedance | Poll | ModelArk |
 | 8 | `seedance_list_tasks` | Seedance | Read-only | ModelArk |
 | 9 | `seedance_cancel_or_delete_task` | Seedance | Destructive | ModelArk |
-| 10 | `media_upload` | TOS (optional) | Synchronous | TOS |
+| 10 | `media_upload` | Object storage (optional) | Synchronous | TOS / S3 |
 
 ## Tool Annotations
 
@@ -402,8 +402,8 @@ Extends `MediaSource` with a `role` field:
 Video references are URL-only. Unlike image and audio references, there is no
 Base64 path — videos must be uploaded to a publicly reachable HTTPS endpoint
 before the tool is called. Use the `media_upload` tool to upload Base64 or
-a local file (stdio only) to BytePlus TOS and receive a presigned HTTPS GET
-URL. Alternatively, host the video on your own HTTPS endpoint (S3, TOS, etc.).
+a local file (stdio only) to object storage (TOS or S3) and receive a presigned
+HTTPS GET URL. Alternatively, host the video on your own HTTPS endpoint.
 The URL must resolve to a public IP (loopback, private, and link-local
 addresses are rejected by the SSRF policy).
 
@@ -653,8 +653,10 @@ Returns server health and configuration status as plain text.
 
 ## 10. media_upload
 
-Upload media to BytePlus TOS and return a presigned HTTPS GET URL. Registered
-only when `TOS_ACCESS_KEY`, `TOS_SECRET_KEY`, and `TOS_BUCKET` are set.
+Upload media to object storage (TOS or S3) and return a presigned HTTPS GET
+URL. Registered when the selected object-storage backend credentials are set
+(`TOS_*` with default `OBJECT_STORAGE_BACKEND=tos`, or `S3_*` with
+`OBJECT_STORAGE_BACKEND=s3`).
 
 ### Input
 
@@ -672,7 +674,7 @@ only when `TOS_ACCESS_KEY`, `TOS_SECRET_KEY`, and `TOS_BUCKET` are set.
 |---|---|---|
 | `url` | string | Presigned HTTPS GET URL |
 | `expires_at` | string | ISO-8601 expiry timestamp |
-| `object_key` | string | TOS object key |
+| `object_key` | string | Object key |
 | `bytes` | integer | Uploaded byte count |
 
 ### Example

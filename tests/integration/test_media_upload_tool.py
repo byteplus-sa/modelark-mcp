@@ -257,3 +257,41 @@ class TestMediaUploadErrors:
         assert result.structured_content is None
         assert "http_status=500" in result.content[0].text
         mock_gw.close.assert_called_once()
+
+
+class TestMediaUploadS3Backend:
+    async def test_s3_backend_uses_s3_provider_slot(
+        self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from modelark_mcp.config.env import get_settings
+
+        s3_settings = get_settings().model_copy(
+            update={
+                "tos_access_key": "",
+                "tos_secret_key": "",
+                "tos_bucket": "",
+                "s3_access_key": "ak-s3",
+                "s3_secret_key": "sk-s3",  # pragma: allowlist secret
+                "s3_bucket": "s3-bucket",
+                "object_storage_backend": "s3",
+            }
+        )
+        monkeypatch.setattr("modelark_mcp.tools.media_upload.get_settings", lambda: s3_settings)
+
+        mock_gw = _mock_gateway()
+        data = base64.b64encode(b"fake").decode()
+
+        with patch(
+            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
+        ):
+            result = await media_upload(
+                MediaUploadInput(
+                    media_type="image",
+                    mime_type="image/png",
+                    data=data,
+                ),
+                fake_ctx,
+            )
+
+        assert isinstance(result, MediaUploadOutput)
+        assert result.url == "https://tos.example.com/presigned-url"

@@ -16,7 +16,7 @@ products plus artifact access and an optional media upload helper:
 | **Seedance** | `seedance_create_task`, `seedance_create_task_variations`, `seedance_get_task`, `seedance_list_tasks`, `seedance_cancel_or_delete_task` | Async video generation and task management through ModelArk |
 | **Speech-to-Text** | `speech_to_text` | Synchronous audio transcription through Seed Speech ASR (HTTP) |
 | **Artifacts** | `seed_media_get_artifact` | Retrieve persisted media inline by artifact ID |
-| **TOS** (optional) | `media_upload` | Upload Base64 or local-file media to BytePlus TOS, return a presigned HTTPS URL for use as a reference |
+| **Object storage** (optional) | `media_upload` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL for use as a reference |
 
 Key features:
 
@@ -62,12 +62,11 @@ accepts as reference input:
 > **Video references must be pre-hosted.** `seedance_create_task` accepts
 > video references as a **public HTTPS URL only** — there is no inline Base64
 > option. Use the `media_upload` tool to upload Base64 or a local file path
-> (stdio only) to BytePlus TOS and receive a presigned HTTPS GET URL you can
+> (stdio only) to object storage (TOS or S3) and receive a presigned HTTPS GET URL you can
 > pass directly to `seedance_create_task`. Alternatively, host the video on
-> your own accessible HTTPS endpoint (S3, TOS, etc.). The URL must resolve to
+> your own accessible HTTPS endpoint. The URL must resolve to
 > a public IP (private/loopback/link-local addresses are rejected by the SSRF
-> policy). `media_upload` requires `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` /
-> `TOS_BUCKET` env vars; see [Configuration](docs/configuration.md).
+> policy). `media_upload` requires TOS or S3 credentials; see [Configuration](docs/configuration.md).
 
 ## Architecture
 
@@ -87,7 +86,7 @@ flowchart TB
     TR[TRAE IDE]
   end
   subgraph Server["ModelArk MCP Server (FastMCP)"]
-    Tools["Tools<br/>Seedream · Seedance · Seed Audio · Artifacts · TOS upload"]
+    Tools["Tools<br/>Seedream · Seedance · Seed Audio · Artifacts · Object storage"]
     Domain["Domain layer<br/>models · capability registry · errors"]
     Runtime["Runtime services<br/>concurrency · budget · ownership · retry"]
     Store["Artifact store<br/>filesystem + .meta.json"]
@@ -176,7 +175,8 @@ SEEDANCE_DEFAULT_MODEL=dreamina-seedance-2-0-260128
 
 If a credential is absent, the server skips registering that product's
 tools. `seed_media_get_artifact` is always available, provider tools appear only
-when their credentials are configured, `media_upload` appears only when TOS
+when their credentials are configured, `media_upload` appears only when object
+storage credentials (TOS or S3) are
 credentials are configured, and `speech_to_text` appears only when
 `SEED_SPEECH_ASR_API_KEY` is set.
 

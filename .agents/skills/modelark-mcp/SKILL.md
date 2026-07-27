@@ -1,6 +1,6 @@
 ---
 name: modelark-mcp
-description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video, poll and manage Seedance tasks, upload reference media to TOS, and fetch persisted artifacts.
+description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video, poll and manage Seedance tasks, upload reference media to object storage (TOS or S3), and fetch persisted artifacts.
 ---
 
 # ModelArk Seed Multimodal MCP Server
@@ -16,7 +16,7 @@ local MCP server:
 - **Seedance** for asynchronous video generation.
 - **Speech-to-Text** for synchronous audio transcription via Seed Speech ASR.
 - **Artifacts** for durable media access after provider URLs expire.
-- **TOS upload** for URL-only media workflows such as Seedance video
+- **Object storage upload** for URL-only media workflows such as Seedance video
   references.
 
 ## When To Use
@@ -28,7 +28,7 @@ Invoke this skill when the user wants to:
 - create, poll, list, cancel, or delete Seedance video tasks;
 - transcribe audio or video into timestamped, speaker-diarized text;
 - fetch a previously persisted artifact by ID;
-- upload local or Base64 media to TOS to obtain a presigned HTTPS URL;
+- upload local or Base64 media to object storage (TOS or S3) to obtain a presigned HTTPS URL;
 - verify which products are configured on the running server.
 
 ## Registration Model
@@ -60,7 +60,7 @@ Do not assume a fixed tool count. Registration is conditional:
 - `seedance_list_tasks`
 - `seedance_cancel_or_delete_task`
 
-### Requires `TOS_ACCESS_KEY`, `TOS_SECRET_KEY`, and `TOS_BUCKET`
+### Requires object storage credentials (TOS or S3)
 
 - `media_upload`
 
@@ -79,12 +79,19 @@ BYTEPLUS_MODELARK_API_KEY=your-modelark-key
 BYTEPLUS_SEED_AUDIO_API_KEY=your-seed-audio-key
 ```
 
-Optional TOS upload support:
+Optional object storage upload support (TOS default, S3 alternative):
 
 ```bash
+# TOS backend (default)
 TOS_ACCESS_KEY=your-ak
 TOS_SECRET_KEY=your-sk
 TOS_BUCKET=your-private-bucket
+
+# S3 backend
+S3_ACCESS_KEY=your-ak
+S3_SECRET_KEY=your-sk
+S3_BUCKET=your-private-bucket
+OBJECT_STORAGE_BACKEND=s3
 ```
 
 ### Running
@@ -235,16 +242,16 @@ Transcribe audio to text via Seed Speech ASR (synchronous HTTP).
 - Optional: `language` (BCP-47 code, default `en-US`), `enable_punc`,
   `enable_itn`
 - Returns the complete `TranscriptionResult` in a single call — no task ID,
-  no polling, no TOS upload required
+  no polling, no object-storage upload required
 - `TranscriptionResult` includes `text`, `utterances` (with word-level
   timestamps and speaker labels), and `duration_ms`
 - Transcription output is text — no artifact persistence needed
 
-### TOS upload helper
+### Object storage upload helper
 
 #### `media_upload`
 
-Upload media to BytePlus TOS and receive a presigned HTTPS URL.
+Upload media to object storage (TOS or S3) and receive a presigned HTTPS URL.
 
 - Supports `media_type` of `image`, `audio`, or `video`
 - Accepts either Base64 `data` or absolute `file_path`
@@ -284,7 +291,7 @@ Upload media to BytePlus TOS and receive a presigned HTTPS URL.
 
 Call `speech_to_text` with an audio URL, Base64, or local file path (stdio
 only). The tool returns the complete `TranscriptionResult` in a single
-synchronous call — no task ID, no polling, no TOS upload required.
+synchronous call — no task ID, no polling, no object-storage upload required.
 
 Use `TranscriptionResult.text` for the full transcript, or
 `utterances`/`words` for timestamped segments and speaker labels.
@@ -331,7 +338,7 @@ Use bindings when a custom model ID is not one of the built-in defaults.
 - `DAILY_BUDGET_USD`
 - `MODELARK_LOG_LEVEL`
 
-### TOS upload
+### Object storage
 
 - `TOS_ACCESS_KEY`
 - `TOS_SECRET_KEY`
@@ -340,6 +347,13 @@ Use bindings when a custom model ID is not one of the built-in defaults.
 - `TOS_REGION`
 - `TOS_ENDPOINT`
 - `TOS_PRESIGN_TTL_SECONDS`
+- `S3_ACCESS_KEY`
+- `S3_SECRET_KEY`
+- `S3_BUCKET`
+- `S3_REGION`
+- `S3_ENDPOINT`
+- `S3_PRESIGN_TTL_SECONDS`
+- `OBJECT_STORAGE_BACKEND`
 
 ## Guardrails And Pitfalls
 
