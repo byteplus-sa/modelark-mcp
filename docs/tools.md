@@ -2,7 +2,8 @@
 
 The server exposes a conditional set of typed tools. `seed_media_get_artifact`
 is always available, provider tools are registered only when their credentials
-are configured, and `media_upload` is registered only when TOS credentials are
+are configured, and `media_upload` is registered when object storage
+credentials (TOS or S3) are
 present. Each tool accepts a Pydantic input model and returns a Pydantic output
 model as structured content. All tools accept a `ctx: Context` parameter for
 progress reporting and logging.
@@ -294,7 +295,7 @@ for async polling via `seedance_get_task`.
 Transcribe audio to text via Seed Speech ASR. Submits audio via HTTP, polls
 until transcription is complete, and returns the complete
 `TranscriptionResult` in a single synchronous call — no task ID exposed to
-the caller, no TOS upload required.
+the caller, no object-storage upload required.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=True`, `openWorldHint=False`
@@ -376,8 +377,8 @@ optional `log_id`.
 
 ## media_upload
 
-Upload image, audio, or video media to BytePlus TOS and receive a presigned
-HTTPS URL.
+Upload image, audio, or video media to object storage (TOS or S3) and receive
+a presigned HTTPS URL.
 
 **Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`

@@ -11,6 +11,7 @@ tool set.
 | Seed Speech (TTS) | `BYTEPLUS_SEED_AUDIO_API_KEY` | `X-Api-Key: <key>` | Seed Audio (speech generation) |
 | Seed Speech (STT) | `SEED_SPEECH_ASR_API_KEY` | `X-Api-Key: <key>` | Speech-to-Text (ASR) |
 | TOS | `TOS_ACCESS_KEY` + `TOS_SECRET_KEY` + `TOS_BUCKET` | AK/SK signing | `media_upload` |
+| S3 | `S3_ACCESS_KEY` + `S3_SECRET_KEY` + `S3_BUCKET` | AK/SK signing | `media_upload` |
 
 Copy `.env.example` to `.env` and fill in the keys you need.
 
@@ -99,11 +100,14 @@ The ASR key is obtained from the same BytePlus Voice / Seed Speech console as
 the TTS key, but is a separate credential. Set `SEED_SPEECH_ASR_API_KEY` in
 `.env` to enable the `speech_to_text` tool.
 
-## TOS (Object Storage)
+## Object storage (TOS or S3)
 
-TOS is **optional** but enables several workflows: the `media_upload` tool
-and Seedance video references (URL-only). It uses Access Key / Secret Key
-(AK/SK) signing, not a bearer token.
+Object storage is **optional** but enables several workflows: the `media_upload`
+tool and Seedance video references (URL-only). It uses Access Key / Secret Key
+(AK/SK) signing, not a bearer token. Select the backend with
+`OBJECT_STORAGE_BACKEND` (`tos` default, or `s3`).
+
+### TOS backend
 
 **Env vars:**
 
@@ -150,6 +154,25 @@ TOS_ENDPOINT=tos-ap-southeast-1.bytepluses.com
   (`stt-input/`, `references/`) to control storage cost over time.
 - For temporary credentials (STS), also set `TOS_SECURITY_TOKEN`.
 
+### S3 backend
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `S3_ACCESS_KEY` | empty | S3 access key ID |
+| `S3_SECRET_KEY` | empty | S3 secret access key |
+| `S3_BUCKET` | empty | Target bucket name |
+| `S3_REGION` | `us-east-1` | AWS region |
+| `S3_ENDPOINT` | empty | Custom endpoint for S3-compatible storage |
+| `S3_PRESIGN_TTL_SECONDS` | `86400` | Presigned URL validity (60–604800) |
+| `OBJECT_STORAGE_BACKEND` | `tos` | Select active backend: `tos` or `s3` |
+
+`S3_ACCESS_KEY` and `S3_SECRET_KEY` must **both** be set or **both** be
+empty. All three of AK, SK, and bucket must be set to register the
+`media_upload` tool with the S3 backend.
+
+When `S3_ENDPOINT` is set, path-style addressing is used automatically for
+S3-compatible storage (MinIO, R2, TOS-via-boto3).
+
 ## Verifying your setup
 
 After filling in `.env`, start the server and check the health resource — it
@@ -160,7 +183,8 @@ make dev
 ```
 
 The `seed-health://status` MCP resource reports `ModelArk configured`,
-`Seed Audio configured`, `STT configured`, and `TOS configured` booleans per
+`Seed Audio configured`, `STT configured`, `TOS configured`, `S3 configured`,
+and `Object storage backend` values per
 provider. The separate `/health` HTTP route is a liveness probe that returns
 only `{"status": "healthy"}`. Any provider reported `false` means its key was
 not loaded — check the env var spelling and that the `.env` file is in the
@@ -186,13 +210,22 @@ SEED_SPEECH_ASR_BASE_URL=https://voice.ap-southeast-1.bytepluses.com
 SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS=3.0
 SEED_SPEECH_ASR_POLL_MAX_SECONDS=600.0
 
-# TOS — object storage (optional)
+# Object storage — TOS (optional, default backend)
 TOS_ACCESS_KEY=
 TOS_SECRET_KEY=
 TOS_BUCKET=
 TOS_REGION=ap-southeast-1
 TOS_ENDPOINT=tos-ap-southeast-1.bytepluses.com
 TOS_PRESIGN_TTL_SECONDS=86400
+
+# Object storage — S3 (optional alternative backend)
+S3_ACCESS_KEY=
+S3_SECRET_KEY=
+S3_BUCKET=
+S3_REGION=us-east-1
+S3_ENDPOINT=
+S3_PRESIGN_TTL_SECONDS=86400
+OBJECT_STORAGE_BACKEND=tos
 ```
 
 Console: **<https://console.byteplus.com>**
