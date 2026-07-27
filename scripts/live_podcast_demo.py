@@ -25,34 +25,34 @@ PODCAST_PROMPT = (
     "relaxed, warm atmosphere. Two Filipino hosts are recording an episode. "
     "The male host (warm baritone, Filipino English accent, relaxed and "
     "conversational, friendly and engaging) speaks first in a welcoming tone: "
-    "\"Welcome back to the show! So, have you been following this Pax Silica "
-    "development?\" "
+    '"Welcome back to the show! So, have you been following this Pax Silica '
+    'development?" '
     "The female host (bright and articulate, Filipino English accent, warm and "
     "enthusiastic, slightly more animated) responds: "
-    "\"Oh yeah, it is a big deal. It is a US-led coalition to secure supply "
+    '"Oh yeah, it is a big deal. It is a US-led coalition to secure supply '
     "chains for semiconductors, AI, and critical minerals. They launched it "
-    "back in December twenty twenty-five in Washington.\" "
+    'back in December twenty twenty-five in Washington." '
     "Male host nods and continues: "
-    "\"Right. And the Philippines officially joined in April twenty twenty-six "
+    '"Right. And the Philippines officially joined in April twenty twenty-six '
     "as the thirteenth signatory. Trade Undersecretary Ceferino Rodolfo signed "
-    "the declaration.\" "
+    'the declaration." '
     "Female host adds with interest: "
-    "\"The headline is the site — a four-thousand-acre zone in New Clark City, "
+    '"The headline is the site — a four-thousand-acre zone in New Clark City, '
     "Tarlac. They are calling it the first AI-native industrial acceleration "
-    "hub.\" "
+    'hub." '
     "Male host: "
-    "\"BCDA says it could generate over one hundred thirty thousand high-quality "
+    '"BCDA says it could generate over one hundred thirty thousand high-quality '
     "jobs. Finance Secretary Frederick Go even called it a generational "
-    "project.\" "
+    'project." '
     "Female host, now more measured: "
-    "\"But there is pushback. People are worried about environmental impact, "
+    '"But there is pushback. People are worried about environmental impact, '
     "land use, and whether we will end up in a subordinate role, just exporting "
-    "raw materials.\" "
+    'raw materials." '
     "Male host, thoughtfully: "
-    "\"Exactly. Massive potential, but real questions about sovereignty and who "
-    "actually benefits.\" "
+    '"Exactly. Massive potential, but real questions about sovereignty and who '
+    'actually benefits." '
     "Female host, wrapping up: "
-    "\"Definitely one to watch closely.\""
+    '"Definitely one to watch closely."'
 )
 
 
