@@ -122,7 +122,7 @@ async def seed_audio_generate_variations(
         input.image_reference.model_dump() if input.image_reference else None
     )
 
-    output_dict: dict[str, Any] | None = (
+    audio_config_dict: dict[str, Any] | None = (
         input.output.model_dump(exclude_none=True) if input.output else None
     )
     watermark_dict: dict[str, Any] | None = (
@@ -143,7 +143,7 @@ async def seed_audio_generate_variations(
             request = SeedAudioService.build_request(
                 text_prompt=prompts[idx],
                 references=references if references else None,
-                output=output_dict,
+                audio_config=audio_config_dict,
                 watermark=watermark_dict,
             )
 

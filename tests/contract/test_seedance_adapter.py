@@ -81,6 +81,20 @@ class TestSeedanceContentBuilding:
         )
         assert len(content) == 5  # 1 text + 2 images + 1 video + 1 audio
 
+    def test_prompt_with_video_and_audio(self) -> None:
+        content = SeedanceService.build_content(
+            prompt="A dancer moving to music",
+            videos=[{"url": "https://cdn.example.com/dance.mp4"}],
+            audios=[{"url": "https://cdn.example.com/song.wav"}],
+        )
+        assert len(content) == 3  # 1 text + 1 video + 1 audio
+        assert content[0].type == "text"
+        assert content[0].text == "A dancer moving to music"
+        assert content[1].type == "video_url"
+        assert content[1].role == "reference_video"
+        assert content[2].type == "audio_url"
+        assert content[2].role == "reference_audio"
+
 
 class TestSeedanceCreateTask:
     """Tests for POST /contents/generations/tasks."""

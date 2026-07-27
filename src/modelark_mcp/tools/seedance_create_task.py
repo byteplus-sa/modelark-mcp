@@ -138,10 +138,11 @@ class SeedanceCreateTaskInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_media_required(self) -> SeedanceCreateTaskInput:
-        """Audio cannot be the sole media input; at least one image or video is required."""
+        """Audio cannot be the sole media input; text-only is allowed."""
         has_images = bool(self.images)
         has_videos = bool(self.videos)
         has_audios = bool(self.audios)
+        has_prompt = bool(self.prompt) or bool(getattr(self, "variation_prompts", None))
 
         if not has_images and not has_videos:
             if has_audios:
@@ -149,10 +150,8 @@ class SeedanceCreateTaskInput(BaseModel):
                     "Audio references cannot be the sole media input. "
                     "At least one image or video is required."
                 )
-            raise ValueError(
-                "At least one media input (image, video) is required. "
-                "Prompt-only text generation is not sufficient."
-            )
+            if not has_prompt:
+                raise ValueError("At least one of prompt, images, or videos is required.")
         return self
 
     @model_validator(mode="after")

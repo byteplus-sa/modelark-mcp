@@ -82,6 +82,9 @@ build/
 /.artifacts/
 /artifacts/
 
+# Generated media output
+/output/
+
 # Logs
 *.log
 logs/

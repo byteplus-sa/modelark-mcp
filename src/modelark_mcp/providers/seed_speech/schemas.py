@@ -31,22 +31,16 @@ class SeedAudioProviderRequest(BaseModel):
     model: str = "seed-audio-1.0"
     text_prompt: str
     references: list[dict[str, Any]] | None = None
-    output: dict[str, Any] | None = None
+    audio_config: dict[str, Any] | None = None
     watermark: dict[str, Any] | None = None
 
     def to_api_dict(self) -> dict[str, Any]:
-        """Serialize to the Ark Seed Audio wire format.
+        """Serialize to the Seed Audio wire format.
 
-        The Ark API expects ``output`` and ``watermark`` sub-fields as
-        top-level keys (flat), not nested objects. This method flattens
-        them so the wire payload matches the provider's expected shape.
+        ``audio_config`` and ``watermark`` are nested objects on the wire,
+        matching the provider's expected request body shape.
         """
-        data: dict[str, Any] = self.model_dump(exclude_none=True, exclude={"output", "watermark"})
-        if self.output:
-            data.update(self.output)
-        if self.watermark:
-            data.update(self.watermark)
-        return data
+        return self.model_dump(exclude_none=True)
 
 
 class SeedAudioSubtitle(BaseModel):
