@@ -139,8 +139,9 @@ Create an asynchronous Seedance video generation task.
 | `priority` | integer | No | Priority (0-9) |
 | `safety_identifier` | string | No | Safety identifier (max 64 chars) |
 
-At least one image or video input is required. Audio cannot be the sole
-media input.
+Text-only input (prompt with no media) is supported for pure text-to-video
+generation. Audio cannot be the sole media input — at least a prompt,
+image, or video is required.
 
 ### Output
 
