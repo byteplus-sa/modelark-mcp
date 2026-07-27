@@ -249,9 +249,7 @@ class TestSttConfig:
         )
 
     def test_asr_ws_url_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(
-            "SEED_SPEECH_ASR_WS_URL", "wss://custom.asr.example.com/api/v1/asr"
-        )
+        monkeypatch.setenv("SEED_SPEECH_ASR_WS_URL", "wss://custom.asr.example.com/api/v1/asr")
         settings = Settings(_env_file=None)
         assert settings.seed_speech_asr_ws_url == "wss://custom.asr.example.com/api/v1/asr"
 

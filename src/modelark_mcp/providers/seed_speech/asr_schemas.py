@@ -33,9 +33,7 @@ class AsrFullClientRequest(BaseModel):
     user: dict[str, str] = Field(default_factory=lambda: {"uid": "modelark-mcp"})
     audio: AsrAudioConfig
     request: AsrRequestConfig
-    workflow: str = (
-        "audio_in,resample,partition,vad,fe,decode,itn,nlu_ddc,nlu_punctuate"
-    )
+    workflow: str = "audio_in,resample,partition,vad,fe,decode,itn,nlu_ddc,nlu_punctuate"
 
 
 class AsrWord(BaseModel):
