@@ -131,6 +131,16 @@ class TestSeedanceVariationsTool:
         assert inp.videos is None
         assert inp.audios is None
 
+    async def test_variation_prompts_only_no_media_valid(self) -> None:
+        inp = SeedanceVariationsInput(
+            variation_prompts=["a cat playing"], variations=1
+        )
+        assert inp.prompt is None
+        assert inp.variation_prompts == ["a cat playing"]
+        assert inp.images is None
+        assert inp.videos is None
+        assert inp.audios is None
+
     async def test_too_many_variations_raises(self) -> None:
         from pydantic import ValidationError
 

@@ -76,6 +76,10 @@ class TestSeedanceCreateTaskInput:
         assert inp.videos is None
         assert inp.audios is None
 
+    def test_empty_request_raises(self) -> None:
+        with pytest.raises(ValidationError, match="At least one of prompt"):
+            SeedanceCreateTaskInput()
+
     def test_prompt_with_video_and_audio_valid(self) -> None:
         from modelark_mcp.tools.seedance_create_task import (
             SeedanceAudioInput,

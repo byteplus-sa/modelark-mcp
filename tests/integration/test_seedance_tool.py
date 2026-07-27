@@ -86,7 +86,10 @@ class TestSeedanceCreateTaskTool:
         fake_ctx: FakeContext,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        captured_content: list[Any] = []
+
         async def mock_create(self: SeedanceService, request: Any) -> tuple[str, str | None]:
+            captured_content.extend(request.content)
             return "task-text-001", "req-text"
 
         monkeypatch.setattr(SeedanceService, "create_task", mock_create)
@@ -101,6 +104,10 @@ class TestSeedanceCreateTaskTool:
         assert result.task_id == "task-text-001"
         assert result.status == "queued"
         assert result.recommended_poll_after_ms == 5000
+
+        assert len(captured_content) == 1
+        assert captured_content[0].type == "text"
+        assert captured_content[0].text == "just text"
 
     async def test_create_task_prompt_with_video_and_audio_succeeds(
         self,
