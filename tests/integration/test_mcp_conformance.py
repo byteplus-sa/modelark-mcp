@@ -69,6 +69,7 @@ class TestToolDiscovery:
             "seedance_get_task",
             "seedance_list_tasks",
             "seedance_cancel_or_delete_task",
+            "speech_to_text",
         }
 
 

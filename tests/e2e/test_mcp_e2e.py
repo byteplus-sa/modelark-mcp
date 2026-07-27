@@ -105,6 +105,7 @@ class TestToolDiscovery:
                 "seedance_get_task",
                 "seedance_list_tasks",
                 "seedance_cancel_or_delete_task",
+                "speech_to_text",
             }
 
     async def test_tool_has_input_schema(self, e2e_server: object) -> None:

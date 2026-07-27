@@ -73,7 +73,6 @@ class Settings(BaseSettings):
 
     modelark_api_key: str = Field(default="", validation_alias="BYTEPLUS_MODELARK_API_KEY")
     seed_audio_api_key: str = Field(default="", validation_alias="BYTEPLUS_SEED_AUDIO_API_KEY")
-    las_api_key: str = Field(default="", validation_alias="BYTEPLUS_LAS_API_KEY")
 
     # --- Provider base URLs --------------------------------------------------
 
@@ -85,22 +84,40 @@ class Settings(BaseSettings):
         default="https://voice.ap-southeast-1.bytepluses.com",
         validation_alias="BYTEPLUS_SEED_AUDIO_BASE_URL",
     )
-    las_base_url: str = Field(
-        default="https://operator.las.ap-southeast-1.bytepluses.com",
-        validation_alias="BYTEPLUS_LAS_BASE_URL",
-    )
 
-    # --- LAS (Lake AI Service) configuration ---------------------------------
+    # --- Seed Speech ASR (STT) configuration ---------------------------------
 
-    las_default_operator: str = Field(
-        default="las_asr_pro",
-        validation_alias="LAS_DEFAULT_OPERATOR",
-        description="LAS ASR operator: 'las_asr_pro' (enhanced) or 'las_asr' (standard).",
+    seed_speech_asr_ws_url: str = Field(
+        default="wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
+        validation_alias="SEED_SPEECH_ASR_WS_URL",
+        description="Seed Speech ASR WebSocket endpoint (wss://).",
     )
-    las_default_resource: str = Field(
-        default="bigasr",
-        validation_alias="LAS_DEFAULT_RESOURCE",
-        description="Model resource for las_asr_pro: 'bigasr' or 'seedasr'.",
+    seed_speech_asr_appid: str = Field(
+        default="",
+        validation_alias="SEED_SPEECH_ASR_APPID",
+        description="BytePlus appid for ASR config payload, if required.",
+    )
+    seed_speech_asr_cluster: str = Field(
+        default="",
+        validation_alias="SEED_SPEECH_ASR_CLUSTER",
+        description="BytePlus cluster for ASR config payload, if required.",
+    )
+    seed_speech_asr_chunk_bytes: int = Field(
+        default=16384,
+        ge=1024,
+        validation_alias="SEED_SPEECH_ASR_CHUNK_BYTES",
+        description="Audio chunk size (bytes) streamed per WS message.",
+    )
+    seed_speech_asr_max_duration_seconds: int = Field(
+        default=3600,
+        ge=1,
+        validation_alias="SEED_SPEECH_ASR_MAX_DURATION_SECONDS",
+        description="Hard cap on audio duration to bound the blocking call.",
+    )
+    seed_speech_asr_resource_id: str = Field(
+        default="volc.seedasr.sauc.duration",
+        validation_alias="SEED_SPEECH_ASR_RESOURCE_ID",
+        description="Resource ID for Seed Speech ASR (from BytePlus/Volcengine console).",
     )
 
     # --- Model bindings ------------------------------------------------------
@@ -250,9 +267,9 @@ class Settings(BaseSettings):
         return bool(self.tos_access_key and self.tos_secret_key and self.tos_bucket)
 
     @property
-    def has_las(self) -> bool:
-        """Whether LAS (Lake AI Service) credentials are configured."""
-        return bool(self.las_api_key)
+    def has_stt(self) -> bool:
+        """Whether Seed Speech ASR (STT) is configured. Shares the TTS key."""
+        return bool(self.seed_audio_api_key)
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -278,7 +295,7 @@ class Settings(BaseSettings):
     def normalize_log_level(cls, value: object) -> object:
         return value.upper() if isinstance(value, str) else value
 
-    @field_validator("modelark_base_url", "seed_audio_base_url", "las_base_url")
+    @field_validator("modelark_base_url", "seed_audio_base_url")
     @classmethod
     def validate_provider_url(cls, value: str) -> str:
         parsed = urlsplit(value)
@@ -286,8 +303,6 @@ class Settings(BaseSettings):
             variable = (
                 "BYTEPLUS_MODELARK_BASE_URL"
                 if "ark" in value.lower()
-                else "BYTEPLUS_LAS_BASE_URL"
-                if "las" in value.lower() or "operator" in value.lower()
                 else "BYTEPLUS_SEED_AUDIO_BASE_URL"
             )
             raise ValueError(f"{variable} must use HTTPS and include a host")
@@ -295,21 +310,15 @@ class Settings(BaseSettings):
             raise ValueError("Provider base URLs must not contain credentials")
         return value.rstrip("/")
 
-    @field_validator("las_default_operator")
+    @field_validator("seed_speech_asr_ws_url")
     @classmethod
-    def validate_las_operator(cls, value: str) -> str:
-        allowed = {"las_asr_pro", "las_asr"}
-        if value not in allowed:
-            raise ValueError(f"LAS_DEFAULT_OPERATOR must be one of {allowed}, got '{value}'")
-        return value
-
-    @field_validator("las_default_resource")
-    @classmethod
-    def validate_las_resource(cls, value: str) -> str:
-        allowed = {"bigasr", "seedasr"}
-        if value not in allowed:
-            raise ValueError(f"LAS_DEFAULT_RESOURCE must be one of {allowed}, got '{value}'")
-        return value
+    def validate_asr_ws_url(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if parsed.scheme != "wss" or not parsed.hostname:
+            raise ValueError("SEED_SPEECH_ASR_WS_URL must use wss:// and include a host")
+        if parsed.username or parsed.password:
+            raise ValueError("Provider base URLs must not contain credentials")
+        return value.rstrip("/")
 
     @model_validator(mode="after")
     def validate_model_bindings(self) -> Settings:
@@ -422,8 +431,8 @@ def validate() -> None:
         raise ValueError("BYTEPLUS_MODELARK_BASE_URL must use HTTPS")
     if not settings.seed_audio_base_url.startswith("https://"):
         raise ValueError("BYTEPLUS_SEED_AUDIO_BASE_URL must use HTTPS")
-    if not settings.las_base_url.startswith("https://"):
-        raise ValueError("BYTEPLUS_LAS_BASE_URL must use HTTPS")
+    if not settings.seed_speech_asr_ws_url.startswith("wss://"):
+        raise ValueError("SEED_SPEECH_ASR_WS_URL must use wss://")
     if settings.artifact_ttl_seconds <= 0:
         raise ValueError("ARTIFACT_TTL_SECONDS must be positive")
     if settings.mcp_inline_media_max_bytes <= 0:

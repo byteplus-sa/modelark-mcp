@@ -8,8 +8,7 @@ tool set.
 | Service | Env var | Auth header | Tools it enables |
 |---|---|---|---|
 | ModelArk | `BYTEPLUS_MODELARK_API_KEY` | `Authorization: Bearer <key>` | Seedream (image), Seedance (video) |
-| Seed Audio | `BYTEPLUS_SEED_AUDIO_API_KEY` | `X-Api-Key: <key>` | Seed Audio (speech generation) |
-| LAS | `BYTEPLUS_LAS_API_KEY` | `Authorization: <key>` (bare, no `Bearer`) | Speech-to-text |
+| Seed Speech | `BYTEPLUS_SEED_AUDIO_API_KEY` | `X-Api-Key: <key>` | Seed Audio (TTS), Speech-to-Text (STT) |
 | TOS | `TOS_ACCESS_KEY` + `TOS_SECRET_KEY` + `TOS_BUCKET` | AK/SK signing | `media_upload`, Base64/file upload for STT |
 
 Copy `.env.example` to `.env` and fill in the keys you need.
@@ -52,18 +51,20 @@ BYTEPLUS_MODELARK_API_KEY=your-modelark-key-here
 The base URL is region-scoped. If your account is in a different region, update
 `BYTEPLUS_MODELARK_BASE_URL` to match.
 
-## Seed Audio
+## Seed Speech
 
-Seed Audio is the **Seed Speech** service for full-scene audio generation (TTS).
-It is a **separate key** from ModelArk and uses a different auth header
-(`X-Api-Key`, not Bearer).
+Seed Speech is the service for **Seed Audio** (full-scene audio generation /
+TTS) and **Speech-to-Text** (ASR). Both share the same `X-Api-Key`
+credential. It is a **separate key** from ModelArk and uses a different auth
+header (`X-Api-Key`, not Bearer).
 
 **Env vars:**
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_SEED_AUDIO_API_KEY` | empty | Seed Speech API key |
+| `BYTEPLUS_SEED_AUDIO_API_KEY` | empty | Seed Speech API key (shared by TTS and STT) |
 | `BYTEPLUS_SEED_AUDIO_BASE_URL` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech host |
+| `SEED_SPEECH_ASR_WS_URL` | `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel` | WebSocket endpoint for STT |
 
 **How to get the key:**
 
@@ -76,39 +77,29 @@ It is a **separate key** from ModelArk and uses a different auth header
 BYTEPLUS_SEED_AUDIO_API_KEY=your-seed-audio-key-here
 ```
 
-## LAS (Speech-to-Text)
+## Seed Speech ASR (Speech-to-Text)
 
-LAS (Lake AI Service) provides **ASR** — asynchronous speech-to-text with
-speaker diarization, word timestamps, and language identification. Its key is
-sent as a **bare** `Authorization` header value (no `Bearer` prefix), which is
-different from both ModelArk and Seed Audio.
+Speech-to-text (ASR) uses the **same** `BYTEPLUS_SEED_AUDIO_API_KEY` as Seed
+Audio. There is no separate STT credential. If the key is set, the
+`speech_to_text` tool is registered automatically — it opens a WebSocket to
+Seed Speech ASR, streams the audio, and returns the complete transcription in a
+single synchronous call.
 
 **Env vars:**
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_LAS_API_KEY` | empty | LAS API key |
-| `BYTEPLUS_LAS_BASE_URL` | `https://operator.las.ap-southeast-1.bytepluses.com` | LAS operator host |
-| `LAS_DEFAULT_OPERATOR` | `las_asr_pro` | `las_asr_pro` (enhanced, 99 languages, video) or `las_asr` (standard) |
-| `LAS_DEFAULT_RESOURCE` | `bigasr` | Model resource for `las_asr_pro`: `bigasr` or `seedasr` |
+| `SEED_SPEECH_ASR_WS_URL` | `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel` | WebSocket endpoint for streaming ASR |
+| `SEED_SPEECH_ASR_RESOURCE_ID` | `volc.seedasr.sauc.duration` | Resource ID for the ASR service |
+| `SEED_SPEECH_ASR_APPID` | empty | Optional BytePlus appid for the ASR config payload |
+| `SEED_SPEECH_ASR_CLUSTER` | empty | Optional BytePlus cluster for the ASR config payload |
+| `SEED_SPEECH_ASR_CHUNK_BYTES` | `16384` | Audio chunk size (bytes) per WS message |
+| `SEED_SPEECH_ASR_MAX_DURATION_SECONDS` | `3600` | Hard cap on audio duration to bound the blocking call |
 
 **How to get the key:**
 
-1. Sign in to **<https://console.byteplus.com>**.
-2. Open the **LAS** (Lake AI Service) console.
-3. Create an application or API key under ASR / speech recognition.
-4. Copy the key. LAS keys are separate from ModelArk and Seed Audio keys.
-
-```dotenv
-BYTEPLUS_LAS_API_KEY=your-las-key-here
-LAS_DEFAULT_OPERATOR=las_asr_pro
-LAS_DEFAULT_RESOURCE=bigasr
-```
-
-**Input note:** LAS ASR accepts audio **via URL only**. To transcribe a local
-file or Base64 audio, also configure TOS (below) — the submit tool uploads to
-TOS and passes the presigned URL to LAS. Without TOS, you can only pass a
-public `audio_url`.
+The same Seed Speech key used for TTS also enables STT. See the Seed Speech
+section above for instructions. There is no separate STT credential to obtain.
 
 ## TOS (Object Storage)
 
@@ -170,13 +161,12 @@ reports which providers are configured:
 make dev
 ```
 
-The `seed-health://status` MCP resource reports a `ModelArk configured`,
-`Seed Audio configured`, and `TOS configured` boolean per provider. (A `LAS
-configured` line appears once the speech-to-text feature lands.) The separate
-`/health` HTTP route is a liveness probe that returns only
-`{"status": "healthy"}`. Any provider reported `false` means its key was not
-loaded — check the env var spelling and that the `.env` file is in the project
-root.
+The `seed-health://status` MCP resource reports `ModelArk configured`,
+`Seed Audio configured`, `STT configured`, and `TOS configured` booleans per
+provider. The separate `/health` HTTP route is a liveness probe that returns
+only `{"status": "healthy"}`. Any provider reported `false` means its key was
+not loaded — check the env var spelling and that the `.env` file is in the
+project root.
 
 If a tool is missing entirely, its provider credentials were absent at startup.
 Tools are registered conditionally based on which keys are present.
@@ -188,15 +178,15 @@ Tools are registered conditionally based on which keys are present.
 BYTEPLUS_MODELARK_API_KEY=
 BYTEPLUS_MODELARK_BASE_URL=https://ark.ap-southeast.bytepluses.com/api/v3
 
-# Seed Audio — speech generation
+# Seed Speech — TTS + STT
 BYTEPLUS_SEED_AUDIO_API_KEY=
 BYTEPLUS_SEED_AUDIO_BASE_URL=https://voice.ap-southeast-1.bytepluses.com
 
-# LAS — speech-to-text
-BYTEPLUS_LAS_API_KEY=
-BYTEPLUS_LAS_BASE_URL=https://operator.las.ap-southeast-1.bytepluses.com
-LAS_DEFAULT_OPERATOR=las_asr_pro
-LAS_DEFAULT_RESOURCE=bigasr
+# Seed Speech ASR (STT)
+SEED_SPEECH_ASR_WS_URL=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel
+SEED_SPEECH_ASR_RESOURCE_ID=volc.seedasr.sauc.duration
+SEED_SPEECH_ASR_APPID=
+SEED_SPEECH_ASR_CLUSTER=
 
 # TOS — object storage (optional)
 TOS_ACCESS_KEY=

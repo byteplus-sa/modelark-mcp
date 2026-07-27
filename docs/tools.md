@@ -289,70 +289,11 @@ for async polling via `seedance_get_task`.
 
 **Output:** `VariationSummary` + `recommended_poll_after_ms`.
 
-## speech_to_text_create_task
+## speech_to_text
 
-Submit audio for speech-to-text transcription via BytePlus LAS ASR. This is an
-asynchronous API — the returned task ID is polled with
-`speech_to_text_get_result`.
-
-**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
-`idempotentHint=False`, `openWorldHint=True`
-
-### Input
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `audio` | AsrAudioInput | Yes | Audio source (see below) |
-| `options` | AsrRequestOptions | No | Transcription feature toggles (see below) |
-| `operator` | `las_asr_pro` \| `las_asr` | No | Override LAS operator. Defaults to `LAS_DEFAULT_OPERATOR` |
-
-**AsrAudioInput** — provide exactly one source:
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `audio_url` | string | No\* | HTTPS URL of the audio file. Always available |
-| `audio_data` | string | No\* | Base64-encoded audio bytes. Requires TOS configured |
-| `audio_file_path` | string | No\* | Absolute local file path. stdio transport only. Requires TOS configured |
-| `audio_format` | `wav` \| `mp3` \| `ogg` \| `raw` \| `flac` \| `mp4` \| `mov` \| `mkv` | Yes | Audio/video format |
-
-\* Provide exactly one of `audio_url`, `audio_data`, or `audio_file_path`.
-
-**AsrRequestOptions:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `enable_punc` | boolean | No | Enable automatic punctuation. Default: true |
-| `enable_itn` | boolean | No | Enable inverse text normalization (number formatting). Default: true |
-| `enable_speaker_info` | boolean | No | Enable speaker diarization (up to 10 speakers) |
-| `enable_lid` | boolean | No | Enable automatic language identification |
-| `show_utterances` | boolean | No | Return utterance-level segments with timestamps |
-| `show_words` | boolean | No | Return word-level timestamps within utterances |
-
-### Output
-
-Returns `SpeechToTextCreateTaskOutput` with `task_id`, `status` (`queued`),
-and `recommended_poll_after_ms`.
-
-### Example
-
-```json
-{
-  "audio": {
-    "audio_url": "https://example.com/meeting.wav",
-    "audio_format": "wav"
-  },
-  "options": {
-    "enable_speaker_info": true,
-    "show_utterances": true,
-    "show_words": true
-  }
-}
-```
-
-## speech_to_text_get_result
-
-Retrieve the result of a speech-to-text transcription task. Polls the LAS ASR
-service until the task reaches a terminal state (`completed` or `failed`).
+Transcribe audio to text via Seed Speech ASR. Opens a WebSocket, streams the
+audio in chunks, and returns the complete `TranscriptionResult` in a single
+synchronous call — no task ID, no polling, no TOS upload required.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=True`, `openWorldHint=False`
@@ -361,22 +302,39 @@ service until the task reaches a terminal state (`completed` or `failed`).
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Task ID returned by `speech_to_text_create_task` |
-| `operator` | `las_asr_pro` \| `las_asr` | No | Override LAS operator. Must match the submit call. Defaults to `LAS_DEFAULT_OPERATOR` |
+| `audio` | AsrAudioInput | Yes | Audio source (see below) |
+| `options` | AsrRequestOptions | No | Transcription feature toggles (see below) |
+
+**AsrAudioInput** — provide exactly one source:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `audio_url` | string | No\* | HTTPS URL of the audio file |
+| `audio_data` | string | No\* | Base64-encoded audio bytes |
+| `audio_file_path` | string | No\* | Absolute local file path (stdio transport only) |
+| `audio_format` | `wav` \| `mp3` \| `ogg` \| `raw` \| `flac` | Yes | Audio format |
+
+\* Provide exactly one of `audio_url`, `audio_data`, or `audio_file_path`.
+
+**AsrRequestOptions:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `language` | string | No | BCP-47 language code. Default: `en-US` |
+| `enable_punc` | boolean | No | Enable automatic punctuation |
+| `enable_itn` | boolean | No | Enable inverse text normalization (number formatting) |
 
 ### Output
 
-Returns `SpeechToTextGetResultOutput` with `task_id`, `status`
-(`pending`, `accepted`, `completed`, or `failed`), `result`
-(`TranscriptionResult` when completed), `error` (when failed), and
-`request_id`.
+Returns `SpeechToTextOutput` with `result` (`TranscriptionResult`) and
+optional `log_id`.
 
 **TranscriptionResult:**
 
 | Field | Type | Description |
 |---|---|---|
 | `text` | string | Full transcript text |
-| `utterances` | list[TranscriptionUtterance] | Utterance-level segments (if `show_utterances` was enabled) |
+| `utterances` | list[TranscriptionUtterance] | Utterance-level segments with timestamps |
 | `duration_ms` | integer | Total audio duration in milliseconds |
 
 **TranscriptionUtterance:**
@@ -386,8 +344,8 @@ Returns `SpeechToTextGetResultOutput` with `task_id`, `status`
 | `text` | string | Utterance text |
 | `start_time_ms` | integer | Start time in milliseconds |
 | `end_time_ms` | integer | End time in milliseconds |
-| `words` | list[TranscriptionWord] | Word-level detail (if `show_words` was enabled) |
-| `speaker_id` | string | Speaker label (if `enable_speaker_info` was enabled) |
+| `words` | list[TranscriptionWord] | Word-level detail |
+| `speaker_id` | string | Speaker label (if diarization is enabled) |
 | `channel_id` | string | Audio channel (if channel split is enabled) |
 
 **TranscriptionWord:**
@@ -398,6 +356,22 @@ Returns `SpeechToTextGetResultOutput` with `task_id`, `status`
 | `confidence` | float | Recognition confidence (0.0–1.0) |
 | `start_time_ms` | integer | Start time in milliseconds |
 | `end_time_ms` | integer | End time in milliseconds |
+
+### Example
+
+```json
+{
+  "audio": {
+    "audio_url": "https://example.com/meeting.wav",
+    "audio_format": "wav"
+  },
+  "options": {
+    "language": "en-US",
+    "enable_punc": true,
+    "enable_itn": true
+  }
+}
+```
 
 ## media_upload
 

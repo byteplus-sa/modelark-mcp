@@ -60,25 +60,26 @@ claim. Tool scopes are enforced by FastMCP:
 - `media:upload`
 - `artifacts:read`
 
-## LAS speech-to-text (optional)
+## Seed Speech ASR (STT)
 
-The `speech_to_text_create_task` and `speech_to_text_get_result` tools are
-registered only when `BYTEPLUS_LAS_API_KEY` is set. LAS ASR is an asynchronous
-submit/poll API that transcribes audio (and video) into timestamped,
-speaker-diarized text. Audio input requires a URL — Base64 or `file_path`
-input also needs TOS configured.
+The `speech_to_text` tool is registered when `BYTEPLUS_SEED_AUDIO_API_KEY` is
+set — STT shares the Seed Speech key with TTS. It opens a WebSocket to Seed
+Speech ASR, streams the audio in chunks, and returns the complete
+`TranscriptionResult` in a single synchronous call. Audio input accepts URL,
+Base64, or local file path (stdio only).
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_LAS_API_KEY` | empty | Enables speech-to-text; sent as bare `Authorization` header |
-| `BYTEPLUS_LAS_BASE_URL` | LAS operator URL | HTTPS service base URL |
-| `LAS_DEFAULT_OPERATOR` | `las_asr_pro` | Operator: `las_asr_pro` (enhanced) or `las_asr` (standard) |
-| `LAS_DEFAULT_RESOURCE` | `bigasr` | Model resource for `las_asr_pro`: `bigasr` or `seedasr` |
+| `SEED_SPEECH_ASR_WS_URL` | `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel` | WebSocket endpoint for streaming ASR |
+| `SEED_SPEECH_ASR_RESOURCE_ID` | `volc.seedasr.sauc.duration` | Resource ID for ASR service |
+| `SEED_SPEECH_ASR_APPID` | empty | Optional BytePlus appid for the ASR config payload |
+| `SEED_SPEECH_ASR_CLUSTER` | empty | Optional BytePlus cluster for the ASR config payload |
+| `SEED_SPEECH_ASR_CHUNK_BYTES` | `16384` | Audio chunk size (bytes) per WS message |
+| `SEED_SPEECH_ASR_MAX_DURATION_SECONDS` | `3600` | Hard cap on audio duration to bound the blocking call |
 
-JWT tool scopes for speech-to-text:
+JWT tool scope for speech-to-text:
 
-- `las:asr:create`
-- `las:asr:read`
+- `seed:asr:transcribe`
 
 ## TOS object storage (optional)
 

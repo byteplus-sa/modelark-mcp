@@ -14,7 +14,7 @@ local MCP server:
 - **Seedream** for image generation and editing.
 - **Seed Audio** for full-scene audio generation.
 - **Seedance** for asynchronous video generation.
-- **Speech-to-Text** for audio/video transcription via BytePlus LAS ASR.
+- **Speech-to-Text** for synchronous audio transcription via Seed Speech ASR.
 - **Artifacts** for durable media access after provider URLs expire.
 - **TOS upload** for URL-only media workflows such as Seedance video
   references.
@@ -44,6 +44,7 @@ Do not assume a fixed tool count. Registration is conditional:
 
 - `seed_audio_generate`
 - `seed_audio_generate_variations`
+- `speech_to_text`
 
 ### Requires `BYTEPLUS_MODELARK_API_KEY`
 
@@ -55,11 +56,6 @@ Do not assume a fixed tool count. Registration is conditional:
 - `seedance_get_task`
 - `seedance_list_tasks`
 - `seedance_cancel_or_delete_task`
-
-### Requires `BYTEPLUS_LAS_API_KEY`
-
-- `speech_to_text_create_task`
-- `speech_to_text_get_result`
 
 ### Requires `TOS_ACCESS_KEY`, `TOS_SECRET_KEY`, and `TOS_BUCKET`
 
@@ -86,12 +82,6 @@ Optional TOS upload support:
 TOS_ACCESS_KEY=your-ak
 TOS_SECRET_KEY=your-sk
 TOS_BUCKET=your-private-bucket
-```
-
-Optional speech-to-text (LAS ASR):
-
-```bash
-BYTEPLUS_LAS_API_KEY=your-las-key
 ```
 
 ### Running
@@ -232,25 +222,19 @@ Destructive task cleanup.
 
 ### Speech-to-Text
 
-#### `speech_to_text_create_task`
+#### `speech_to_text`
 
-Submit audio or video for transcription via BytePlus LAS ASR (async).
+Transcribe audio to text via Seed Speech ASR (synchronous WebSocket).
 
-- Accepts audio via `audio_url` (always), `audio_data` Base64 (requires TOS),
-  or `audio_file_path` (stdio + TOS)
-- Supports formats: wav, mp3, ogg, raw, flac, mp4, mov, mkv
-- Optional: speaker diarization, language ID, utterances, word timestamps
-- Returns: `task_id`, `status: "queued"`, `recommended_poll_after_ms`
-
-#### `speech_to_text_get_result`
-
-Poll for transcription results.
-
-- Input: `task_id`, optional `operator` override
-- Returns: `task_id`, `status` (`pending`, `accepted`, `completed`, `failed`),
-  `result` (TranscriptionResult), `error`, `request_id`
+- Accepts audio via `audio_url`, Base64 `audio_data`, or `audio_file_path`
+  (stdio only)
+- Supports formats: wav, mp3, ogg, raw, flac
+- Optional: `language` (BCP-47 code, default `en-US`), `enable_punc`,
+  `enable_itn`
+- Returns the complete `TranscriptionResult` in a single call — no task ID,
+  no polling, no TOS upload required
 - `TranscriptionResult` includes `text`, `utterances` (with word-level
-  timestamps and speaker labels if enabled), and `duration_ms`
+  timestamps and speaker labels), and `duration_ms`
 - Transcription output is text — no artifact persistence needed
 
 ### TOS upload helper
@@ -295,20 +279,19 @@ Upload media to BytePlus TOS and receive a presigned HTTPS URL.
 
 ### Speech-to-text transcription
 
-1. Call `speech_to_text_create_task` with an audio URL, Base64, or file path.
-2. Wait at least `recommended_poll_after_ms` (default 3000 ms).
-3. Poll with `speech_to_text_get_result` until `status` is `completed` or
-   `failed`.
-4. Use `TranscriptionResult.text` for the full transcript, or
-   `utterances`/`words` for timestamped segments and speaker labels.
+Call `speech_to_text` with an audio URL, Base64, or local file path (stdio
+only). The tool returns the complete `TranscriptionResult` in a single
+synchronous call — no task ID, no polling, no TOS upload required.
+
+Use `TranscriptionResult.text` for the full transcript, or
+`utterances`/`words` for timestamped segments and speaker labels.
 
 ## Environment Essentials
 
 ### Provider credentials
 
 - `BYTEPLUS_MODELARK_API_KEY` enables Seedream and Seedance
-- `BYTEPLUS_SEED_AUDIO_API_KEY` enables Seed Audio
-- `BYTEPLUS_LAS_API_KEY` enables Speech-to-Text (LAS ASR)
+- `BYTEPLUS_SEED_AUDIO_API_KEY` enables Seed Audio (TTS) and Speech-to-Text (STT)
 
 ### Model selection
 
@@ -354,13 +337,6 @@ Use bindings when a custom model ID is not one of the built-in defaults.
 - `TOS_ENDPOINT`
 - `TOS_PRESIGN_TTL_SECONDS`
 
-### LAS speech-to-text
-
-- `BYTEPLUS_LAS_API_KEY`
-- `BYTEPLUS_LAS_BASE_URL`
-- `LAS_DEFAULT_OPERATOR` (`las_asr_pro` or `las_asr`)
-- `LAS_DEFAULT_RESOURCE` (`bigasr` or `seedasr`)
-
 ## Guardrails And Pitfalls
 
 - Generated provider URLs expire quickly. Persist outputs unless the user only
@@ -368,14 +344,12 @@ Use bindings when a custom model ID is not one of the built-in defaults.
 - Tool availability depends on configuration. If a tool is missing, check
   `seed-health://status` and the relevant env vars before assuming a bug.
 - Do not poll Seedance aggressively. Respect `recommended_poll_after_ms`.
-- LAS ASR is also async. Respect the `recommended_poll_after_ms` returned by
-  `speech_to_text_create_task` (default 3000 ms) before polling.
+- `speech_to_text` is synchronous — it blocks until transcription completes.
+  The call is capped by `SEED_SPEECH_ASR_MAX_DURATION_SECONDS` (default 3600s).
 - Use `seedream_edit_image` for spatial edits; do not force point or bbox logic
   into `seedream_generate_image`.
 - Video references are URL-only. Use `media_upload` when the user starts with
   local or Base64 video input.
-- LAS ASR accepts audio via URL only. Base64 or `file_path` audio also needs
-  TOS configured — the submit tool uploads to TOS and passes the presigned URL.
 - Custom model IDs must be explicitly bound to a supported family.
 - Budget enforcement is optional. `DAILY_BUDGET_USD=0` records usage without
   blocking.
@@ -383,9 +357,8 @@ Use bindings when a custom model ID is not one of the built-in defaults.
 ## Server Notes
 
 - ModelArk uses Bearer auth and powers Seedream plus Seedance.
-- Seed Audio uses `X-Api-Key` and a separate Seed Speech endpoint.
-- LAS ASR uses a bare `Authorization` header (no Bearer prefix) and powers
-  speech-to-text.
+- Seed Speech uses `X-Api-Key` and powers both Seed Audio (TTS) and
+  Speech-to-Text (ASR).
 - The server persists outputs locally and exposes them as durable MCP
   artifacts.
 - HTTP mode also exposes `/health`, `/ready`, and `/metrics`.

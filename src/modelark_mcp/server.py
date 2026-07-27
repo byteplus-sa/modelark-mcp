@@ -109,34 +109,21 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             auth=component_auth(settings, "media:upload"),
         )(media_upload)
 
-    if settings.has_las:
-        from modelark_mcp.tools.speech_to_text_create_task import (
-            TOOL_ANNOTATIONS as stt_create_annotations,
+    if settings.has_stt:
+        from modelark_mcp.tools.speech_to_text import (
+            TOOL_ANNOTATIONS as stt_annotations,
         )
-        from modelark_mcp.tools.speech_to_text_create_task import (
-            SpeechToTextCreateTaskOutput,
-            speech_to_text_create_task,
-        )
-        from modelark_mcp.tools.speech_to_text_get_result import (
-            TOOL_ANNOTATIONS as stt_get_annotations,
-        )
-        from modelark_mcp.tools.speech_to_text_get_result import (
-            SpeechToTextGetResultOutput,
-            speech_to_text_get_result,
+        from modelark_mcp.tools.speech_to_text import (
+            SpeechToTextOutput,
+            speech_to_text,
         )
 
         server.tool(
-            name="speech_to_text_create_task",
-            annotations={**stt_create_annotations},
-            output_schema=SpeechToTextCreateTaskOutput.model_json_schema(),
-            auth=component_auth(settings, "las:asr:create"),
-        )(speech_to_text_create_task)
-        server.tool(
-            name="speech_to_text_get_result",
-            annotations={**stt_get_annotations},
-            output_schema=SpeechToTextGetResultOutput.model_json_schema(),
-            auth=component_auth(settings, "las:asr:read"),
-        )(speech_to_text_get_result)
+            name="speech_to_text",
+            annotations={**stt_annotations},
+            output_schema=SpeechToTextOutput.model_json_schema(),
+            auth=component_auth(settings, "seed:asr:transcribe"),
+        )(speech_to_text)
 
     if not settings.has_modelark:
         log_info("tools_skipped", reason="BYTEPLUS_MODELARK_API_KEY not configured")
@@ -319,7 +306,7 @@ def create_server(
             f"ModelArk configured: {resolved_settings.has_modelark}\n"
             f"Seed Audio configured: {resolved_settings.has_seed_audio}\n"
             f"TOS configured: {resolved_settings.has_tos}\n"
-            f"LAS configured: {resolved_settings.has_las}\n"
+            f"STT configured: {resolved_settings.has_stt}\n"
             f"Artifact backend: {resolved_settings.artifact_backend}\n"
             f"Transport: {resolved_settings.mcp_transport}\n"
         )

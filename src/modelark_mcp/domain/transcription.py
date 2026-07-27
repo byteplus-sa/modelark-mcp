@@ -1,13 +1,10 @@
 """Provider-agnostic transcription result models.
 
 These types are used in STT tool output and are independent of the underlying
-ASR provider (LAS ASR). Timestamps are in milliseconds (integer), matching the
-LAS ASR response contract.
+ASR provider (Seed Speech ASR). Timestamps are in milliseconds (integer).
 """
 
 from __future__ import annotations
-
-from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -37,19 +34,10 @@ class TranscriptionUtterance(BaseModel):
 
 
 class TranscriptionResult(BaseModel):
-    """Full transcription result returned by speech_to_text_get_result."""
+    """Full transcription result returned by the speech_to_text tool."""
 
     text: str
     utterances: list[TranscriptionUtterance] = Field(default_factory=list)
     duration_ms: int | None = Field(
         default=None, description="Total audio duration in milliseconds."
     )
-
-
-class AsrTaskStatus(StrEnum):
-    """Lifecycle states for an ASR transcription task."""
-
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-    COMPLETED = "completed"
-    FAILED = "failed"

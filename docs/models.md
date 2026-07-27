@@ -59,21 +59,21 @@ Only `supported_resolutions` differs:
 > `ratio` field exists only on `SeedanceTaskSettings` and the tool input
 > layer; the registry does not validate ratios.
 
-## LAS ASR operators
+## Seed Speech ASR (Speech-to-Text)
 
-Speech-to-text uses the BytePlus LAS ASR Service, which offers two operators
-with distinct capabilities. Configured via `LAS_DEFAULT_OPERATOR`.
+Speech-to-text uses the Seed Speech ASR WebSocket API. It shares the same
+`BYTEPLUS_SEED_AUDIO_API_KEY` as Seed Audio (TTS). Audio is streamed in
+chunks over a single WebSocket connection, and the complete
+`TranscriptionResult` is returned synchronously.
 
-| Operator | Version | Resource | Formats | Duration limit | Languages |
-|---|---|---|---|---|---|
-| `las_asr` (standard) | `v2` | — | raw, wav, mp3, ogg | ≤ 2 hours | limited |
-| `las_asr_pro` (enhanced) | `v1` | `bigasr` or `seedasr` | + mp4, mov, mkv, flac | no limit | 99 |
+Supported audio formats: `wav`, `mp3`, `ogg`, `raw`, `flac`.
 
-**Default:** `las_asr_pro` with `resource: bigasr`. The `seedasr` resource uses
-the SeedASR model (same family as Seed Audio TTS).
-
-The `operator_version` is derived from the operator ID (`las_asr_pro` → `v1`,
-`las_asr` → `v2`) — it is not a separate configuration value.
+The WebSocket endpoint is configured via `SEED_SPEECH_ASR_WS_URL` (default
+`wss://openspeech.bytedance.com/api/v3/sauc/bigmodel`). Optional config
+payload fields `appid`, `cluster`, and `resource_id` can be set via
+`SEED_SPEECH_ASR_APPID`, `SEED_SPEECH_ASR_CLUSTER`, and
+`SEED_SPEECH_ASR_RESOURCE_ID`. Chunk size and max duration are tunable via
+`SEED_SPEECH_ASR_CHUNK_BYTES` and `SEED_SPEECH_ASR_MAX_DURATION_SECONDS`.
 
 ## Default model IDs
 
