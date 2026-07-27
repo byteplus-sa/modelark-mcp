@@ -88,9 +88,7 @@ def decode_server_message(frame: bytes) -> tuple[MessageType, Any]:
     FULL_SERVER_RESPONSE → (type, parsed_dict); SERVER_ERROR → (type, (code, msg)).
     """
     if len(frame) < 9:
-        raise ValueError(
-            f"ASR server frame too short: expected ≥9 bytes, got {len(frame)}"
-        )
+        raise ValueError(f"ASR server frame too short: expected ≥9 bytes, got {len(frame)}")
     msg_type = MessageType((frame[1] >> 4) & 0x0F)
     serialization = Serialization((frame[2] >> 4) & 0x0F)
     compression = Compression(frame[2] & 0x0F)
@@ -147,7 +145,9 @@ class SeedSpeechAsrWsClient:
             raise self._connection_error("CONNECTION_TIMEOUT", retryable=True) from None
         except InvalidHandshake as exc:
             status_str = str(exc)
-            retryable = "5" in status_str and ("502" in status_str or "503" in status_str or "504" in status_str)
+            retryable = "5" in status_str and (
+                "502" in status_str or "503" in status_str or "504" in status_str
+            )
             raise self._connection_error(
                 "HANDSHAKE_FAILED",
                 retryable=retryable,
