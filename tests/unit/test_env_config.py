@@ -14,7 +14,8 @@ def clean_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test-speech")
     monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "https://ark.test.example.com/api/v3")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.test.example.com")
-    monkeypatch.setenv("SEED_SPEECH_ASR_WS_URL", "wss://voice.test.example.com/api/v1/asr")
+    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+    monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://voice.test.example.com")
     monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
     monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
     get_settings.cache_clear()
@@ -32,14 +33,14 @@ class TestValidate:
         get_settings.cache_clear()
         monkeypatch.delenv("BYTEPLUS_MODELARK_BASE_URL", raising=False)
         monkeypatch.delenv("BYTEPLUS_SEED_AUDIO_BASE_URL", raising=False)
-        monkeypatch.delenv("SEED_SPEECH_ASR_WS_URL", raising=False)
+        monkeypatch.delenv("SEED_SPEECH_ASR_BASE_URL", raising=False)
         validate()
         get_settings.cache_clear()
 
     def test_validate_rejects_non_https_modelark_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "http://ark.example.com/api/v3")
         monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.example.com")
-        monkeypatch.setenv("SEED_SPEECH_ASR_WS_URL", "wss://voice.example.com/asr")
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://voice.example.com")
         monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
         monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
         get_settings.cache_clear()
@@ -52,7 +53,7 @@ class TestValidate:
     ) -> None:
         monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "https://ark.example.com/api/v3")
         monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "http://voice.example.com")
-        monkeypatch.setenv("SEED_SPEECH_ASR_WS_URL", "wss://voice.example.com/asr")
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://voice.example.com")
         monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
         monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
         get_settings.cache_clear()
@@ -60,15 +61,15 @@ class TestValidate:
             validate()
         get_settings.cache_clear()
 
-    def test_validate_rejects_non_wss_asr_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_validate_rejects_non_https_asr_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "https://ark.example.com/api/v3")
         monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.example.com")
-        monkeypatch.setenv("SEED_SPEECH_ASR_WS_URL", "ws://voice.example.com/asr")
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "http://voice.example.com")
         monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
         monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
         get_settings.cache_clear()
-        with pytest.raises(ValueError, match="SEED_SPEECH_ASR_WS_URL must use wss://"):
-            validate()
+        with pytest.raises(ValidationError, match="SEED_SPEECH_ASR_BASE_URL must use HTTPS"):
+            Settings(_env_file=None)
         get_settings.cache_clear()
 
     def test_validate_rejects_zero_ttl(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -232,48 +233,46 @@ class TestSttConfig:
     """Tests for Seed Speech ASR (STT) configuration."""
 
     def test_has_stt_true_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test-speech")
+        monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
         settings = Settings(_env_file=None)
         assert settings.has_stt is True
 
     def test_has_stt_false_when_key_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "")
+        monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "")
         settings = Settings(_env_file=None)
         assert settings.has_stt is False
 
-    def test_asr_ws_url_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("SEED_SPEECH_ASR_WS_URL", raising=False)
+    def test_asr_base_url_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SEED_SPEECH_ASR_BASE_URL", raising=False)
         settings = Settings(_env_file=None)
-        assert settings.seed_speech_asr_ws_url == (
-            "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
-        )
+        assert settings.seed_speech_asr_base_url == "https://voice.ap-southeast-1.bytepluses.com"
 
-    def test_asr_ws_url_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SEED_SPEECH_ASR_WS_URL", "wss://custom.asr.example.com/api/v1/asr")
+    def test_asr_base_url_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://custom.asr.example.com")
         settings = Settings(_env_file=None)
-        assert settings.seed_speech_asr_ws_url == "wss://custom.asr.example.com/api/v1/asr"
+        assert settings.seed_speech_asr_base_url == "https://custom.asr.example.com"
 
-    def test_asr_chunk_bytes_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("SEED_SPEECH_ASR_CHUNK_BYTES", raising=False)
+    def test_asr_poll_interval_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS", raising=False)
         settings = Settings(_env_file=None)
-        assert settings.seed_speech_asr_chunk_bytes == 16384
+        assert settings.seed_speech_asr_poll_interval_seconds == 3.0
 
-    def test_asr_chunk_bytes_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SEED_SPEECH_ASR_CHUNK_BYTES", "8192")
+    def test_asr_poll_interval_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS", "5.0")
         settings = Settings(_env_file=None)
-        assert settings.seed_speech_asr_chunk_bytes == 8192
+        assert settings.seed_speech_asr_poll_interval_seconds == 5.0
 
-    def test_asr_max_duration_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("SEED_SPEECH_ASR_MAX_DURATION_SECONDS", raising=False)
+    def test_asr_poll_max_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SEED_SPEECH_ASR_POLL_MAX_SECONDS", raising=False)
         settings = Settings(_env_file=None)
-        assert settings.seed_speech_asr_max_duration_seconds == 3600
+        assert settings.seed_speech_asr_poll_max_seconds == 600.0
 
-    def test_asr_max_duration_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SEED_SPEECH_ASR_MAX_DURATION_SECONDS", "600")
+    def test_asr_poll_max_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_POLL_MAX_SECONDS", "300")
         settings = Settings(_env_file=None)
-        assert settings.seed_speech_asr_max_duration_seconds == 600
+        assert settings.seed_speech_asr_poll_max_seconds == 300.0
 
-    def test_asr_ws_url_rejects_non_wss(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SEED_SPEECH_ASR_WS_URL", "http://voice.example.com/asr")
-        with pytest.raises(ValidationError, match="SEED_SPEECH_ASR_WS_URL must use wss://"):
+    def test_asr_base_url_rejects_non_https(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "http://voice.example.com")
+        with pytest.raises(ValidationError, match="SEED_SPEECH_ASR_BASE_URL must use HTTPS"):
             Settings(_env_file=None)

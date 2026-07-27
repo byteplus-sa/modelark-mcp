@@ -1,144 +1,117 @@
-"""Seed Speech ASR adapter — speech-to-text over WebSocket.
+"""Seed Speech ASR adapter — speech-to-text over HTTP submit + query.
 
-Orchestrates the WS binary protocol: sends config, streams audio chunks,
-buffers partial results, and maps the final response to a domain
-``TranscriptionResult``. Streaming is fully hidden from the caller — one call,
-one complete result.
+Submits audio (base64-encoded bytes or public URL) to Seed Speech ASR,
+then polls until the transcription is ready. All polling is hidden from
+the caller — one call, one complete result.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import time
+from typing import Any
+from uuid import uuid4
 
 from modelark_mcp.domain.transcription import (
     TranscriptionResult,
     TranscriptionUtterance,
     TranscriptionWord,
 )
-from modelark_mcp.providers.seed_speech.asr_schemas import (
-    AsrAudioConfig,
-    AsrFullClientRequest,
-    AsrRequestConfig,
-    AsrServerResponse,
-)
-from modelark_mcp.providers.seed_speech.asr_ws import (
-    MessageType,
-    SeedSpeechAsrWsClient,
-)
+from modelark_mcp.providers.seed_speech.asr_http import SeedSpeechAsrHttpGateway
 
 
 class SeedSpeechAsrService:
     """Service layer for Seed Speech ASR (speech-to-text)."""
 
-    def __init__(self, client: SeedSpeechAsrWsClient | None = None) -> None:
-        self._client = client
+    def __init__(
+        self,
+        gateway: SeedSpeechAsrHttpGateway | None = None,
+    ) -> None:
+        self._gateway = gateway
 
     async def transcribe(
         self,
         *,
-        audio_bytes: bytes,
-        audio_format: str,
+        audio_bytes: bytes | None = None,
+        audio_url: str | None = None,
+        audio_format: str = "wav",
         language: str = "en-US",
         enable_punc: bool | None = None,
         enable_itn: bool | None = None,
-        chunk_bytes: int = 16384,
-        session_timeout: float = 3600.0,
-        appid: str = "",
-        cluster: str = "",
+        poll_interval: float = 3.0,
+        poll_max: float = 600.0,
     ) -> tuple[TranscriptionResult, str | None]:
-        """Transcribe audio via one WS session. Returns ``(result, log_id)``.
+        """Transcribe audio via HTTP submit + query.
 
-        Blocks until the server emits the final response after the last audio
-        chunk. All partial responses are buffered and discarded; only the
-        final, complete transcription is returned.
+        Returns ``(result, log_id)``. Blocks until the transcription is ready
+        or ``poll_max`` seconds elapse.
+
+        Args:
+            audio_bytes: Raw audio bytes (base64-encoded for submit).
+            audio_url: Public URL of the audio file (passed directly).
+            audio_format: Audio format string (e.g. "wav", "mp3").
+            language: BCP-47 language code.
+            enable_punc: Enable punctuation output.
+            enable_itn: Enable inverse text normalization.
+            poll_interval: Seconds between query polls (default 3).
+            poll_max: Maximum total seconds to wait (default 600).
         """
-        if chunk_bytes <= 0:
-            raise ValueError(f"chunk_bytes must be positive, got {chunk_bytes}")
+        if audio_bytes is None and audio_url is None:
+            raise ValueError("Either audio_bytes or audio_url must be provided")
+        if audio_bytes is not None and audio_url is not None:
+            raise ValueError("Provide audio_bytes or audio_url, not both")
 
-        config = self.build_client_request(
+        task_id = str(uuid4())
+        audio_data = base64.b64encode(audio_bytes).decode() if audio_bytes is not None else None
+        gateway = self._gateway or SeedSpeechAsrHttpGateway()
+
+        await gateway.submit(
+            audio_data=audio_data,
+            audio_url=audio_url,
             audio_format=audio_format,
             language=language,
             enable_punc=enable_punc,
             enable_itn=enable_itn,
-            appid=appid,
-            cluster=cluster,
-        )
-        client = self._client or SeedSpeechAsrWsClient.from_settings()
-
-        async def _run() -> tuple[TranscriptionResult, str | None]:
-            latest: AsrServerResponse | None = None
-            log_id: str | None = None
-            async with client:
-                await client.send_config(config.model_dump())
-                ack_type, ack_payload = await client.recv()
-                if ack_type == MessageType.SERVER_ERROR:
-                    code, message = ack_payload
-                    raise SeedSpeechAsrWsClient.normalize_error(code, message, "configure")
-                ack = AsrServerResponse.model_validate(ack_payload)
-                if ack.message:
-                    log_id = ack.message
-                for offset in range(0, len(audio_bytes), chunk_bytes):
-                    chunk = audio_bytes[offset : offset + chunk_bytes]
-                    is_last = offset + chunk_bytes >= len(audio_bytes)
-                    await client.send_audio(chunk, is_last=is_last)
-                    msg_type, payload = await client.recv()
-                    if msg_type == MessageType.SERVER_ERROR:
-                        code, message = payload
-                        raise SeedSpeechAsrWsClient.normalize_error(code, message, "transcribe")
-                    latest = AsrServerResponse.model_validate(payload)
-
-            if latest is None or latest.result is None:
-                return TranscriptionResult(text=""), log_id
-            return self.map_result(latest), log_id
-
-        return await asyncio.wait_for(_run(), timeout=session_timeout)
-
-    @staticmethod
-    def build_client_request(
-        *,
-        audio_format: str,
-        language: str,
-        enable_punc: bool | None,
-        enable_itn: bool | None,
-        appid: str = "",
-        cluster: str = "",
-    ) -> AsrFullClientRequest:
-        user: dict[str, str] = {"uid": "modelark-mcp"}
-        if appid:
-            user["appid"] = appid
-        if cluster:
-            user["cluster"] = cluster
-        return AsrFullClientRequest(
-            user=user,
-            audio=AsrAudioConfig(format=audio_format, language=language),
-            request=AsrRequestConfig(
-                enable_punc=enable_punc,
-                enable_itn=enable_itn,
-                show_utterances=True,
-            ),
+            request_id=task_id,
         )
 
+        delay = poll_interval
+        deadline = time.monotonic() + poll_max
+        sequence = 0
+
+        while time.monotonic() < deadline:
+            await asyncio.sleep(delay)
+            response = await gateway.query(task_id=task_id, sequence=sequence)
+            sequence += 1
+            if response is not None:
+                return self._map_result(response), None
+            delay = min(delay * 2, 10.0)
+
+        raise TimeoutError(f"ASR polling timed out after {poll_max:.0f}s for task {task_id}")
+
     @staticmethod
-    def map_result(response: AsrServerResponse) -> TranscriptionResult:
-        r = response.result
-        if r is None:
-            return TranscriptionResult(text="")
-        utterances = [
-            TranscriptionUtterance(
-                text=u.text,
-                start_time_ms=u.start_time,
-                end_time_ms=u.end_time,
-                words=[
-                    TranscriptionWord(
-                        text=w.text,
-                        confidence=w.confidence,
-                        start_time_ms=w.start_time,
-                        end_time_ms=w.end_time,
-                    )
-                    for w in u.words
-                ],
+    def _map_result(response: dict[str, Any]) -> TranscriptionResult:
+        """Map ASR query response to domain TranscriptionResult."""
+        result = response.get("result", {})
+        text = result.get("text", "")
+        utterances = []
+        for u in result.get("utterances", []):
+            words = [
+                TranscriptionWord(
+                    text=w.get("text", ""),
+                    confidence=w.get("confidence"),
+                    start_time_ms=w.get("start_time"),
+                    end_time_ms=w.get("end_time"),
+                )
+                for w in u.get("words", [])
+            ]
+            utterances.append(
+                TranscriptionUtterance(
+                    text=u.get("text", ""),
+                    start_time_ms=u.get("start_time"),
+                    end_time_ms=u.get("end_time"),
+                    words=words,
+                )
             )
-            for u in r.utterances
-            if u.definite is not False
-        ]
-        return TranscriptionResult(text=r.text, utterances=utterances)
+        return TranscriptionResult(text=text, utterances=utterances)

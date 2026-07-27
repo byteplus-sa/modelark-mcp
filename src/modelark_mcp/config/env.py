@@ -16,7 +16,14 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -87,37 +94,29 @@ class Settings(BaseSettings):
 
     # --- Seed Speech ASR (STT) configuration ---------------------------------
 
-    seed_speech_asr_ws_url: str = Field(
-        default="wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
-        validation_alias="SEED_SPEECH_ASR_WS_URL",
-        description="Seed Speech ASR WebSocket endpoint (wss://).",
-    )
-    seed_speech_asr_appid: str = Field(
+    seed_speech_asr_api_key: str = Field(
         default="",
-        validation_alias="SEED_SPEECH_ASR_APPID",
-        description="BytePlus appid for ASR config payload, if required.",
+        validation_alias="SEED_SPEECH_ASR_API_KEY",
+        description="Seed Speech ASR API key (distinct from TTS key).",
     )
-    seed_speech_asr_cluster: str = Field(
-        default="",
-        validation_alias="SEED_SPEECH_ASR_CLUSTER",
-        description="BytePlus cluster for ASR config payload, if required.",
+    seed_speech_asr_base_url: str = Field(
+        default="https://voice.ap-southeast-1.bytepluses.com",
+        validation_alias="SEED_SPEECH_ASR_BASE_URL",
+        description="Seed Speech ASR HTTP base URL.",
     )
-    seed_speech_asr_chunk_bytes: int = Field(
-        default=16384,
-        ge=1024,
-        validation_alias="SEED_SPEECH_ASR_CHUNK_BYTES",
-        description="Audio chunk size (bytes) streamed per WS message.",
+    seed_speech_asr_poll_interval_seconds: float = Field(
+        default=3.0,
+        ge=0.5,
+        le=60.0,
+        validation_alias="SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS",
+        description="Seconds between ASR query polls.",
     )
-    seed_speech_asr_max_duration_seconds: int = Field(
-        default=3600,
-        ge=1,
-        validation_alias="SEED_SPEECH_ASR_MAX_DURATION_SECONDS",
-        description="Hard cap on audio duration to bound the blocking call.",
-    )
-    seed_speech_asr_resource_id: str = Field(
-        default="volc.seedasr.sauc.duration",
-        validation_alias="SEED_SPEECH_ASR_RESOURCE_ID",
-        description="Resource ID for Seed Speech ASR (from BytePlus/Volcengine console).",
+    seed_speech_asr_poll_max_seconds: float = Field(
+        default=600.0,
+        ge=10.0,
+        le=3600.0,
+        validation_alias="SEED_SPEECH_ASR_POLL_MAX_SECONDS",
+        description="Maximum total seconds to wait for ASR result.",
     )
 
     # --- Model bindings ------------------------------------------------------
@@ -268,8 +267,8 @@ class Settings(BaseSettings):
 
     @property
     def has_stt(self) -> bool:
-        """Whether Seed Speech ASR (STT) is configured. Shares the TTS key."""
-        return bool(self.seed_audio_api_key)
+        """Whether Seed Speech ASR (STT) is configured. Requires a dedicated ASR API key."""
+        return bool(self.seed_speech_asr_api_key)
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -295,27 +294,18 @@ class Settings(BaseSettings):
     def normalize_log_level(cls, value: object) -> object:
         return value.upper() if isinstance(value, str) else value
 
-    @field_validator("modelark_base_url", "seed_audio_base_url")
+    @field_validator("modelark_base_url", "seed_audio_base_url", "seed_speech_asr_base_url")
     @classmethod
-    def validate_provider_url(cls, value: str) -> str:
+    def validate_provider_url(cls, value: str, info: ValidationInfo) -> str:
         parsed = urlsplit(value)
         if parsed.scheme != "https" or not parsed.hostname:
-            variable = (
-                "BYTEPLUS_MODELARK_BASE_URL"
-                if "ark" in value.lower()
-                else "BYTEPLUS_SEED_AUDIO_BASE_URL"
-            )
+            env_var_map = {
+                "modelark_base_url": "BYTEPLUS_MODELARK_BASE_URL",
+                "seed_audio_base_url": "BYTEPLUS_SEED_AUDIO_BASE_URL",
+                "seed_speech_asr_base_url": "SEED_SPEECH_ASR_BASE_URL",
+            }
+            variable = env_var_map.get(info.field_name or "", "BYTEPLUS_PROVIDER_BASE_URL")
             raise ValueError(f"{variable} must use HTTPS and include a host")
-        if parsed.username or parsed.password:
-            raise ValueError("Provider base URLs must not contain credentials")
-        return value.rstrip("/")
-
-    @field_validator("seed_speech_asr_ws_url")
-    @classmethod
-    def validate_asr_ws_url(cls, value: str) -> str:
-        parsed = urlsplit(value)
-        if parsed.scheme != "wss" or not parsed.hostname:
-            raise ValueError("SEED_SPEECH_ASR_WS_URL must use wss:// and include a host")
         if parsed.username or parsed.password:
             raise ValueError("Provider base URLs must not contain credentials")
         return value.rstrip("/")
@@ -431,8 +421,6 @@ def validate() -> None:
         raise ValueError("BYTEPLUS_MODELARK_BASE_URL must use HTTPS")
     if not settings.seed_audio_base_url.startswith("https://"):
         raise ValueError("BYTEPLUS_SEED_AUDIO_BASE_URL must use HTTPS")
-    if not settings.seed_speech_asr_ws_url.startswith("wss://"):
-        raise ValueError("SEED_SPEECH_ASR_WS_URL must use wss://")
     if settings.artifact_ttl_seconds <= 0:
         raise ValueError("ARTIFACT_TTL_SECONDS must be positive")
     if settings.mcp_inline_media_max_bytes <= 0:

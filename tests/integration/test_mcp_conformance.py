@@ -24,6 +24,7 @@ def configured_server(
     """Set test env vars and re-register tools with fake credentials."""
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test")
+    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
 
     # Clear cached settings.
     get_settings.cache_clear()

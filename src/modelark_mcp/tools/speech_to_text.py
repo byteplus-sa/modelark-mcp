@@ -1,10 +1,10 @@
 """``speech_to_text`` tool — transcribe audio via Seed Speech ASR (synchronous).
 
 Resolves audio to raw bytes (URL → SSRF-safe download, Base64 → decode, file →
-read), opens a WebSocket to Seed Speech ASR, streams the audio in chunks, and
-returns the complete ``TranscriptionResult`` in a single response. No task ID,
-no TOS upload, no second tool — the WS stream is fully contained within one
-tool invocation.
+read), submits to Seed Speech ASR via HTTP, polls until complete, and returns
+the ``TranscriptionResult`` in a single response. No task ID, no TOS upload,
+no second tool — the HTTP submit + poll is fully contained within one tool
+invocation.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def _estimate_duration_seconds(num_bytes: int) -> float:
 
 
 class AsrAudioInput(BaseModel):
-    """Audio source — resolved to raw bytes for the WS stream."""
+    """Audio source — resolved to raw bytes for HTTP submit."""
 
     audio_url: str | None = Field(None, description="HTTPS URL of the audio file.")
     audio_data: str | None = Field(
@@ -113,8 +113,7 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
     settings = get_settings()
     if not settings.has_stt:
         raise ValueError(
-            "BYTEPLUS_SEED_AUDIO_API_KEY is not configured. "
-            "Set it in .env to enable speech-to-text."
+            "SEED_SPEECH_ASR_API_KEY is not configured. Set it in .env to enable speech-to-text."
         )
 
     try:
@@ -148,10 +147,8 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
                     language=options.language,
                     enable_punc=options.enable_punc,
                     enable_itn=options.enable_itn,
-                    chunk_bytes=settings.seed_speech_asr_chunk_bytes,
-                    session_timeout=settings.seed_speech_asr_max_duration_seconds,
-                    appid=settings.seed_speech_asr_appid or "",
-                    cluster=settings.seed_speech_asr_cluster or "",
+                    poll_interval=settings.seed_speech_asr_poll_interval_seconds,
+                    poll_max=settings.seed_speech_asr_poll_max_seconds,
                 )
             )
     except ProviderError as exc:
