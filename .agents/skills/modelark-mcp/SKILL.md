@@ -191,8 +191,8 @@ queued -> running -> succeeded | failed | cancelled | expired
 Create a video generation task.
 
 - Supports prompt plus image, video, and audio references
-- Important constraint: at least one image or video is required; audio cannot
-  be the sole media input
+- Text-only (prompt with no media) is supported for pure text-to-video
+- Audio cannot be the sole media input; at least a prompt, image, or video is required
 - Supports `return_last_frame`, `generate_audio`, `priority`, and task TTL
 - Returns: `task_id`, `status="queued"`, `recommended_poll_after_ms`
 
