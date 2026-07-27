@@ -13,6 +13,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.domain.transcription import (
     TranscriptionResult,
     TranscriptionUtterance,
@@ -88,13 +89,35 @@ class SeedSpeechAsrService:
                 return self._map_result(response), None
             delay = min(delay * 2, 10.0)
 
-        raise TimeoutError(f"ASR polling timed out after {poll_max:.0f}s for task {task_id}")
+        raise ProviderError(
+            NormalizedProviderError(
+                provider="seed-speech",
+                operation="query_asr_task",
+                http_status=None,
+                code="TIMEOUT",
+                message=f"ASR polling timed out after {poll_max:.0f}s for task {task_id}",
+                request_id=task_id,
+                retryable=False,
+                ambiguous_completion=False,
+            )
+        )
 
     @staticmethod
     def _map_result(response: dict[str, Any]) -> TranscriptionResult:
         """Map ASR query response to domain TranscriptionResult."""
         result = response.get("result", {})
         text = result.get("text", "")
+        audio_info = response.get("audio_info", {})
+        duration_ms = audio_info.get("duration")
+        if duration_ms is None:
+            additions = result.get("additions", {})
+            if isinstance(additions, dict):
+                duration_ms = additions.get("duration")
+        if duration_ms is not None:
+            try:
+                duration_ms = int(duration_ms)
+            except (TypeError, ValueError):
+                duration_ms = None
         utterances = []
         for u in result.get("utterances", []):
             words = [
@@ -114,4 +137,4 @@ class SeedSpeechAsrService:
                     words=words,
                 )
             )
-        return TranscriptionResult(text=text, utterances=utterances)
+        return TranscriptionResult(text=text, utterances=utterances, duration_ms=duration_ms)

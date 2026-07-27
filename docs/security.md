@@ -84,7 +84,7 @@ The `seed-health://status` resource and the `/health`, `/ready`, `/metrics`
 routes are **not** scope-protected at the FastMCP layer. Seed Audio tools are
 registered only when `BYTEPLUS_SEED_AUDIO_API_KEY` is set; Seedream/Seedance
 tools only when `BYTEPLUS_MODELARK_API_KEY` is set; speech-to-text tools only
-when `BYTEPLUS_SEED_AUDIO_API_KEY` is set. The `media_upload` tool is
+when `SEED_SPEECH_ASR_API_KEY` is set. The `media_upload` tool is
 registered only when TOS credentials are set (`TOS_ACCESS_KEY` /
 `TOS_SECRET_KEY` / `TOS_BUCKET`).
 

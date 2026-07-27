@@ -62,20 +62,18 @@ claim. Tool scopes are enforced by FastMCP:
 
 ## Seed Speech ASR (STT)
 
-The `speech_to_text` tool is registered when `BYTEPLUS_SEED_AUDIO_API_KEY` is
-set — STT shares the Seed Speech key with TTS. It opens a WebSocket to Seed
-Speech ASR, streams the audio in chunks, and returns the complete
-`TranscriptionResult` in a single synchronous call. Audio input accepts URL,
-Base64, or local file path (stdio only).
+The `speech_to_text` tool is registered when `SEED_SPEECH_ASR_API_KEY` is
+set — STT uses a dedicated ASR key, distinct from the TTS key. It submits
+audio via HTTP, polls until transcription is complete, and returns the
+complete `TranscriptionResult` in a single synchronous call. Audio input
+accepts URL, Base64, or local file path (stdio only).
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SEED_SPEECH_ASR_WS_URL` | `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel` | WebSocket endpoint for streaming ASR |
-| `SEED_SPEECH_ASR_RESOURCE_ID` | `volc.seedasr.sauc.duration` | Resource ID for ASR service |
-| `SEED_SPEECH_ASR_APPID` | empty | Optional BytePlus appid for the ASR config payload |
-| `SEED_SPEECH_ASR_CLUSTER` | empty | Optional BytePlus cluster for the ASR config payload |
-| `SEED_SPEECH_ASR_CHUNK_BYTES` | `16384` | Audio chunk size (bytes) per WS message |
-| `SEED_SPEECH_ASR_MAX_DURATION_SECONDS` | `3600` | Hard cap on audio duration to bound the blocking call |
+| `SEED_SPEECH_ASR_API_KEY` | empty | Enables speech-to-text; sent as `X-Api-Key` header |
+| `SEED_SPEECH_ASR_BASE_URL` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech ASR HTTP host |
+| `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` | `3.0` | Seconds between ASR query polls |
+| `SEED_SPEECH_ASR_POLL_MAX_SECONDS` | `600.0` | Maximum total seconds to wait for ASR result |
 
 JWT tool scope for speech-to-text:
 

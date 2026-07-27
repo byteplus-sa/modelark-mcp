@@ -291,9 +291,10 @@ for async polling via `seedance_get_task`.
 
 ## speech_to_text
 
-Transcribe audio to text via Seed Speech ASR. Opens a WebSocket, streams the
-audio in chunks, and returns the complete `TranscriptionResult` in a single
-synchronous call — no task ID, no polling, no TOS upload required.
+Transcribe audio to text via Seed Speech ASR. Submits audio via HTTP, polls
+until transcription is complete, and returns the complete
+`TranscriptionResult` in a single synchronous call — no task ID exposed to
+the caller, no TOS upload required.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=True`, `openWorldHint=False`

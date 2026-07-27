@@ -61,19 +61,17 @@ Only `supported_resolutions` differs:
 
 ## Seed Speech ASR (Speech-to-Text)
 
-Speech-to-text uses the Seed Speech ASR WebSocket API. It shares the same
-`BYTEPLUS_SEED_AUDIO_API_KEY` as Seed Audio (TTS). Audio is streamed in
-chunks over a single WebSocket connection, and the complete
+Speech-to-text uses the Seed Speech ASR HTTP API. It uses a dedicated
+`SEED_SPEECH_ASR_API_KEY` (distinct from the TTS key). Audio is submitted
+via HTTP and polled until transcription is complete; the full
 `TranscriptionResult` is returned synchronously.
 
 Supported audio formats: `wav`, `mp3`, `ogg`, `raw`, `flac`.
 
-The WebSocket endpoint is configured via `SEED_SPEECH_ASR_WS_URL` (default
-`wss://openspeech.bytedance.com/api/v3/sauc/bigmodel`). Optional config
-payload fields `appid`, `cluster`, and `resource_id` can be set via
-`SEED_SPEECH_ASR_APPID`, `SEED_SPEECH_ASR_CLUSTER`, and
-`SEED_SPEECH_ASR_RESOURCE_ID`. Chunk size and max duration are tunable via
-`SEED_SPEECH_ASR_CHUNK_BYTES` and `SEED_SPEECH_ASR_MAX_DURATION_SECONDS`.
+The HTTP base URL is configured via `SEED_SPEECH_ASR_BASE_URL` (default
+`https://voice.ap-southeast-1.bytepluses.com`). Poll interval and max wait
+are tunable via `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` and
+`SEED_SPEECH_ASR_POLL_MAX_SECONDS`.
 
 ## Default model IDs
 

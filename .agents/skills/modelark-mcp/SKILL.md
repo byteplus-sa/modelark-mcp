@@ -44,6 +44,9 @@ Do not assume a fixed tool count. Registration is conditional:
 
 - `seed_audio_generate`
 - `seed_audio_generate_variations`
+
+### Requires `SEED_SPEECH_ASR_API_KEY`
+
 - `speech_to_text`
 
 ### Requires `BYTEPLUS_MODELARK_API_KEY`
@@ -224,7 +227,7 @@ Destructive task cleanup.
 
 #### `speech_to_text`
 
-Transcribe audio to text via Seed Speech ASR (synchronous WebSocket).
+Transcribe audio to text via Seed Speech ASR (synchronous HTTP).
 
 - Accepts audio via `audio_url`, Base64 `audio_data`, or `audio_file_path`
   (stdio only)
@@ -291,7 +294,8 @@ Use `TranscriptionResult.text` for the full transcript, or
 ### Provider credentials
 
 - `BYTEPLUS_MODELARK_API_KEY` enables Seedream and Seedance
-- `BYTEPLUS_SEED_AUDIO_API_KEY` enables Seed Audio (TTS) and Speech-to-Text (STT)
+- `BYTEPLUS_SEED_AUDIO_API_KEY` enables Seed Audio (TTS)
+- `SEED_SPEECH_ASR_API_KEY` enables Speech-to-Text (STT)
 
 ### Model selection
 
@@ -345,7 +349,7 @@ Use bindings when a custom model ID is not one of the built-in defaults.
   `seed-health://status` and the relevant env vars before assuming a bug.
 - Do not poll Seedance aggressively. Respect `recommended_poll_after_ms`.
 - `speech_to_text` is synchronous — it blocks until transcription completes.
-  The call is capped by `SEED_SPEECH_ASR_MAX_DURATION_SECONDS` (default 3600s).
+  The call is capped by `SEED_SPEECH_ASR_POLL_MAX_SECONDS` (default 600s).
 - Use `seedream_edit_image` for spatial edits; do not force point or bbox logic
   into `seedream_generate_image`.
 - Video references are URL-only. Use `media_upload` when the user starts with
@@ -357,7 +361,8 @@ Use bindings when a custom model ID is not one of the built-in defaults.
 ## Server Notes
 
 - ModelArk uses Bearer auth and powers Seedream plus Seedance.
-- Seed Speech uses `X-Api-Key` and powers both Seed Audio (TTS) and
+- Seed Audio uses `X-Api-Key` and powers Seed Audio (TTS).
+- Seed Speech ASR uses `X-Api-Key` (a separate key) and powers
   Speech-to-Text (ASR).
 - The server persists outputs locally and exposes them as durable MCP
   artifacts.

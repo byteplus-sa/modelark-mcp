@@ -104,6 +104,8 @@ class SeedSpeechAsrHttpGateway(BaseHttpGateway):
             raise self.normalize_error(response, "submit")
         return request_id
 
+    _NON_TERMINAL_STATUSES = frozenset({"20000001", "45000000"})
+
     async def query(self, *, task_id: str, sequence: int) -> dict[str, Any] | None:
         """Poll for ASR result. Returns None if still processing."""
         response = await self._request(
@@ -119,7 +121,7 @@ class SeedSpeechAsrHttpGateway(BaseHttpGateway):
         if response.status_code >= 400:
             raise self.normalize_error(response, "query")
         api_status = response.headers.get("x-api-status-code", "")
-        if api_status == "45000000":
+        if api_status in self._NON_TERMINAL_STATUSES:
             return None
         return cast("dict[str, Any]", response.json())
 
