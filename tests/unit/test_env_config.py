@@ -12,10 +12,10 @@ from modelark_mcp.config.env import Settings, get_settings, validate
 def clean_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test-modelark")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test-speech")
-    monkeypatch.setenv("BYTEPLUS_LAS_API_KEY", "las-test-key")
     monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "https://ark.test.example.com/api/v3")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.test.example.com")
-    monkeypatch.setenv("BYTEPLUS_LAS_BASE_URL", "https://las.test.example.com")
+    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+    monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://voice.test.example.com")
     monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
     monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
     get_settings.cache_clear()
@@ -33,13 +33,14 @@ class TestValidate:
         get_settings.cache_clear()
         monkeypatch.delenv("BYTEPLUS_MODELARK_BASE_URL", raising=False)
         monkeypatch.delenv("BYTEPLUS_SEED_AUDIO_BASE_URL", raising=False)
-        monkeypatch.delenv("BYTEPLUS_LAS_BASE_URL", raising=False)
+        monkeypatch.delenv("SEED_SPEECH_ASR_BASE_URL", raising=False)
         validate()
         get_settings.cache_clear()
 
     def test_validate_rejects_non_https_modelark_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "http://ark.example.com/api/v3")
         monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.example.com")
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://voice.example.com")
         monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
         monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
         get_settings.cache_clear()
@@ -52,7 +53,7 @@ class TestValidate:
     ) -> None:
         monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "https://ark.example.com/api/v3")
         monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "http://voice.example.com")
-        monkeypatch.setenv("BYTEPLUS_LAS_BASE_URL", "https://las.example.com")
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://voice.example.com")
         monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
         monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
         get_settings.cache_clear()
@@ -60,15 +61,15 @@ class TestValidate:
             validate()
         get_settings.cache_clear()
 
-    def test_validate_rejects_non_https_las_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_validate_rejects_non_https_asr_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "https://ark.example.com/api/v3")
         monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.example.com")
-        monkeypatch.setenv("BYTEPLUS_LAS_BASE_URL", "http://las.example.com")
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "http://voice.example.com")
         monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
         monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
         get_settings.cache_clear()
-        with pytest.raises(ValueError, match="BYTEPLUS_LAS_BASE_URL must use HTTPS"):
-            validate()
+        with pytest.raises(ValidationError, match="SEED_SPEECH_ASR_BASE_URL must use HTTPS"):
+            Settings(_env_file=None)
         get_settings.cache_clear()
 
     def test_validate_rejects_zero_ttl(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -162,11 +163,6 @@ class TestSettingsFromEnv:
         settings = Settings(_env_file=None)
         assert settings.seed_audio_api_key == "sk-audio-env"  # pragma: allowlist secret
 
-    def test_las_api_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("BYTEPLUS_LAS_API_KEY", "las-env-key")
-        settings = Settings(_env_file=None)
-        assert settings.las_api_key == "las-env-key"  # pragma: allowlist secret
-
     def test_transport_http_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MCP_TRANSPORT", "http")
         settings = Settings(_env_file=None)
@@ -233,55 +229,50 @@ class TestSettingsFromEnv:
         assert settings.modelark_base_url == "https://custom.ark.com/api/v3"
 
 
-class TestLasConfig:
-    """Tests for LAS (Lake AI Service) configuration."""
+class TestSttConfig:
+    """Tests for Seed Speech ASR (STT) configuration."""
 
-    def test_has_las_true_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("BYTEPLUS_LAS_API_KEY", "las-test-key")
+    def test_has_stt_true_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
         settings = Settings(_env_file=None)
-        assert settings.has_las is True
+        assert settings.has_stt is True
 
-    def test_has_las_false_when_key_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("BYTEPLUS_LAS_API_KEY", "")
+    def test_has_stt_false_when_key_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "")
         settings = Settings(_env_file=None)
-        assert settings.has_las is False
+        assert settings.has_stt is False
 
-    def test_las_base_url_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("BYTEPLUS_LAS_BASE_URL", raising=False)
+    def test_asr_base_url_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SEED_SPEECH_ASR_BASE_URL", raising=False)
         settings = Settings(_env_file=None)
-        assert settings.las_base_url == "https://operator.las.ap-southeast-1.bytepluses.com"
+        assert settings.seed_speech_asr_base_url == "https://voice.ap-southeast-1.bytepluses.com"
 
-    def test_las_base_url_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("BYTEPLUS_LAS_BASE_URL", "https://custom.las.example.com")
+    def test_asr_base_url_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://custom.asr.example.com")
         settings = Settings(_env_file=None)
-        assert settings.las_base_url == "https://custom.las.example.com"
+        assert settings.seed_speech_asr_base_url == "https://custom.asr.example.com"
 
-    def test_default_operator_is_pro(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("LAS_DEFAULT_OPERATOR", raising=False)
+    def test_asr_poll_interval_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS", raising=False)
         settings = Settings(_env_file=None)
-        assert settings.las_default_operator == "las_asr_pro"
+        assert settings.seed_speech_asr_poll_interval_seconds == 3.0
 
-    def test_default_resource_is_bigasr(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("LAS_DEFAULT_RESOURCE", raising=False)
+    def test_asr_poll_interval_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS", "5.0")
         settings = Settings(_env_file=None)
-        assert settings.las_default_resource == "bigasr"
+        assert settings.seed_speech_asr_poll_interval_seconds == 5.0
 
-    def test_operator_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("LAS_DEFAULT_OPERATOR", "las_asr")
+    def test_asr_poll_max_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SEED_SPEECH_ASR_POLL_MAX_SECONDS", raising=False)
         settings = Settings(_env_file=None)
-        assert settings.las_default_operator == "las_asr"
+        assert settings.seed_speech_asr_poll_max_seconds == 600.0
 
-    def test_resource_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("LAS_DEFAULT_RESOURCE", "seedasr")
+    def test_asr_poll_max_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_POLL_MAX_SECONDS", "300")
         settings = Settings(_env_file=None)
-        assert settings.las_default_resource == "seedasr"
+        assert settings.seed_speech_asr_poll_max_seconds == 300.0
 
-    def test_invalid_operator_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("LAS_DEFAULT_OPERATOR", "invalid_op")
-        with pytest.raises(ValidationError, match="LAS_DEFAULT_OPERATOR"):
-            Settings(_env_file=None)
-
-    def test_invalid_resource_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("LAS_DEFAULT_RESOURCE", "invalid_model")
-        with pytest.raises(ValidationError, match="LAS_DEFAULT_RESOURCE"):
+    def test_asr_base_url_rejects_non_https(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "http://voice.example.com")
+        with pytest.raises(ValidationError, match="SEED_SPEECH_ASR_BASE_URL must use HTTPS"):
             Settings(_env_file=None)

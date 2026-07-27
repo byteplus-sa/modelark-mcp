@@ -16,7 +16,14 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,7 +80,6 @@ class Settings(BaseSettings):
 
     modelark_api_key: str = Field(default="", validation_alias="BYTEPLUS_MODELARK_API_KEY")
     seed_audio_api_key: str = Field(default="", validation_alias="BYTEPLUS_SEED_AUDIO_API_KEY")
-    las_api_key: str = Field(default="", validation_alias="BYTEPLUS_LAS_API_KEY")
 
     # --- Provider base URLs --------------------------------------------------
 
@@ -85,22 +91,32 @@ class Settings(BaseSettings):
         default="https://voice.ap-southeast-1.bytepluses.com",
         validation_alias="BYTEPLUS_SEED_AUDIO_BASE_URL",
     )
-    las_base_url: str = Field(
-        default="https://operator.las.ap-southeast-1.bytepluses.com",
-        validation_alias="BYTEPLUS_LAS_BASE_URL",
-    )
 
-    # --- LAS (Lake AI Service) configuration ---------------------------------
+    # --- Seed Speech ASR (STT) configuration ---------------------------------
 
-    las_default_operator: str = Field(
-        default="las_asr_pro",
-        validation_alias="LAS_DEFAULT_OPERATOR",
-        description="LAS ASR operator: 'las_asr_pro' (enhanced) or 'las_asr' (standard).",
+    seed_speech_asr_api_key: str = Field(
+        default="",
+        validation_alias="SEED_SPEECH_ASR_API_KEY",
+        description="Seed Speech ASR API key (distinct from TTS key).",
     )
-    las_default_resource: str = Field(
-        default="bigasr",
-        validation_alias="LAS_DEFAULT_RESOURCE",
-        description="Model resource for las_asr_pro: 'bigasr' or 'seedasr'.",
+    seed_speech_asr_base_url: str = Field(
+        default="https://voice.ap-southeast-1.bytepluses.com",
+        validation_alias="SEED_SPEECH_ASR_BASE_URL",
+        description="Seed Speech ASR HTTP base URL.",
+    )
+    seed_speech_asr_poll_interval_seconds: float = Field(
+        default=3.0,
+        ge=0.5,
+        le=60.0,
+        validation_alias="SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS",
+        description="Seconds between ASR query polls.",
+    )
+    seed_speech_asr_poll_max_seconds: float = Field(
+        default=600.0,
+        ge=10.0,
+        le=3600.0,
+        validation_alias="SEED_SPEECH_ASR_POLL_MAX_SECONDS",
+        description="Maximum total seconds to wait for ASR result.",
     )
 
     # --- Model bindings ------------------------------------------------------
@@ -250,9 +266,9 @@ class Settings(BaseSettings):
         return bool(self.tos_access_key and self.tos_secret_key and self.tos_bucket)
 
     @property
-    def has_las(self) -> bool:
-        """Whether LAS (Lake AI Service) credentials are configured."""
-        return bool(self.las_api_key)
+    def has_stt(self) -> bool:
+        """Whether Seed Speech ASR (STT) is configured. Requires a dedicated ASR API key."""
+        return bool(self.seed_speech_asr_api_key)
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -278,38 +294,21 @@ class Settings(BaseSettings):
     def normalize_log_level(cls, value: object) -> object:
         return value.upper() if isinstance(value, str) else value
 
-    @field_validator("modelark_base_url", "seed_audio_base_url", "las_base_url")
+    @field_validator("modelark_base_url", "seed_audio_base_url", "seed_speech_asr_base_url")
     @classmethod
-    def validate_provider_url(cls, value: str) -> str:
+    def validate_provider_url(cls, value: str, info: ValidationInfo) -> str:
         parsed = urlsplit(value)
         if parsed.scheme != "https" or not parsed.hostname:
-            variable = (
-                "BYTEPLUS_MODELARK_BASE_URL"
-                if "ark" in value.lower()
-                else "BYTEPLUS_LAS_BASE_URL"
-                if "las" in value.lower() or "operator" in value.lower()
-                else "BYTEPLUS_SEED_AUDIO_BASE_URL"
-            )
+            env_var_map = {
+                "modelark_base_url": "BYTEPLUS_MODELARK_BASE_URL",
+                "seed_audio_base_url": "BYTEPLUS_SEED_AUDIO_BASE_URL",
+                "seed_speech_asr_base_url": "SEED_SPEECH_ASR_BASE_URL",
+            }
+            variable = env_var_map.get(info.field_name or "", "BYTEPLUS_PROVIDER_BASE_URL")
             raise ValueError(f"{variable} must use HTTPS and include a host")
         if parsed.username or parsed.password:
             raise ValueError("Provider base URLs must not contain credentials")
         return value.rstrip("/")
-
-    @field_validator("las_default_operator")
-    @classmethod
-    def validate_las_operator(cls, value: str) -> str:
-        allowed = {"las_asr_pro", "las_asr"}
-        if value not in allowed:
-            raise ValueError(f"LAS_DEFAULT_OPERATOR must be one of {allowed}, got '{value}'")
-        return value
-
-    @field_validator("las_default_resource")
-    @classmethod
-    def validate_las_resource(cls, value: str) -> str:
-        allowed = {"bigasr", "seedasr"}
-        if value not in allowed:
-            raise ValueError(f"LAS_DEFAULT_RESOURCE must be one of {allowed}, got '{value}'")
-        return value
 
     @model_validator(mode="after")
     def validate_model_bindings(self) -> Settings:
@@ -422,8 +421,6 @@ def validate() -> None:
         raise ValueError("BYTEPLUS_MODELARK_BASE_URL must use HTTPS")
     if not settings.seed_audio_base_url.startswith("https://"):
         raise ValueError("BYTEPLUS_SEED_AUDIO_BASE_URL must use HTTPS")
-    if not settings.las_base_url.startswith("https://"):
-        raise ValueError("BYTEPLUS_LAS_BASE_URL must use HTTPS")
     if settings.artifact_ttl_seconds <= 0:
         raise ValueError("ARTIFACT_TTL_SECONDS must be positive")
     if settings.mcp_inline_media_max_bytes <= 0:

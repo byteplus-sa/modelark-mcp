@@ -1,7 +1,7 @@
 ---
 title: Speech-to-Text via BytePlus LAS ASR
 type: plan
-status: implemented
+status: deprecated
 created: 2026-07-25
 updated: 2026-07-25
 tags:

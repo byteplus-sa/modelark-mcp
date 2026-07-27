@@ -76,8 +76,7 @@ tool → scope mapping is wired in `server.py::register_tools`:
 | `seedance:create` | `seedance_create_task`, `seedance_create_task_variations` |
 | `seedance:read` | `seedance_get_task`, `seedance_list_tasks` |
 | `seedance:delete` | `seedance_cancel_or_delete_task` |
-| `las:asr:create` | `speech_to_text_create_task` |
-| `las:asr:read` | `speech_to_text_get_result` |
+| `seed:asr:transcribe` | `speech_to_text` |
 | `media:upload` | `media_upload` |
 | `artifacts:read` | MCP resource `seed-media://artifacts/{artifact_id}` |
 
@@ -85,7 +84,7 @@ The `seed-health://status` resource and the `/health`, `/ready`, `/metrics`
 routes are **not** scope-protected at the FastMCP layer. Seed Audio tools are
 registered only when `BYTEPLUS_SEED_AUDIO_API_KEY` is set; Seedream/Seedance
 tools only when `BYTEPLUS_MODELARK_API_KEY` is set; speech-to-text tools only
-when `BYTEPLUS_LAS_API_KEY` is set. The `media_upload` tool is
+when `SEED_SPEECH_ASR_API_KEY` is set. The `media_upload` tool is
 registered only when TOS credentials are set (`TOS_ACCESS_KEY` /
 `TOS_SECRET_KEY` / `TOS_BUCKET`).
 

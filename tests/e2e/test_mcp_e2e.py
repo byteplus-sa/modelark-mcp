@@ -41,6 +41,7 @@ ARK_BASE = "https://ark.test.example.com/api/v3"
 def e2e_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> object:
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test-modelark")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test-speech")
+    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
     monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", ARK_BASE)
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.test.example.com")
     monkeypatch.setenv("SEEDREAM_DEFAULT_MODEL", "dola-seedream-5-0-pro-260628")
@@ -105,6 +106,7 @@ class TestToolDiscovery:
                 "seedance_get_task",
                 "seedance_list_tasks",
                 "seedance_cancel_or_delete_task",
+                "speech_to_text",
             }
 
     async def test_tool_has_input_schema(self, e2e_server: object) -> None:

@@ -60,25 +60,24 @@ claim. Tool scopes are enforced by FastMCP:
 - `media:upload`
 - `artifacts:read`
 
-## LAS speech-to-text (optional)
+## Seed Speech ASR (STT)
 
-The `speech_to_text_create_task` and `speech_to_text_get_result` tools are
-registered only when `BYTEPLUS_LAS_API_KEY` is set. LAS ASR is an asynchronous
-submit/poll API that transcribes audio (and video) into timestamped,
-speaker-diarized text. Audio input requires a URL — Base64 or `file_path`
-input also needs TOS configured.
+The `speech_to_text` tool is registered when `SEED_SPEECH_ASR_API_KEY` is
+set — STT uses a dedicated ASR key, distinct from the TTS key. It submits
+audio via HTTP, polls until transcription is complete, and returns the
+complete `TranscriptionResult` in a single synchronous call. Audio input
+accepts URL, Base64, or local file path (stdio only).
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_LAS_API_KEY` | empty | Enables speech-to-text; sent as bare `Authorization` header |
-| `BYTEPLUS_LAS_BASE_URL` | LAS operator URL | HTTPS service base URL |
-| `LAS_DEFAULT_OPERATOR` | `las_asr_pro` | Operator: `las_asr_pro` (enhanced) or `las_asr` (standard) |
-| `LAS_DEFAULT_RESOURCE` | `bigasr` | Model resource for `las_asr_pro`: `bigasr` or `seedasr` |
+| `SEED_SPEECH_ASR_API_KEY` | empty | Enables speech-to-text; sent as `X-Api-Key` header |
+| `SEED_SPEECH_ASR_BASE_URL` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech ASR HTTP host |
+| `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` | `3.0` | Seconds between ASR query polls |
+| `SEED_SPEECH_ASR_POLL_MAX_SECONDS` | `600.0` | Maximum total seconds to wait for ASR result |
 
-JWT tool scopes for speech-to-text:
+JWT tool scope for speech-to-text:
 
-- `las:asr:create`
-- `las:asr:read`
+- `seed:asr:transcribe`
 
 ## TOS object storage (optional)
 
