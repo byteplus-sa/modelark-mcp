@@ -123,17 +123,15 @@ class SeedSpeechAsrHttpGateway(BaseHttpGateway):
         api_status = response.headers.get("x-api-status-code", "")
         if api_status in self._NON_TERMINAL_STATUSES:
             return None
-        return cast("dict[str, Any]", response.json())
+        try:
+            return cast("dict[str, Any]", response.json())
+        except json.JSONDecodeError:
+            raise self.normalize_error(response, "query") from None
 
     @staticmethod
     def extract_request_id(response: httpx.Response) -> str | None:
         value = response.headers.get("X-Tt-Logid") or response.headers.get("x-tt-logid")
         return str(value) if value is not None else None
-
-    @staticmethod
-    def extract_log_id_from_body(body: dict[str, Any]) -> str | None:
-        """Extract log ID from query response body if present."""
-        return None
 
     @classmethod
     def normalize_error(cls, response: httpx.Response, operation: str) -> ProviderError:

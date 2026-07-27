@@ -154,6 +154,8 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
     except ProviderError as exc:
         await ctx.error(f"Speech-to-text failed: {exc.message}")
         return provider_error_result(exc)
+    finally:
+        await service.close()
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

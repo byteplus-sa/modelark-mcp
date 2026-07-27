@@ -13,6 +13,8 @@ import time
 from typing import Any
 from uuid import uuid4
 
+import httpx
+
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.domain.transcription import (
     TranscriptionResult,
@@ -30,6 +32,7 @@ class SeedSpeechAsrService:
         gateway: SeedSpeechAsrHttpGateway | None = None,
     ) -> None:
         self._gateway = gateway
+        self._owns_gateway = gateway is None
 
     async def transcribe(
         self,
@@ -65,17 +68,25 @@ class SeedSpeechAsrService:
 
         task_id = str(uuid4())
         audio_data = base64.b64encode(audio_bytes).decode() if audio_bytes is not None else None
-        gateway = self._gateway or SeedSpeechAsrHttpGateway()
+        gateway = self._gateway
+        if gateway is None:
+            gateway = SeedSpeechAsrHttpGateway()
+            self._gateway = gateway
 
-        await gateway.submit(
-            audio_data=audio_data,
-            audio_url=audio_url,
-            audio_format=audio_format,
-            language=language,
-            enable_punc=enable_punc,
-            enable_itn=enable_itn,
-            request_id=task_id,
-        )
+        try:
+            await self._submit(
+                gateway,
+                audio_data=audio_data,
+                audio_url=audio_url,
+                audio_format=audio_format,
+                language=language,
+                enable_punc=enable_punc,
+                enable_itn=enable_itn,
+                request_id=task_id,
+            )
+        except ProviderError:
+            await self._safe_close(gateway)
+            raise
 
         delay = poll_interval
         deadline = time.monotonic() + poll_max
@@ -83,7 +94,11 @@ class SeedSpeechAsrService:
 
         while time.monotonic() < deadline:
             await asyncio.sleep(delay)
-            response = await gateway.query(task_id=task_id, sequence=sequence)
+            try:
+                response = await self._query(gateway, task_id=task_id, sequence=sequence)
+            except ProviderError:
+                await self._safe_close(gateway)
+                raise
             sequence += 1
             if response is not None:
                 return self._map_result(response), None
@@ -138,3 +153,46 @@ class SeedSpeechAsrService:
                 )
             )
         return TranscriptionResult(text=text, utterances=utterances, duration_ms=duration_ms)
+
+    async def _submit(
+        self,
+        gateway: SeedSpeechAsrHttpGateway,
+        **kwargs: Any,
+    ) -> None:
+        """Submit with transport error normalization."""
+        try:
+            await gateway.submit(**kwargs)
+        except httpx.TimeoutException:
+            raise SeedSpeechAsrHttpGateway.normalize_timeout("submit_asr") from None
+        except httpx.ConnectError as exc:
+            raise SeedSpeechAsrHttpGateway.normalize_connection_error("submit_asr", exc) from exc
+        except httpx.TransportError as exc:
+            raise SeedSpeechAsrHttpGateway.normalize_transport_error("submit_asr", exc) from exc
+
+    async def _query(
+        self,
+        gateway: SeedSpeechAsrHttpGateway,
+        *,
+        task_id: str,
+        sequence: int,
+    ) -> dict[str, Any] | None:
+        """Query with transport error normalization."""
+        try:
+            return await gateway.query(task_id=task_id, sequence=sequence)
+        except httpx.TimeoutException:
+            raise SeedSpeechAsrHttpGateway.normalize_timeout("query_asr") from None
+        except httpx.ConnectError as exc:
+            raise SeedSpeechAsrHttpGateway.normalize_connection_error("query_asr", exc) from exc
+        except httpx.TransportError as exc:
+            raise SeedSpeechAsrHttpGateway.normalize_transport_error("query_asr", exc) from exc
+
+    async def _safe_close(self, gateway: SeedSpeechAsrHttpGateway) -> None:
+        """Close the gateway if this service created it internally."""
+        if self._owns_gateway:
+            await gateway.close()
+
+    async def close(self) -> None:
+        """Close the gateway if it was created internally (not injected)."""
+        if self._gateway is not None and self._owns_gateway:
+            await self._gateway.close()
+            self._gateway = None
