@@ -18,6 +18,7 @@ from typing import Any, ClassVar
 
 import truststore
 from websockets.asyncio.client import connect
+from websockets.exceptions import InvalidHandshake
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError, ProviderName
@@ -86,6 +87,10 @@ def decode_server_message(frame: bytes) -> tuple[MessageType, Any]:
 
     FULL_SERVER_RESPONSE → (type, parsed_dict); SERVER_ERROR → (type, (code, msg)).
     """
+    if len(frame) < 9:
+        raise ValueError(
+            f"ASR server frame too short: expected ≥9 bytes, got {len(frame)}"
+        )
     msg_type = MessageType((frame[1] >> 4) & 0x0F)
     serialization = Serialization((frame[2] >> 4) & 0x0F)
     compression = Compression(frame[2] & 0x0F)
@@ -126,19 +131,31 @@ class SeedSpeechAsrWsClient:
 
     async def __aenter__(self) -> SeedSpeechAsrWsClient:
         ssl_context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        self._ws = await connect(
-            self._ws_url,
-            additional_headers={
-                "X-Api-Key": self._api_key,
-                "X-Api-Resource-Id": self._resource_id,
-                "X-Api-Request-Id": str(uuid.uuid4()),
-                "X-Api-Sequence": "-1",
-            },
-            ssl=ssl_context,
-            open_timeout=self._connect_timeout,
-        )
+        try:
+            self._ws = await connect(
+                self._ws_url,
+                additional_headers={
+                    "X-Api-Key": self._api_key,
+                    "X-Api-Resource-Id": self._resource_id,
+                    "X-Api-Request-Id": str(uuid.uuid4()),
+                    "X-Api-Sequence": "-1",
+                },
+                ssl=ssl_context,
+                open_timeout=self._connect_timeout,
+            )
+        except TimeoutError:
+            raise self._connection_error("CONNECTION_TIMEOUT", retryable=True) from None
+        except InvalidHandshake as exc:
+            status_str = str(exc)
+            retryable = "5" in status_str and ("502" in status_str or "503" in status_str or "504" in status_str)
+            raise self._connection_error(
+                "HANDSHAKE_FAILED",
+                retryable=retryable,
+            ) from exc
+        except ssl.SSLError as exc:
+            raise self._connection_error("TLS_ERROR", retryable=False) from exc
+        except OSError as exc:
+            raise self._connection_error("CONNECTION_FAILED", retryable=True) from exc
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -167,9 +184,24 @@ class SeedSpeechAsrWsClient:
         )
 
     @classmethod
-    def normalize_error(
-        cls, code: int, message: str, operation: str
-    ) -> ProviderError:
+    def _connection_error(cls, code: str, *, retryable: bool) -> ProviderError:
+        normalized = NormalizedProviderError(
+            provider=cls.PROVIDER,
+            operation="connect",
+            code=code,
+            message=f"WebSocket connection failed: {code}",
+            retryable=retryable,
+            ambiguous_completion=False,
+        )
+        log_error(
+            "seed_speech_asr_connect_error",
+            code=code,
+            retryable=retryable,
+        )
+        return ProviderError(normalized)
+
+    @classmethod
+    def normalize_error(cls, code: int, message: str, operation: str) -> ProviderError:
         retryable = code in _RETRYABLE_ASR_CODES
         normalized = NormalizedProviderError(
             provider=cls.PROVIDER,

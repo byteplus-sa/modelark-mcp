@@ -26,8 +26,6 @@ from modelark_mcp.providers.seed_speech.asr_ws import (
     SeedSpeechAsrWsClient,
 )
 
-_SESSION_TIMEOUT = 3600.0
-
 
 class SeedSpeechAsrService:
     """Service layer for Seed Speech ASR (speech-to-text)."""
@@ -44,7 +42,9 @@ class SeedSpeechAsrService:
         enable_punc: bool | None = None,
         enable_itn: bool | None = None,
         chunk_bytes: int = 16384,
-        session_timeout: float = _SESSION_TIMEOUT,
+        session_timeout: float = 3600.0,
+        appid: str = "",
+        cluster: str = "",
     ) -> tuple[TranscriptionResult, str | None]:
         """Transcribe audio via one WS session. Returns ``(result, log_id)``.
 
@@ -52,24 +52,31 @@ class SeedSpeechAsrService:
         chunk. All partial responses are buffered and discarded; only the
         final, complete transcription is returned.
         """
+        if chunk_bytes <= 0:
+            raise ValueError(f"chunk_bytes must be positive, got {chunk_bytes}")
+
         config = self.build_client_request(
             audio_format=audio_format,
             language=language,
             enable_punc=enable_punc,
             enable_itn=enable_itn,
+            appid=appid,
+            cluster=cluster,
         )
         client = self._client or SeedSpeechAsrWsClient.from_settings()
 
         async def _run() -> tuple[TranscriptionResult, str | None]:
             latest: AsrServerResponse | None = None
+            log_id: str | None = None
             async with client:
                 await client.send_config(config.model_dump())
                 ack_type, ack_payload = await client.recv()
                 if ack_type == MessageType.SERVER_ERROR:
                     code, message = ack_payload
-                    raise SeedSpeechAsrWsClient.normalize_error(
-                        code, message, "configure"
-                    )
+                    raise SeedSpeechAsrWsClient.normalize_error(code, message, "configure")
+                ack = AsrServerResponse.model_validate(ack_payload)
+                if ack.message:
+                    log_id = ack.message
                 for offset in range(0, len(audio_bytes), chunk_bytes):
                     chunk = audio_bytes[offset : offset + chunk_bytes]
                     is_last = offset + chunk_bytes >= len(audio_bytes)
@@ -77,14 +84,12 @@ class SeedSpeechAsrService:
                     msg_type, payload = await client.recv()
                     if msg_type == MessageType.SERVER_ERROR:
                         code, message = payload
-                        raise SeedSpeechAsrWsClient.normalize_error(
-                            code, message, "transcribe"
-                        )
+                        raise SeedSpeechAsrWsClient.normalize_error(code, message, "transcribe")
                     latest = AsrServerResponse.model_validate(payload)
 
             if latest is None or latest.result is None:
-                return TranscriptionResult(text=""), None
-            return self.map_result(latest), None
+                return TranscriptionResult(text=""), log_id
+            return self.map_result(latest), log_id
 
         return await asyncio.wait_for(_run(), timeout=session_timeout)
 
@@ -95,8 +100,16 @@ class SeedSpeechAsrService:
         language: str,
         enable_punc: bool | None,
         enable_itn: bool | None,
+        appid: str = "",
+        cluster: str = "",
     ) -> AsrFullClientRequest:
+        user: dict[str, str] = {"uid": "modelark-mcp"}
+        if appid:
+            user["appid"] = appid
+        if cluster:
+            user["cluster"] = cluster
         return AsrFullClientRequest(
+            user=user,
             audio=AsrAudioConfig(format=audio_format, language=language),
             request=AsrRequestConfig(
                 enable_punc=enable_punc,

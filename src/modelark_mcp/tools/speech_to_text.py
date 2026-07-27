@@ -54,13 +54,9 @@ class AsrAudioInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_exactly_one_source(self) -> AsrAudioInput:
-        provided = sum(
-            1 for v in (self.audio_url, self.audio_data, self.audio_file_path) if v
-        )
+        provided = sum(1 for v in (self.audio_url, self.audio_data, self.audio_file_path) if v)
         if provided != 1:
-            raise ValueError(
-                "Provide exactly one of audio_url, audio_data, or audio_file_path."
-            )
+            raise ValueError("Provide exactly one of audio_url, audio_data, or audio_file_path.")
         if self.audio_url:
             validate_url(self.audio_url)
         return self
@@ -105,9 +101,7 @@ async def _resolve_audio_bytes(audio: AsrAudioInput, ctx: Context) -> bytes:
     return p.read_bytes()
 
 
-async def speech_to_text(
-    input: SpeechToTextInput, ctx: Context
-) -> SpeechToTextOutput | ToolResult:
+async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToTextOutput | ToolResult:
     """Transcribe audio to text via Seed Speech ASR (single synchronous call).
 
     Accepts audio via URL, Base64, or local file path (stdio only). Returns the
@@ -136,9 +130,7 @@ async def speech_to_text(
 
     await ctx.report_progress(progress=30, total=100)
     duration_est = _estimate_duration_seconds(len(audio_bytes))
-    estimated_cost = log_cost_estimate(
-        product="stt", variations=1, duration_seconds=duration_est
-    )
+    estimated_cost = log_cost_estimate(product="stt", variations=1, duration_seconds=duration_est)
 
     options = input.options or AsrRequestOptions()
     service = SeedSpeechAsrService()
@@ -157,6 +149,9 @@ async def speech_to_text(
                     enable_punc=options.enable_punc,
                     enable_itn=options.enable_itn,
                     chunk_bytes=settings.seed_speech_asr_chunk_bytes,
+                    session_timeout=settings.seed_speech_asr_max_duration_seconds,
+                    appid=settings.seed_speech_asr_appid or "",
+                    cluster=settings.seed_speech_asr_cluster or "",
                 )
             )
     except ProviderError as exc:
