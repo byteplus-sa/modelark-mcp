@@ -191,9 +191,9 @@ async def seed_audio_generate(
         image_ref=image_ref_data,
     )
 
-    output_dict = None
+    audio_config_dict = None
     if input.output:
-        output_dict = input.output.model_dump(exclude_none=True)
+        audio_config_dict = input.output.model_dump(exclude_none=True)
 
     watermark_dict = None
     if input.watermark:
@@ -202,7 +202,7 @@ async def seed_audio_generate(
     request = SeedAudioService.build_request(
         text_prompt=input.text_prompt,
         references=references if references else None,
-        output=output_dict,
+        audio_config=audio_config_dict,
         watermark=watermark_dict,
     )
 

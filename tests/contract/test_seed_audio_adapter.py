@@ -45,9 +45,9 @@ class TestSeedAudioRequestBuilding:
         assert request.references == refs
 
     def test_request_with_output_options(self) -> None:
-        output = {"format": "mp3", "sample_rate": 44100}
-        request = SeedAudioService.build_request(text_prompt="Hello", output=output)
-        assert request.output == output
+        audio_config = {"format": "mp3", "sample_rate": 44100}
+        request = SeedAudioService.build_request(text_prompt="Hello", audio_config=audio_config)
+        assert request.audio_config == audio_config
 
     def test_request_with_watermark(self) -> None:
         watermark = {"enable": True, "metadata": True}
@@ -56,56 +56,54 @@ class TestSeedAudioRequestBuilding:
 
 
 class TestSeedAudioProviderRequestSerialization:
-    """Tests for ``SeedAudioProviderRequest.to_api_dict()`` wire flattening."""
+    """Tests for ``SeedAudioProviderRequest.to_api_dict()`` wire serialization."""
 
     def test_to_api_dict_text_only(self) -> None:
         request = SeedAudioProviderRequest(model="seed-audio-1.0", text_prompt="Hello")
         result = request.to_api_dict()
         assert result == {"model": "seed-audio-1.0", "text_prompt": "Hello"}
 
-    def test_to_api_dict_flattens_output(self) -> None:
+    def test_to_api_dict_nests_audio_config(self) -> None:
         request = SeedAudioProviderRequest(
             model="seed-audio-1.0",
             text_prompt="Hello",
-            output={"format": "mp3", "sample_rate": 44100},
+            audio_config={"format": "mp3", "sample_rate": 44100},
         )
         result = request.to_api_dict()
-        assert "output" not in result
-        assert result["format"] == "mp3"
-        assert result["sample_rate"] == 44100
+        assert result["audio_config"] == {"format": "mp3", "sample_rate": 44100}
+        assert "format" not in result
+        assert "sample_rate" not in result
         assert result["model"] == "seed-audio-1.0"
         assert result["text_prompt"] == "Hello"
 
-    def test_to_api_dict_flattens_watermark(self) -> None:
+    def test_to_api_dict_nests_watermark(self) -> None:
         request = SeedAudioProviderRequest(
             model="seed-audio-1.0",
             text_prompt="Hello",
             watermark={"enable": True, "metadata": False},
         )
         result = request.to_api_dict()
-        assert "watermark" not in result
-        assert result["enable"] is True
-        assert result["metadata"] is False
+        assert result["watermark"] == {"enable": True, "metadata": False}
+        assert "enable" not in result
+        assert "metadata" not in result
 
-    def test_to_api_dict_flattens_both(self) -> None:
+    def test_to_api_dict_nests_both(self) -> None:
         request = SeedAudioProviderRequest(
             model="seed-audio-1.0",
             text_prompt="Hello",
-            output={"format": "mp3"},
+            audio_config={"format": "mp3"},
             watermark={"enable": True},
         )
         result = request.to_api_dict()
-        assert "output" not in result
-        assert "watermark" not in result
-        assert result["format"] == "mp3"
-        assert result["enable"] is True
+        assert result["audio_config"] == {"format": "mp3"}
+        assert result["watermark"] == {"enable": True}
 
-    def test_to_api_dict_excludes_none_output(self) -> None:
+    def test_to_api_dict_excludes_none_audio_config(self) -> None:
         request = SeedAudioProviderRequest(
-            model="seed-audio-1.0", text_prompt="Hello", output=None, watermark=None
+            model="seed-audio-1.0", text_prompt="Hello", audio_config=None, watermark=None
         )
         result = request.to_api_dict()
-        assert "output" not in result
+        assert "audio_config" not in result
         assert "watermark" not in result
         assert result == {"model": "seed-audio-1.0", "text_prompt": "Hello"}
 
@@ -114,11 +112,11 @@ class TestSeedAudioProviderRequestSerialization:
             model="seed-audio-1.0",
             text_prompt="Hello",
             references=[{"speaker": "voice_001"}],
-            output={"format": "wav"},
+            audio_config={"format": "wav"},
         )
         result = request.to_api_dict()
         assert result["references"] == [{"speaker": "voice_001"}]
-        assert result["format"] == "wav"
+        assert result["audio_config"] == {"format": "wav"}
 
 
 class TestSeedAudioReferenceMapping:
@@ -268,7 +266,7 @@ class TestSeedAudioResponseParsing:
         assert route.calls.last.request.headers["X-Api-Request-Id"] == "req-abc"
 
     @respx.mock
-    async def test_output_flattened_on_wire(self, service: SeedAudioService) -> None:
+    async def test_audio_config_nested_on_wire(self, service: SeedAudioService) -> None:
         import json
 
         route = respx.post(f"{SPEECH_BASE}/api/v3/tts/create").mock(
@@ -276,16 +274,16 @@ class TestSeedAudioResponseParsing:
         )
         request = SeedAudioService.build_request(
             text_prompt="Hello",
-            output={"format": "mp3", "sample_rate": 44100},
+            audio_config={"format": "mp3", "sample_rate": 44100},
             watermark={"enable": True},
         )
         await service.generate(request)
         body = json.loads(route.calls.last.request.content)
-        assert "output" not in body
-        assert "watermark" not in body
-        assert body["format"] == "mp3"
-        assert body["sample_rate"] == 44100
-        assert body["enable"] is True
+        assert body["audio_config"] == {"format": "mp3", "sample_rate": 44100}
+        assert body["watermark"] == {"enable": True}
+        assert "format" not in body
+        assert "sample_rate" not in body
+        assert "enable" not in body
 
 
 class TestSeedAudioErrorPropagation:

@@ -62,7 +62,7 @@ class SeedAudioService:
         *,
         text_prompt: str,
         references: list[dict[str, Any]] | None = None,
-        output: dict[str, Any] | None = None,
+        audio_config: dict[str, Any] | None = None,
         watermark: dict[str, Any] | None = None,
     ) -> SeedAudioProviderRequest:
         """Build a provider request from domain-level parameters."""
@@ -70,7 +70,7 @@ class SeedAudioService:
             model="seed-audio-1.0",
             text_prompt=text_prompt,
             references=references,
-            output=output,
+            audio_config=audio_config,
             watermark=watermark,
         )
 
