@@ -387,5 +387,6 @@ Returns:
 ```
 
 The presigned URL is valid for 24 hours by default (configurable via
-`TOS_PRESIGN_TTL_SECONDS`). The bucket remains private; the presigned URL
+`TOS_PRESIGN_TTL_SECONDS` or `S3_PRESIGN_TTL_SECONDS` depending on the
+selected backend). The bucket remains private; the presigned URL
 is the only way for BytePlus to read the object.
