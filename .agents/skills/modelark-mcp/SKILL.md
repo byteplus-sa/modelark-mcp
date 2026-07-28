@@ -72,6 +72,7 @@ gracefully degrades to whatever is configured.
 ### Requires object storage credentials (TOS or S3)
 
 - `media_upload`
+- `media_presign`
 
 ---
 
@@ -572,6 +573,7 @@ Transcription output is text — no artifact persistence needed.
 ### Object Storage Upload
 
 Requires object storage credentials (TOS or S3). No auth scope in stdio mode.
+In JWT mode: `media:upload` for `media_upload`, `media:presign` for `media_presign`.
 
 #### `media_upload`
 
@@ -608,6 +610,28 @@ Returns `MediaUploadOutput` with `url`, `expires_at`, `object_key`, `bytes`.
   "data": "UklGRiQAAABXQVZFZm10..."
 }
 ```
+
+#### `media_presign`
+
+Generate a fresh presigned HTTPS GET URL for an existing object in storage
+(TOS or S3) without re-uploading. Use this when a previously uploaded
+reference's presigned URL has expired or is about to expire.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `object_key` | `str` | Yes | Object key returned by a prior `media_upload` call |
+
+Returns `MediaPresignOutput` with `url`, `expires_at`, `object_key`.
+
+**Example — renew an expired URL:**
+
+```json
+{
+  "object_key": "references/video/abc-123-def"
+}
+```
+
+JWT scope: `media:presign`.
 
 ---
 
@@ -827,7 +851,8 @@ Set to `0` (default) for record-only mode with no enforcement.
 | Auth error (JWT mode) | Missing or invalid token | Check JWT configuration and scopes |
 | Budget rejected | Daily limit exceeded | Wait for UTC day rollover or increase budget |
 | `speech_to_text` timeout | ASR poll cap reached | Increase `SEED_SPEECH_ASR_POLL_MAX_SECONDS` or provide shorter audio |
-| `media_upload` not available | Missing TOS/S3 credentials | Set `TOS_*` or `S3_*` env vars and `OBJECT_STORAGE_BACKEND` |
+| `media_upload` / `media_presign` not available | Missing TOS/S3 credentials | Set `TOS_*` or `S3_*` env vars and `OBJECT_STORAGE_BACKEND` |
+| Presigned URL expired | TTL elapsed (default 30 min) | Call `media_presign` with the `object_key` to generate a fresh URL |
 
 ---
 

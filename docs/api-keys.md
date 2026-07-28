@@ -10,8 +10,8 @@ tool set.
 | ModelArk | `BYTEPLUS_MODELARK_API_KEY` | `Authorization: Bearer <key>` | Seedream (image), Seedance (video) |
 | Seed Speech (TTS) | `BYTEPLUS_SEED_AUDIO_API_KEY` | `X-Api-Key: <key>` | Seed Audio (speech generation) |
 | Seed Speech (STT) | `SEED_SPEECH_ASR_API_KEY` | `X-Api-Key: <key>` | Speech-to-Text (ASR) |
-| TOS | `TOS_ACCESS_KEY` + `TOS_SECRET_KEY` + `TOS_BUCKET` | AK/SK signing | `media_upload` |
-| S3 | `S3_ACCESS_KEY` + `S3_SECRET_KEY` + `S3_BUCKET` | AK/SK signing | `media_upload` |
+| TOS | `TOS_ACCESS_KEY` + `TOS_SECRET_KEY` + `TOS_BUCKET` | AK/SK signing | `media_upload`, `media_presign` |
+| S3 | `S3_ACCESS_KEY` + `S3_SECRET_KEY` + `S3_BUCKET` | AK/SK signing | `media_upload`, `media_presign` |
 
 Copy `.env.example` to `.env` and fill in the keys you need.
 
@@ -103,8 +103,8 @@ the TTS key, but is a separate credential. Set `SEED_SPEECH_ASR_API_KEY` in
 ## Object storage (TOS or S3)
 
 Object storage is **optional** but enables several workflows: the `media_upload`
-tool and Seedance video references (URL-only). It uses Access Key / Secret Key
-(AK/SK) signing, not a bearer token. Select the backend with
+and `media_presign` tools and Seedance video references (URL-only). It uses
+Access Key / Secret Key (AK/SK) signing, not a bearer token. Select the backend with
 `OBJECT_STORAGE_BACKEND` (`tos` default, or `s3`).
 
 ### TOS backend
@@ -119,11 +119,11 @@ tool and Seedance video references (URL-only). It uses Access Key / Secret Key
 | `TOS_BUCKET` | empty | Target bucket name |
 | `TOS_REGION` | `ap-southeast-1` | Bucket region |
 | `TOS_ENDPOINT` | `tos-ap-southeast-1.bytepluses.com` | TOS API endpoint |
-| `TOS_PRESIGN_TTL_SECONDS` | `86400` | Presigned URL validity (60–604800) |
+| `TOS_PRESIGN_TTL_SECONDS` | `1800` | Presigned URL validity in seconds (60–604800) |
 
 `TOS_ACCESS_KEY` and `TOS_SECRET_KEY` must **both** be set or **both** be
 empty. All three of AK, SK, and bucket must be set to register the
-`media_upload` tool.
+`media_upload` and `media_presign` tools.
 
 **How to get the keys:**
 
@@ -147,7 +147,7 @@ TOS_ENDPOINT=tos-ap-southeast-1.bytepluses.com
 **Security notes:**
 
 - Keep the bucket **private**. The server never makes objects public; it
-  generates short-lived presigned GET URLs (default 24 hours, configurable via
+  generates short-lived presigned GET URLs (default 30 minutes, configurable via
   `TOS_PRESIGN_TTL_SECONDS`) for individual objects.
 - Uploaded objects are **not auto-deleted** by this server. Configure a TOS
   bucket lifecycle rule to expire objects under the upload prefixes
@@ -163,12 +163,12 @@ TOS_ENDPOINT=tos-ap-southeast-1.bytepluses.com
 | `S3_BUCKET` | empty | Target bucket name |
 | `S3_REGION` | `us-east-1` | AWS region |
 | `S3_ENDPOINT` | empty | Custom endpoint for S3-compatible storage |
-| `S3_PRESIGN_TTL_SECONDS` | `86400` | Presigned URL validity (60–604800) |
+| `S3_PRESIGN_TTL_SECONDS` | `1800` | Presigned URL validity in seconds (60–604800) |
 | `OBJECT_STORAGE_BACKEND` | `tos` | Select active backend: `tos` or `s3` |
 
 `S3_ACCESS_KEY` and `S3_SECRET_KEY` must **both** be set or **both** be
 empty. All three of AK, SK, and bucket must be set to register the
-`media_upload` tool with the S3 backend.
+`media_upload` and `media_presign` tools with the S3 backend.
 
 When `S3_ENDPOINT` is set, path-style addressing is used automatically for
 S3-compatible storage (MinIO, R2, TOS-via-boto3).
@@ -216,7 +216,7 @@ TOS_SECRET_KEY=
 TOS_BUCKET=
 TOS_REGION=ap-southeast-1
 TOS_ENDPOINT=tos-ap-southeast-1.bytepluses.com
-TOS_PRESIGN_TTL_SECONDS=86400
+TOS_PRESIGN_TTL_SECONDS=1800
 
 # Object storage — S3 (optional alternative backend)
 S3_ACCESS_KEY=
@@ -224,7 +224,7 @@ S3_SECRET_KEY=
 S3_BUCKET=
 S3_REGION=us-east-1
 S3_ENDPOINT=
-S3_PRESIGN_TTL_SECONDS=86400
+S3_PRESIGN_TTL_SECONDS=1800
 OBJECT_STORAGE_BACKEND=tos
 ```
 

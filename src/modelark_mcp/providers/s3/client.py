@@ -38,12 +38,15 @@ class S3Gateway:
         self._presign_ttl = (
             presign_ttl if presign_ttl is not None else settings.s3_presign_ttl_seconds
         )
+        endpoint = settings.s3_endpoint or None
+        if not endpoint and settings.s3_region != "us-east-1":
+            endpoint = f"https://s3.{settings.s3_region}.amazonaws.com"
         self._client: Any = client or boto3.client(
             "s3",
             aws_access_key_id=settings.s3_access_key,
             aws_secret_access_key=settings.s3_secret_key,
             region_name=settings.s3_region,
-            endpoint_url=settings.s3_endpoint or None,
+            endpoint_url=endpoint,
             config=BotoConfig(
                 signature_version="s3v4",
                 s3={"addressing_style": "path"} if settings.s3_endpoint else {},

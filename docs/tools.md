@@ -2,11 +2,11 @@
 
 The server exposes a conditional set of typed tools. `seed_media_get_artifact`
 is always available, provider tools are registered only when their credentials
-are configured, and `media_upload` is registered when object storage
-credentials (TOS or S3) are
-present. Each tool accepts a Pydantic input model and returns a Pydantic output
-model as structured content. All tools accept a `ctx: Context` parameter for
-progress reporting and logging.
+are configured, and `media_upload` and `media_presign` are registered when
+object storage credentials (TOS or S3) are present. Each tool accepts a
+Pydantic input model and returns a Pydantic output model as structured
+content. All tools accept a `ctx: Context` parameter for progress reporting
+and logging.
 
 ## Tool Contract for MCP Clients
 
@@ -424,3 +424,23 @@ a presigned HTTPS URL.
 
 Returns `MediaUploadOutput` with presigned `url`, `expires_at`, `object_key`,
 and uploaded `bytes`.
+
+## media_presign
+
+Generate a fresh presigned HTTPS GET URL for an existing object in storage
+without re-uploading.  Use this when a previously uploaded reference's
+presigned URL has expired or is about to expire.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `object_key` | string | Yes | Object key returned by a prior `media_upload` call |
+
+### Output
+
+Returns `MediaPresignOutput` with presigned `url`, `expires_at`, and
+`object_key`.
