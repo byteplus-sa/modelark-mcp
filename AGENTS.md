@@ -144,3 +144,30 @@ troubleshoot the server.
   dates. Prefer official BytePlus and Model Context Protocol sources.
 - **Secrets.** Never commit credentials, API keys, or provider response
   fixtures containing real media. Redact before saving examples.
+
+## Tool Contract Rules
+
+Every MCP tool must be self-describing for MCP clients (Claude Desktop,
+Cursor, TRAE, etc.) without requiring external documentation. These rules are
+mandatory for all new and modified tools:
+
+- **Function docstring required.** Every tool handler function MUST have a
+  docstring. FastMCP uses this as the tool's `description` field in the MCP
+  schema. A tool with no docstring appears as an empty description to clients.
+- **Every field needs a description.** Every field on every Pydantic model
+  that appears in a tool's input or output — including nested and shared
+  domain models — MUST have a `Field(description=...)`. Bare declarations like
+  `task_id: str` are not acceptable. This includes `Literal` fields with
+  defaults (e.g. `provider: Literal["x"] = Field("x", description=...)`).
+- **Descriptions must be accurate.** Field descriptions must match what the
+  code actually produces. Reference units (seconds, milliseconds, bytes),
+  enumerations, ranges, and mutual exclusivity where applicable.
+- **Output models are client-facing.** MCP clients use JSON schema field
+  descriptions to interpret tool results. Treat output model descriptions as
+  shipped user documentation, not internal comments.
+- **Shared domain models are client-facing.** Models in `domain/models.py`,
+  `domain/media.py`, `domain/artifacts.py`, and `domain/transcription.py`
+  appear in tool output schemas. All their fields need descriptions too.
+- **Internal-only models are exempt.** Provider DTOs, config models, and
+  security models that never appear in an MCP tool's `inputSchema` or
+  `outputSchema` do not need descriptions (though they benefit from them).
