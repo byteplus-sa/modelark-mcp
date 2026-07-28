@@ -82,9 +82,11 @@ JWT tool scope for speech-to-text:
 
 ## Object storage (TOS or S3, optional)
 
-The `media_upload` tool is registered when the selected object-storage backend
-is configured. It uploads media to a **private** bucket and returns a presigned
-HTTPS GET URL. Use `OBJECT_STORAGE_BACKEND` to select `tos` (default) or `s3`.
+The `media_upload` and `media_presign` tools are registered when the selected
+object-storage backend is configured. `media_upload` uploads media to a
+**private** bucket and returns a presigned HTTPS GET URL; `media_presign`
+generates a fresh presigned URL for an existing object without re-uploading.
+Use `OBJECT_STORAGE_BACKEND` to select `tos` (default) or `s3`.
 
 ### TOS backend
 

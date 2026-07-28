@@ -1,7 +1,7 @@
 # API Reference
 
-Complete tool schemas, inputs, outputs, and examples for all ten MCP tools
-(nine core plus an optional media upload helper).
+Complete tool schemas, inputs, outputs, and examples for all eleven MCP tools
+(nine core plus optional media upload and presign helpers).
 
 ## Tool Inventory
 
@@ -17,6 +17,7 @@ Complete tool schemas, inputs, outputs, and examples for all ten MCP tools
 | 8 | `seedance_list_tasks` | Seedance | Read-only | ModelArk |
 | 9 | `seedance_cancel_or_delete_task` | Seedance | Destructive | ModelArk |
 | 10 | `media_upload` | Object storage (optional) | Synchronous | TOS / S3 |
+| 11 | `media_presign` | Object storage (optional) | Read-only | TOS / S3 |
 
 ## Tool Annotations
 
@@ -32,6 +33,7 @@ Complete tool schemas, inputs, outputs, and examples for all ten MCP tools
 | `seedance_list_tasks` | true | false | true | false |
 | `seedance_cancel_or_delete_task` | false | true | false | true |
 | `media_upload` | false | false | false | true |
+| `media_presign` | true | false | true | false |
 
 ---
 
@@ -693,6 +695,46 @@ URL. Registered when the selected object-storage backend credentials are set
   "expires_at": "2026-07-24T07:30:00+00:00",
   "object_key": "references/video/abc",
   "bytes": 1048576
+}
+```
+
+---
+
+## 11. media_presign
+
+Generate a fresh presigned HTTPS GET URL for an existing object in storage
+(TOS or S3) without re-uploading. Use this when a previously uploaded
+reference's presigned URL has expired or is about to expire. The object must
+already exist in the bucket (uploaded via `media_upload`). No data is
+transferred — only a new URL is minted.
+
+### Input
+
+| Field | Type | Required | Constraints |
+|---|---|---|---|
+| `object_key` | string | yes | Object key from a prior `media_upload` call. Alphanumeric, `-`, `_`, `/`; first char must be alphanumeric |
+
+### Output
+
+| Field | Type | Description |
+|---|---|---|
+| `url` | string | Fresh presigned HTTPS GET URL |
+| `expires_at` | string | ISO-8601 expiry timestamp |
+| `object_key` | string | Object key the URL grants access to |
+
+### Example
+
+```json
+// Input
+{
+  "object_key": "references/video/abc-123-def"
+}
+
+// Output
+{
+  "url": "https://test-bucket.tos-ap-southeast-1.bytepluses.com/references/video/abc-123-def?X-Tos-Signature=...",
+  "expires_at": "2026-07-24T07:30:00+00:00",
+  "object_key": "references/video/abc-123-def"
 }
 ```
 

@@ -261,8 +261,9 @@ if input.file_path is not None:
 
 ### JWT scope
 
-In JWT auth mode, the `media_upload` tool requires the `media:upload`
-scope. See [security.md](security.md#scope-taxonomy).
+In JWT auth mode, `media_upload` requires the `media:upload` scope and
+`media_presign` requires the `media:presign` scope. See
+[security.md](security.md#scope-taxonomy).
 
 ## Setup guide
 
