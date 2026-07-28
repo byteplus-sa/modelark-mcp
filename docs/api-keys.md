@@ -147,8 +147,9 @@ TOS_ENDPOINT=tos-ap-southeast-1.bytepluses.com
 **Security notes:**
 
 - Keep the bucket **private**. The server never makes objects public; it
-  generates short-lived presigned GET URLs (default 24 hours, configurable via
-  `TOS_PRESIGN_TTL_SECONDS`) for individual objects.- Uploaded objects are **not auto-deleted** by this server. Configure a TOS
+  generates short-lived presigned GET URLs (default 30 minutes, configurable via
+  `TOS_PRESIGN_TTL_SECONDS`) for individual objects.
+- Uploaded objects are **not auto-deleted** by this server. Configure a TOS
   bucket lifecycle rule to expire objects under the upload prefixes
   (`stt-input/`, `references/`) to control storage cost over time.
 - For temporary credentials (STS), also set `TOS_SECURITY_TOKEN`.

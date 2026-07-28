@@ -86,7 +86,7 @@ class MediaUploadInput(BaseModel):
                 validate_video_mime(self.mime_type)
 
     def _validate_key_prefix(self) -> None:
-        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_/ ")
+        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_/")
         if self.key_prefix and not set(self.key_prefix) <= allowed:
             raise ValueError(
                 "key_prefix may only contain alphanumeric characters, '-', '_', and '/'."

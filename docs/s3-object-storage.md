@@ -133,8 +133,9 @@ sequenceDiagram
 ```
 
 The tool accepts the `object_key` returned by a prior `media_upload` call,
-validates it against a strict alphanumeric + `-_/` pattern (preventing path
-traversal), and calls the same `presign_get` gateway method. No data is
+validates it against a strict pattern: alphanumeric characters, `-`, `_`, and
+`/`, with the first character required to be alphanumeric (preventing path
+traversal, leading slashes, and leading dashes), and calls the same `presign_get` gateway method. No data is
 transferred — only a new URL is minted. This works with both the TOS and S3
 backends through the shared `ObjectStorageGateway` protocol.
 
@@ -495,8 +496,6 @@ Validation rules (enforced at startup):
 - If S3 credentials are set but `OBJECT_STORAGE_BACKEND=tos` and TOS
   credentials are missing, the server raises a guidance error pointing you
   to set `OBJECT_STORAGE_BACKEND=s3`.
-
-## Where to read more
 
 ## Tools
 

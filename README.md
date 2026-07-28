@@ -16,7 +16,7 @@ products plus artifact access and an optional media upload helper:
 | **Seedance** | `seedance_create_task`, `seedance_create_task_variations`, `seedance_get_task`, `seedance_list_tasks`, `seedance_cancel_or_delete_task` | Async video generation and task management through ModelArk |
 | **Speech-to-Text** | `speech_to_text` | Synchronous audio transcription through Seed Speech ASR (HTTP) |
 | **Artifacts** | `seed_media_get_artifact` | Retrieve persisted media inline by artifact ID |
-| **Object storage** (optional) | `media_upload` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL for use as a reference |
+| **Object storage** (optional) | `media_upload`, `media_presign` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL; renew expired URLs without re-uploading |
 
 Key features:
 
@@ -175,9 +175,9 @@ SEEDANCE_DEFAULT_MODEL=dreamina-seedance-2-0-260128
 
 If a credential is absent, the server skips registering that product's
 tools. `seed_media_get_artifact` is always available, provider tools appear only
-when their credentials are configured, `media_upload` appears only when object
-storage credentials (TOS or S3) are configured, and `speech_to_text` appears only when
-`SEED_SPEECH_ASR_API_KEY` is set.
+when their credentials are configured, `media_upload` and `media_presign` appear
+only when object storage credentials (TOS or S3) are configured, and
+`speech_to_text` appears only when `SEED_SPEECH_ASR_API_KEY` is set.
 
 See [Configuration](docs/configuration.md) for the full environment
 variable reference.
