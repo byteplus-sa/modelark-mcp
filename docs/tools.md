@@ -8,6 +8,31 @@ present. Each tool accepts a Pydantic input model and returns a Pydantic output
 model as structured content. All tools accept a `ctx: Context` parameter for
 progress reporting and logging.
 
+## Tool Contract for MCP Clients
+
+Every tool is self-describing through its JSON schema — MCP clients do not
+need external documentation to understand inputs and outputs. The following
+contract is enforced for all tools:
+
+- **Tool descriptions.** Each tool's `description` comes from the handler
+  function's docstring. It explains what the tool does, what it accepts, and
+  what it returns.
+- **Field descriptions on every input and output field.** Every Pydantic
+  `Field` includes a `description` that explains the field's meaning, units,
+  valid values, and constraints. This includes nested and shared domain models
+  (`ArtifactRef`, `VariationSummary`, `SeedanceTaskSettings`, etc.).
+- **Tool annotations.** Each tool declares MCP hints (`readOnlyHint`,
+  `destructiveHint`, `idempotentHint`, `openWorldHint`) so clients can reason
+  about side effects before calling.
+- **Output schemas.** Each tool registers a `output_schema` (via
+  `model_json_schema()`) so clients get typed structured content, not just
+  text.
+- **Error handling.** Provider errors are returned as `ToolResult` with
+  `is_error=True` and a human-readable text summary. The declared output
+  schema always represents the success shape; error results carry no
+  `structured_content` to avoid schema-validation conflicts under strict MCP
+  clients.
+
 ## seed_media_get_artifact
 
 Retrieve persisted media inline by artifact ID.
