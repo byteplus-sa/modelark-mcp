@@ -103,8 +103,8 @@ the TTS key, but is a separate credential. Set `SEED_SPEECH_ASR_API_KEY` in
 ## Object storage (TOS or S3)
 
 Object storage is **optional** but enables several workflows: the `media_upload`
-tool and Seedance video references (URL-only). It uses Access Key / Secret Key
-(AK/SK) signing, not a bearer token. Select the backend with
+and `media_presign` tools and Seedance video references (URL-only). It uses
+Access Key / Secret Key (AK/SK) signing, not a bearer token. Select the backend with
 `OBJECT_STORAGE_BACKEND` (`tos` default, or `s3`).
 
 ### TOS backend
@@ -123,7 +123,7 @@ tool and Seedance video references (URL-only). It uses Access Key / Secret Key
 
 `TOS_ACCESS_KEY` and `TOS_SECRET_KEY` must **both** be set or **both** be
 empty. All three of AK, SK, and bucket must be set to register the
-`media_upload` tool.
+`media_upload` and `media_presign` tools.
 
 **How to get the keys:**
 
@@ -168,7 +168,7 @@ TOS_ENDPOINT=tos-ap-southeast-1.bytepluses.com
 
 `S3_ACCESS_KEY` and `S3_SECRET_KEY` must **both** be set or **both** be
 empty. All three of AK, SK, and bucket must be set to register the
-`media_upload` tool with the S3 backend.
+`media_upload` and `media_presign` tools with the S3 backend.
 
 When `S3_ENDPOINT` is set, path-style addressing is used automatically for
 S3-compatible storage (MinIO, R2, TOS-via-boto3).

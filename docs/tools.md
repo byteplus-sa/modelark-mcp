@@ -2,11 +2,11 @@
 
 The server exposes a conditional set of typed tools. `seed_media_get_artifact`
 is always available, provider tools are registered only when their credentials
-are configured, and `media_upload` is registered when object storage
-credentials (TOS or S3) are
-present. Each tool accepts a Pydantic input model and returns a Pydantic output
-model as structured content. All tools accept a `ctx: Context` parameter for
-progress reporting and logging.
+are configured, and `media_upload` and `media_presign` are registered when
+object storage credentials (TOS or S3) are present. Each tool accepts a
+Pydantic input model and returns a Pydantic output model as structured
+content. All tools accept a `ctx: Context` parameter for progress reporting
+and logging.
 
 ## Tool Contract for MCP Clients
 
