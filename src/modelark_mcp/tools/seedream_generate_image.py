@@ -87,12 +87,18 @@ class SeedreamGenerateInput(BaseModel):
 class SeedreamGenerateOutput(BaseModel):
     """Output model for ``seedream_generate_image``."""
 
-    provider: Literal["byteplus-modelark"] = "byteplus-modelark"
-    model: str
-    created_at: str
-    artifacts: list[ArtifactRef]
-    item_errors: list[SeedreamItemError]
-    usage: SeedreamUsage
+    provider: Literal["byteplus-modelark"] = Field(
+        "byteplus-modelark", description="Provider that generated the images."
+    )
+    model: str = Field(..., description="Model ID used for generation.")
+    created_at: str = Field(..., description="ISO-8601 timestamp of generation.")
+    artifacts: list[ArtifactRef] = Field(
+        ..., description="Durable artifact references for generated images."
+    )
+    item_errors: list[SeedreamItemError] = Field(
+        ..., description="Per-image errors for any failed items in a batch."
+    )
+    usage: SeedreamUsage = Field(..., description="Token usage for this generation.")
 
 
 # ---------------------------------------------------------------------------

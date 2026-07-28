@@ -79,9 +79,15 @@ class SeedAudioVariationsInput(BaseModel):
 class SeedAudioVariationsOutput(BaseModel):
     """Output for parallel Seed Audio generation."""
 
-    provider: Literal["byteplus-seed-speech"] = "byteplus-seed-speech"
-    model: Literal["seed-audio-1.0"] = "seed-audio-1.0"
-    summary: VariationSummary
+    provider: Literal["byteplus-seed-speech"] = Field(
+        "byteplus-seed-speech", description="Provider that generated the audio."
+    )
+    model: Literal["seed-audio-1.0"] = Field(
+        "seed-audio-1.0", description="Model used for generation."
+    )
+    summary: VariationSummary = Field(
+        ..., description="Aggregate result with per-variation artifacts and errors."
+    )
 
 
 TOOL_ANNOTATIONS = {

@@ -99,10 +99,14 @@ class SeedreamVariationsInput(BaseModel):
 class SeedreamVariationsOutput(BaseModel):
     """Output for parallel Seedream image generation."""
 
-    provider: Literal["byteplus-modelark"] = "byteplus-modelark"
-    model: str
-    created_at: str
-    summary: VariationSummary
+    provider: Literal["byteplus-modelark"] = Field(
+        "byteplus-modelark", description="Provider that generated the images."
+    )
+    model: str = Field(..., description="Model ID used for generation.")
+    created_at: str = Field(..., description="ISO-8601 timestamp of generation.")
+    summary: VariationSummary = Field(
+        ..., description="Aggregate result with per-variation artifacts and errors."
+    )
 
 
 TOOL_ANNOTATIONS = {

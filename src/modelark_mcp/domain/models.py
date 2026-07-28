@@ -27,9 +27,9 @@ class SubtitleUtterance(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    text: str = ""
-    start: float | None = None
-    end: float | None = None
+    text: str = Field("", description="Utterance text.")
+    start: float | None = Field(None, description="Start time in seconds.")
+    end: float | None = Field(None, description="End time in seconds.")
 
 
 class SubtitleWord(BaseModel):
@@ -37,9 +37,9 @@ class SubtitleWord(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    text: str = ""
-    start: float | None = None
-    end: float | None = None
+    text: str = Field("", description="Word text.")
+    start: float | None = Field(None, description="Start time in seconds.")
+    end: float | None = Field(None, description="End time in seconds.")
 
 
 class Subtitle(BaseModel):
@@ -66,9 +66,9 @@ class SeedreamItemError(BaseModel):
 class SeedreamUsage(BaseModel):
     """Usage information for a Seedream image generation call."""
 
-    prompt_tokens: int | None = None
-    completion_tokens: int | None = None
-    total_tokens: int | None = None
+    prompt_tokens: int | None = Field(None, description="Prompt tokens consumed.")
+    completion_tokens: int | None = Field(None, description="Completion tokens consumed.")
+    total_tokens: int | None = Field(None, description="Total tokens consumed.")
 
 
 class SeedanceTaskUsage(BaseModel):
@@ -81,28 +81,32 @@ class SeedanceTaskUsage(BaseModel):
 class SeedanceTaskSummary(BaseModel):
     """Summary of a Seedance task for list results."""
 
-    task_id: str
-    model: str
-    status: SeedanceTaskStatus
-    created_at: str
-    updated_at: str
+    task_id: str = Field(..., description="Provider task ID.")
+    model: str = Field(..., description="Model ID used for generation.")
+    status: SeedanceTaskStatus = Field(..., description="Current task status.")
+    created_at: str = Field(..., description="ISO-8601 timestamp of task creation.")
+    updated_at: str = Field(..., description="ISO-8601 timestamp of last status update.")
 
 
 class VariationError(BaseModel):
     """Machine-readable failure for one variation."""
 
-    code: str
-    message: str = ""
-    request_id: str | None = None
-    retryable: bool = False
-    ambiguous_completion: bool = False
+    code: str = Field(
+        ..., description="Error code (e.g. PROVIDER_ERROR, TIMEOUT, UNEXPECTED_ERROR)."
+    )
+    message: str = Field("", description="Human-readable error message.")
+    request_id: str | None = Field(None, description="Provider request ID, if available.")
+    retryable: bool = Field(False, description="Whether the caller may retry this variation.")
+    ambiguous_completion: bool = Field(
+        False, description="Whether the provider may have partially completed despite the error."
+    )
 
 
 class SeedanceTaskError(BaseModel):
     """Typed task failure returned by Seedance."""
 
-    code: str = ""
-    message: str = ""
+    code: str = Field("", description="Provider error code.")
+    message: str = Field("", description="Error description.")
 
 
 class SeedanceTaskSettings(BaseModel):
@@ -110,13 +114,15 @@ class SeedanceTaskSettings(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    resolution: str | None = None
-    ratio: str | None = None
-    duration: int | str | None = None
-    generate_audio: bool | None = None
-    return_last_frame: bool | None = None
-    service_tier: str | None = None
-    priority: int | None = None
+    resolution: str | None = Field(None, description="Output video resolution.")
+    ratio: str | None = Field(None, description="Output aspect ratio (e.g. 16:9).")
+    duration: int | str | None = Field(None, description="Video duration in seconds, or 'auto'.")
+    generate_audio: bool | None = Field(None, description="Whether an audio track was generated.")
+    return_last_frame: bool | None = Field(
+        None, description="Whether the last frame was returned as a separate image."
+    )
+    service_tier: str | None = Field(None, description="Service tier used (default or flex).")
+    priority: int | None = Field(None, description="Task priority (0-9).")
 
 
 class VariationResult(BaseModel):
@@ -127,8 +133,10 @@ class VariationResult(BaseModel):
     artifact: ArtifactRef | None = Field(None, description="Generated artifact (None if failed).")
     task_id: str | None = Field(None, description="Task ID for async results (Seedance only).")
     error: VariationError | None = Field(None, description="Error if this variation failed.")
-    request_id: str | None = None
-    provider_log_id: str | None = None
+    request_id: str | None = Field(None, description="Client request ID for this variation.")
+    provider_log_id: str | None = Field(
+        None, description="Provider-side log ID for troubleshooting."
+    )
 
 
 class VariationSummary(BaseModel):
@@ -137,4 +145,6 @@ class VariationSummary(BaseModel):
     total: int = Field(..., description="Total variations requested.")
     succeeded: int = Field(..., description="Variations that produced output.")
     failed: int = Field(..., description="Variations that failed.")
-    variations: list[VariationResult] = Field(default_factory=list)
+    variations: list[VariationResult] = Field(
+        default_factory=list, description="Per-variation results (artifacts, errors, and metadata)."
+    )
