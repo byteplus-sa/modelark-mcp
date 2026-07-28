@@ -145,4 +145,6 @@ class VariationSummary(BaseModel):
     total: int = Field(..., description="Total variations requested.")
     succeeded: int = Field(..., description="Variations that produced output.")
     failed: int = Field(..., description="Variations that failed.")
-    variations: list[VariationResult] = Field(default_factory=list)
+    variations: list[VariationResult] = Field(
+        default_factory=list, description="Per-variation results (artifacts, errors, and metadata)."
+    )
