@@ -44,16 +44,29 @@ class SeedanceGetTaskInput(BaseModel):
 class SeedanceTaskOutput(BaseModel):
     """Output model for ``seedance_get_task``."""
 
-    task_id: str
-    model: str
-    status: SeedanceTaskStatus
-    created_at: str
-    updated_at: str
-    error: SeedanceTaskError | None = None
-    video: ArtifactRef | None = None
-    last_frame: ArtifactRef | None = None
-    usage: SeedanceTaskUsage | None = None
-    settings: SeedanceTaskSettings = Field(default_factory=SeedanceTaskSettings)
+    task_id: str = Field(..., description="Provider task ID.")
+    model: str = Field(..., description="Model ID used for generation.")
+    status: SeedanceTaskStatus = Field(
+        ...,
+        description="Current task status: queued, running, succeeded, failed, cancelled, or expired.",
+    )
+    created_at: str = Field(..., description="ISO-8601 timestamp of task creation.")
+    updated_at: str = Field(..., description="ISO-8601 timestamp of last status update.")
+    error: SeedanceTaskError | None = Field(None, description="Error details if the task failed.")
+    video: ArtifactRef | None = Field(
+        None, description="Durable artifact reference for the generated video (on success)."
+    )
+    last_frame: ArtifactRef | None = Field(
+        None,
+        description="Durable artifact reference for the last frame, if return_last_frame was enabled.",
+    )
+    usage: SeedanceTaskUsage | None = Field(
+        None, description="Token usage and billing information for the completed task."
+    )
+    settings: SeedanceTaskSettings = Field(
+        default_factory=lambda: SeedanceTaskSettings(),
+        description="Generation settings used for this task (resolution, ratio, duration, etc.).",
+    )
 
 
 async def seedance_get_task(

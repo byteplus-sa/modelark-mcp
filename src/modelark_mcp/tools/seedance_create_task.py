@@ -169,9 +169,13 @@ class SeedanceCreateTaskInput(BaseModel):
 class SeedanceCreateTaskOutput(BaseModel):
     """Output model for ``seedance_create_task``."""
 
-    task_id: str
-    status: Literal["queued"] = "queued"
-    recommended_poll_after_ms: int
+    task_id: str = Field(..., description="Provider task ID for polling and management.")
+    status: Literal["queued"] = Field(
+        "queued", description="Initial task status. Poll with seedance_get_task for updates."
+    )
+    recommended_poll_after_ms: int = Field(
+        ..., description="Suggested delay in milliseconds before first poll."
+    )
 
 
 # ---------------------------------------------------------------------------

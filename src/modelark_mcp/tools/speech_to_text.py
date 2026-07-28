@@ -80,8 +80,10 @@ class SpeechToTextInput(BaseModel):
 class SpeechToTextOutput(BaseModel):
     """Output for the ``speech_to_text`` tool."""
 
-    result: TranscriptionResult
-    log_id: str | None = None
+    result: TranscriptionResult = Field(
+        ..., description="Full transcription result with text, utterances, and timing."
+    )
+    log_id: str | None = Field(None, description="Provider-side log ID for troubleshooting.")
 
 
 async def _resolve_audio_bytes(audio: AsrAudioInput, ctx: Context) -> bytes:

@@ -114,14 +114,27 @@ class SeedAudioGenerateInput(BaseModel):
 class SeedAudioGenerateOutput(BaseModel):
     """Output model for ``seed_audio_generate``."""
 
-    provider: Literal["byteplus-seed-speech"] = "byteplus-seed-speech"
-    model: Literal["seed-audio-1.0"] = "seed-audio-1.0"
-    duration_seconds: float
-    billing_duration_seconds: float
-    artifact: ArtifactRef
-    subtitle: Subtitle | None = None
-    request_id: str | None = None
-    provider_log_id: str | None = None
+    provider: Literal["byteplus-seed-speech"] = Field(
+        "byteplus-seed-speech", description="Provider that generated the audio."
+    )
+    model: Literal["seed-audio-1.0"] = Field(
+        "seed-audio-1.0", description="Model used for generation."
+    )
+    duration_seconds: float = Field(..., description="Actual audio duration in seconds.")
+    billing_duration_seconds: float = Field(
+        ...,
+        description="Billing-relevant audio duration in seconds (may differ from actual duration).",
+    )
+    artifact: ArtifactRef = Field(
+        ..., description="Durable artifact reference for the generated audio."
+    )
+    subtitle: Subtitle | None = Field(
+        None, description="Timestamped subtitle data, if requested and available."
+    )
+    request_id: str | None = Field(None, description="Client request ID used for this generation.")
+    provider_log_id: str | None = Field(
+        None, description="Provider-side log ID for troubleshooting."
+    )
     source_url: str | None = Field(
         None, description="Provider HTTP URL (2-hour expiry) for direct download."
     )

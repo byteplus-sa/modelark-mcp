@@ -60,11 +60,13 @@ class SeedanceListTasksInput(BaseModel):
 class SeedanceTaskPage(BaseModel):
     """Output model for ``seedance_list_tasks``."""
 
-    tasks: list[SeedanceTaskSummary]
-    total: int
-    page: int
-    page_size: int
-    has_more: bool = False
+    tasks: list[SeedanceTaskSummary] = Field(
+        ..., description="Task summaries for the current page."
+    )
+    total: int = Field(..., description="Total number of matching tasks.")
+    page: int = Field(..., description="Current page number (1-based).")
+    page_size: int = Field(..., description="Number of tasks per page.")
+    has_more: bool = Field(False, description="Whether more pages are available.")
 
 
 async def seedance_list_tasks(

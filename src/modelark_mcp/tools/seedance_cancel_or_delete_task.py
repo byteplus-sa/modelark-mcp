@@ -74,10 +74,14 @@ class SeedanceCancelOrDeleteInput(BaseModel):
 class SeedanceCancelOrDeleteOutput(BaseModel):
     """Output model for ``seedance_cancel_or_delete_task``."""
 
-    task_id: str
-    mode: Literal["cancel", "delete"]
-    previous_status: str
-    message: str
+    task_id: str = Field(..., description="The task ID that was cancelled or deleted.")
+    mode: Literal["cancel", "delete"] = Field(
+        ..., description="The action performed: cancel or delete."
+    )
+    previous_status: str = Field(
+        ..., description="The task's status before the action was applied."
+    )
+    message: str = Field(..., description="Human-readable confirmation message.")
 
 
 async def seedance_cancel_or_delete_task(

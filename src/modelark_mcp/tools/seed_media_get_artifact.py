@@ -23,18 +23,29 @@ class SeedMediaGetArtifactInput(BaseModel):
 
 
 class SeedMediaGetArtifactOutput(BaseModel):
-    artifact_id: str
-    media_type: MediaType
-    mime_type: str
-    sha256: str
-    bytes: int
-    expires_at: str | None = None
+    """Output model for ``seed_media_get_artifact``."""
+
+    artifact_id: str = Field(..., description="Unique artifact identifier.")
+    media_type: MediaType = Field(..., description="Logical media type: image, audio, or video.")
+    mime_type: str = Field(..., description="MIME type of the stored content (e.g. image/png).")
+    sha256: str = Field(..., description="SHA-256 hex digest of the stored content.")
+    bytes: int = Field(..., description="Size of the stored content in bytes.")
+    expires_at: str | None = Field(
+        None, description="ISO-8601 timestamp when the local artifact expires, if applicable."
+    )
     data: str = Field(..., description="Base64-encoded media data.")
 
 
 async def seed_media_get_artifact(
     input: SeedMediaGetArtifactInput, ctx: Context
 ) -> SeedMediaGetArtifactOutput | ToolResult:
+    """Retrieve persisted media by its artifact ID.
+
+    Returns the raw media bytes (Base64-encoded) along with metadata such as
+    MIME type, SHA-256 hash, and byte count. Use this to fetch media that was
+    persisted by a previous generation call after the provider URL has expired
+    (2h for audio, 24h for image/video).
+    """
     await ctx.info(f"Fetching artifact {input.artifact_id}")
 
     runtime = get_runtime(ctx)

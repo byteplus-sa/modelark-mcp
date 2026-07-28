@@ -60,8 +60,12 @@ class SeedanceVariationsInput(SeedanceCreateTaskInput):
 class SeedanceVariationsOutput(BaseModel):
     """Output for parallel Seedance video task creation."""
 
-    summary: VariationSummary
-    recommended_poll_after_ms: int
+    summary: VariationSummary = Field(
+        ..., description="Aggregate result with per-variation task IDs and errors."
+    )
+    recommended_poll_after_ms: int = Field(
+        ..., description="Suggested delay in milliseconds before first poll."
+    )
 
 
 TOOL_ANNOTATIONS = {
