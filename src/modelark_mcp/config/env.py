@@ -207,7 +207,7 @@ class Settings(BaseSettings):
         validation_alias="TOS_ENDPOINT",
     )
     tos_presign_ttl_seconds: int = Field(
-        default=86400,
+        default=1800,
         ge=60,
         le=604800,
         validation_alias="TOS_PRESIGN_TTL_SECONDS",
@@ -221,7 +221,7 @@ class Settings(BaseSettings):
     s3_region: str = Field(default="us-east-1", validation_alias="S3_REGION")
     s3_endpoint: str = Field(default="", validation_alias="S3_ENDPOINT")
     s3_presign_ttl_seconds: int = Field(
-        default=86400,
+        default=1800,
         ge=60,
         le=604800,
         validation_alias="S3_PRESIGN_TTL_SECONDS",

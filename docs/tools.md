@@ -424,3 +424,23 @@ a presigned HTTPS URL.
 
 Returns `MediaUploadOutput` with presigned `url`, `expires_at`, `object_key`,
 and uploaded `bytes`.
+
+## media_presign
+
+Generate a fresh presigned HTTPS GET URL for an existing object in storage
+without re-uploading.  Use this when a previously uploaded reference's
+presigned URL has expired or is about to expire.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `object_key` | string | Yes | Object key returned by a prior `media_upload` call |
+
+### Output
+
+Returns `MediaPresignOutput` with presigned `url`, `expires_at`, and
+`object_key`.

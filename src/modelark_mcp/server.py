@@ -94,6 +94,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
         )(seed_audio_generate_variations)
 
     if settings.has_object_storage:
+        from modelark_mcp.tools.media_presign import (
+            TOOL_ANNOTATIONS as presign_annotations,
+        )
+        from modelark_mcp.tools.media_presign import (
+            MediaPresignOutput,
+            media_presign,
+        )
         from modelark_mcp.tools.media_upload import (
             TOOL_ANNOTATIONS as upload_annotations,
         )
@@ -108,6 +115,12 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             output_schema=MediaUploadOutput.model_json_schema(),
             auth=component_auth(settings, "media:upload"),
         )(media_upload)
+        server.tool(
+            name="media_presign",
+            annotations={**presign_annotations},
+            output_schema=MediaPresignOutput.model_json_schema(),
+            auth=component_auth(settings, "media:presign"),
+        )(media_presign)
 
     if settings.has_stt:
         from modelark_mcp.tools.speech_to_text import (

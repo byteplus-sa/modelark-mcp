@@ -58,6 +58,7 @@ claim. Tool scopes are enforced by FastMCP:
 - `seedream:generate`
 - `seedance:create`, `seedance:read`, `seedance:delete`
 - `media:upload`
+- `media:presign`
 - `artifacts:read`
 
 ## Seed Speech ASR (STT)
@@ -95,7 +96,7 @@ HTTPS GET URL. Use `OBJECT_STORAGE_BACKEND` to select `tos` (default) or `s3`.
 | `TOS_BUCKET` | empty | Target bucket name |
 | `TOS_REGION` | `ap-southeast-1` | TOS region |
 | `TOS_ENDPOINT` | `tos-ap-southeast-1.bytepluses.com` | TOS API endpoint |
-| `TOS_PRESIGN_TTL_SECONDS` | `86400` | Presigned URL validity (60–604800) |
+| `TOS_PRESIGN_TTL_SECONDS` | `1800` | Presigned URL validity in seconds (60–604800) |
 
 ### S3 backend
 
@@ -106,7 +107,7 @@ HTTPS GET URL. Use `OBJECT_STORAGE_BACKEND` to select `tos` (default) or `s3`.
 | `S3_BUCKET` | empty | Target bucket name |
 | `S3_REGION` | `us-east-1` | AWS region |
 | `S3_ENDPOINT` | empty | Custom endpoint for S3-compatible storage (MinIO, R2) |
-| `S3_PRESIGN_TTL_SECONDS` | `86400` | Presigned URL validity (60–604800) |
+| `S3_PRESIGN_TTL_SECONDS` | `1800` | Presigned URL validity in seconds (60–604800) |
 | `OBJECT_STORAGE_BACKEND` | `tos` | Select active backend: `tos` or `s3` |
 
 AK and SK must both be set or both be empty. The bucket must remain private;

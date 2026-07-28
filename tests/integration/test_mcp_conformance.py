@@ -91,6 +91,8 @@ class TestToolDiscovery:
             "seedance_list_tasks",
             "seedance_cancel_or_delete_task",
             "speech_to_text",
+            "media_upload",
+            "media_presign",
         }
 
     async def test_media_upload_registered_with_s3_only(self, s3_only_server: None) -> None:
@@ -98,6 +100,7 @@ class TestToolDiscovery:
         tools = await server.mcp.list_tools()
         tool_names = {t.name for t in tools}
         assert "media_upload" in tool_names
+        assert "media_presign" in tool_names
 
 
 class TestToolAnnotations:
