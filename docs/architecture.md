@@ -91,7 +91,7 @@ sequenceDiagram
     R-->>T: services
     T->>T: billed_provider_slot(...)
     M->>L: shutdown
-    L->>R: close_runtime_services (artifact_store, ownership_store, budget_ledger)
+    L->>R: close_runtime_services (artifact_store, ownership_store, budget_ledger, task_artifact_cache)
 ```
 
 `RuntimeServices` holds seven components (see [runtime.md](runtime.md) for
