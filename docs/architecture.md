@@ -107,8 +107,8 @@ full detail):
 | `provider_limiters` | `ProviderLimiters` — provider + principal concurrency |
 | `task_artifact_cache` | `SQLiteTaskArtifactCache` — provider task → artifact ref cache |
 
-`close_runtime_services` closes exactly three of these: `artifact_store`,
-`ownership_store`, and `budget_ledger`.
+`close_runtime_services` closes exactly four of these: `artifact_store`,
+`ownership_store`, `budget_ledger`, and `task_artifact_cache`.
 
 ## Request flow for a billable tool
 

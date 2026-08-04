@@ -232,7 +232,6 @@ class SQLiteTaskArtifactCache:
             self._connection.commit()
             count_row = self._connection.execute("SELECT COUNT(*) FROM task_artifacts").fetchone()
             if count_row is not None and count_row[0] > self._max_size:
-                excess = count_row[0] - self._max_size
                 self._connection.execute(
                     """
                     DELETE FROM task_artifacts WHERE task_id NOT IN (
@@ -243,12 +242,11 @@ class SQLiteTaskArtifactCache:
                     (self._max_size,),
                 )
                 self._connection.commit()
-                del excess
 
     async def pop(self, task_id: str) -> dict[str, ArtifactRef | None] | None:
         async with self._lock:
             row = self._connection.execute(
-                "SELECT artifacts_json FROM task_artifacts WHERE task_id = ?",
+                "SELECT artifacts_json, created_at FROM task_artifacts WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if row is not None:
@@ -258,6 +256,9 @@ class SQLiteTaskArtifactCache:
                 )
                 self._connection.commit()
         if row is None:
+            return None
+        created_at = datetime.fromisoformat(row[1])
+        if (datetime.now(UTC) - created_at).total_seconds() > self._ttl_seconds:
             return None
         return self._deserialize(row[0])
 

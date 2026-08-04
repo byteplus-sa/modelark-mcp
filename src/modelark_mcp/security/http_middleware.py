@@ -76,6 +76,8 @@ class RequestBodyLimitMiddleware:
 class RateLimitMiddleware:
     """Per-client-IP token bucket rate limiter for HTTP requests."""
 
+    _MAX_BUCKETS = 10_000
+
     def __init__(self, app: ASGIApp, *, rpm: int, burst: int | None = None) -> None:
         self.app = app
         self.rpm = rpm
@@ -111,10 +113,23 @@ class RateLimitMiddleware:
             tokens, last_refill = self._buckets.get(ip, (self.capacity, now))
             elapsed = now - last_refill
             tokens = min(self.capacity, tokens + elapsed * self._rate)
+            self._buckets[ip] = (tokens, now)
             if tokens >= 1.0:
                 tokens -= 1.0
                 self._buckets[ip] = (tokens, now)
                 return 0.0
-            self._buckets[ip] = (tokens, now)
+            if len(self._buckets) > self._MAX_BUCKETS:
+                self._evict_expired()
             deficit = 1.0 - tokens
             return deficit / self._rate if self._rate > 0 else 0.0
+
+    def _evict_expired(self) -> None:
+        """Remove buckets whose tokens have fully refilled (no active throttle)."""
+        now = time.monotonic()
+        expired = [
+            ip
+            for ip, (tokens, last_refill) in self._buckets.items()
+            if tokens >= self.capacity or (now - last_refill) * self._rate >= self.capacity - tokens
+        ]
+        for ip in expired:
+            del self._buckets[ip]
