@@ -24,13 +24,14 @@ distributed replacement.
 | `ownership_store` | `SQLiteTaskOwnershipStore` | `SQLiteTaskOwnershipStore(database_path)` |
 | `budget_ledger` | `BudgetLedger` | `BudgetLedger(database_path, daily_limit_usd)` |
 | `provider_limiters` | `ProviderLimiters` | `ProviderLimiters(provider_limit, principal_limit)` |
-| `persistence_cache` | `TTLCache[str, dict[str, ArtifactRef \| None]]` | hard-coded `maxsize=10_000`, `ttl=86_400` |
+| `task_artifact_cache` | `TaskArtifactCache` | `SQLiteTaskArtifactCache(database_path, ttl_seconds, max_size)` |
 
-`close_runtime_services` closes exactly three subsystems in order:
-`artifact_store`, `ownership_store`, `budget_ledger`. The `SafeDownloader`
-is closed **indirectly** — `FilesystemArtifactStore.close()` calls
-`self._downloader.close()`. The provider/principal limiters have no close
-method (semaphores require no cleanup).
+`close_runtime_services` closes exactly four subsystems in order:
+`artifact_store`, `ownership_store`, `budget_ledger`, and
+`task_artifact_cache`. The `SafeDownloader` is closed **indirectly** —
+`FilesystemArtifactStore.close()` calls `self._downloader.close()`. The
+provider/principal limiters have no close method (semaphores require no
+cleanup).
 
 ## Concurrency limiters (`ProviderLimiters`)
 
@@ -158,12 +159,32 @@ exists and belongs to someone else still raises, even in local mode.
 
 ## Persistence cache
 
-`RuntimeServices.persistence_cache` is a `TTLCache(maxsize=10_000,
-ttl=86_400)` — hard-coded, not exposed via `Settings`. It caches provider
-task lookups → artifact references (`dict[str, ArtifactRef | None]`). The
-24h TTL matches the longest provider media-URL expiry window (24h for
-image/video; audio URLs expire in 2h), so resolved artifact references for a
-provider task ID are not re-resolved while still valid.
+`RuntimeServices.task_artifact_cache` is a `SQLiteTaskArtifactCache` backed by
+the same `runtime.sqlite3` database as the ownership store and budget ledger.
+Schema:
+
+```sql
+CREATE TABLE IF NOT EXISTS task_artifacts (
+    task_id TEXT PRIMARY KEY,
+    artifacts_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+)
+```
+
+It caches provider task lookups → artifact references (`dict[str, ArtifactRef | None]`).
+The TTL defaults to 86,400 seconds (24h), matching the longest provider media-URL
+expiry window (24h for image/video; audio URLs expire in 2h), so resolved artifact
+references for a provider task ID are not re-resolved while still valid. Entries
+older than `PERSISTENCE_CACHE_TTL_SECONDS` are lazily ignored on read. When the
+row count exceeds `PERSISTENCE_CACHE_MAX_SIZE`, the oldest entries are evicted.
+
+Unlike the previous in-memory `TTLCache`, the SQLite-backed cache **survives
+server restarts** — a restart no longer loses cached task→artifact mappings.
+
+| Env var | Default | Used as |
+|---|---|---|
+| `PERSISTENCE_CACHE_MAX_SIZE` | `10_000` | max rows before oldest eviction |
+| `PERSISTENCE_CACHE_TTL_SECONDS` | `86_400` | TTL in seconds; entries older than this are ignored on read |
 
 ## Retry policy (`providers/retry.py`)
 

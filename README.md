@@ -35,9 +35,10 @@ Key features:
 - **Security** — DNS-pinned SSRF-safe downloads, tenant/principal ownership,
   scoped JWT auth for network HTTP, Host/Origin protection, and body limits
 - **Runtime controls** — shared provider/principal concurrency, daily budget
-  reservations, safe retries, task ownership, readiness, metrics, and tracing
-- **459 offline tests** — unit, contract, integration, HTTP security, E2E, and
-  MCP conformance with 88.08% branch coverage
+  reservations, safe retries, task ownership, readiness with optional provider
+  health checks, per-IP HTTP rate limiting, metrics, and tracing
+- **631 offline tests** — unit, contract, integration, HTTP security, E2E, and
+  MCP conformance with 88% branch coverage
 
 ## Supported Input Modalities
 
@@ -389,7 +390,7 @@ See the project configuration for license details.
 ## Status
 
 All three provider surfaces and both transports are implemented. The local
-release gate passes 459 offline tests at 88.08% branch coverage, Ruff formatting
+release gate passes 631 offline tests at 88% branch coverage, Ruff formatting
 and lint, strict mypy, Bandit/secret scans, and package build. Dependency audit
 and container health are enforced by CI. Remote HTTP requires JWT configuration
 and is intentionally fail-closed.

@@ -178,6 +178,34 @@ class Settings(BaseSettings):
         min_length=1,
         validation_alias="MCP_TENANT_CLAIM",
     )
+    readiness_check_providers: bool = Field(
+        default=False,
+        validation_alias="READINESS_CHECK_PROVIDERS",
+        description=(
+            "When true, the /ready endpoint also checks provider connectivity. "
+            "Increases probe latency by up to READINESS_PROVIDER_TIMEOUT_SECONDS "
+            "per configured provider."
+        ),
+    )
+    readiness_provider_timeout_seconds: float = Field(
+        default=2.0,
+        ge=0.5,
+        le=10.0,
+        validation_alias="READINESS_PROVIDER_TIMEOUT_SECONDS",
+        description="Per-provider timeout for readiness connectivity checks.",
+    )
+    rate_limit_rpm: int = Field(
+        default=0,
+        ge=0,
+        validation_alias="RATE_LIMIT_RPM",
+        description="Maximum HTTP requests per minute per client IP. 0 disables rate limiting.",
+    )
+    rate_limit_burst: int = Field(
+        default=0,
+        ge=0,
+        validation_alias="RATE_LIMIT_BURST",
+        description="Maximum burst size for the token bucket. 0 defaults to RATE_LIMIT_RPM.",
+    )
 
     # --- Artifact persistence ------------------------------------------------
 
@@ -260,6 +288,21 @@ class Settings(BaseSettings):
         ge=0,
         validation_alias="DAILY_BUDGET_USD",
         description="Per-principal UTC daily limit. Zero records usage without blocking.",
+    )
+    persistence_cache_max_size: int = Field(
+        default=10_000,
+        ge=1,
+        validation_alias="PERSISTENCE_CACHE_MAX_SIZE",
+        description="Maximum number of provider task IDs cached in the artifact-resolution cache.",
+    )
+    persistence_cache_ttl_seconds: int = Field(
+        default=86_400,
+        ge=60,
+        validation_alias="PERSISTENCE_CACHE_TTL_SECONDS",
+        description=(
+            "TTL in seconds for cached provider task to artifact mappings. "
+            "Entries older than this are ignored on read."
+        ),
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO",

@@ -23,6 +23,9 @@ _SETTINGS_ENV_PREFIXES = (
     "PRINCIPAL_",
     "DAILY_",
     "MODELARK_",
+    "PERSISTENCE_",
+    "READINESS_",
+    "RATE_LIMIT_",
 )
 
 

@@ -91,7 +91,7 @@ sequenceDiagram
     R-->>T: services
     T->>T: billed_provider_slot(...)
     M->>L: shutdown
-    L->>R: close_runtime_services (artifact_store, ownership_store, budget_ledger)
+    L->>R: close_runtime_services (artifact_store, ownership_store, budget_ledger, task_artifact_cache)
 ```
 
 `RuntimeServices` holds seven components (see [runtime.md](runtime.md) for
@@ -105,10 +105,10 @@ full detail):
 | `ownership_store` | `SQLiteTaskOwnershipStore` — Seedance task ownership |
 | `budget_ledger` | `BudgetLedger` — per-principal UTC daily budget |
 | `provider_limiters` | `ProviderLimiters` — provider + principal concurrency |
-| `persistence_cache` | `TTLCache` — provider task → artifact ref cache |
+| `task_artifact_cache` | `SQLiteTaskArtifactCache` — provider task → artifact ref cache |
 
-`close_runtime_services` closes exactly three of these: `artifact_store`,
-`ownership_store`, and `budget_ledger`.
+`close_runtime_services` closes exactly four of these: `artifact_store`,
+`ownership_store`, `budget_ledger`, and `task_artifact_cache`.
 
 ## Request flow for a billable tool
 

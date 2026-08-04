@@ -8,6 +8,7 @@ limiters and mutable server-module globals from leaking across test servers.
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -21,6 +22,7 @@ from fastmcp.server.dependencies import get_access_token
 
 from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
 from modelark_mcp.config.env import Settings
+from modelark_mcp.domain.artifacts import ArtifactRef
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.observability.metrics import BUDGET_REJECTIONS
 from modelark_mcp.security.auth_context import AuthContext, PrincipalContext
@@ -30,7 +32,6 @@ if TYPE_CHECKING:
     from fastmcp import Context, FastMCP
 
     from modelark_mcp.artifacts.store import ArtifactStore
-    from modelark_mcp.domain.artifacts import ArtifactRef
 
 ProviderKey = Literal["modelark", "seed-speech", "tos", "s3"]
 
@@ -92,6 +93,18 @@ class TaskOwnershipStore(Protocol):
     async def list_task_ids(self, owner: AuthContext) -> set[str]: ...
 
     async def ping(self) -> None: ...
+
+    async def close(self) -> None: ...
+
+
+class TaskArtifactCache(Protocol):
+    async def get(self, task_id: str) -> dict[str, ArtifactRef | None] | None: ...
+
+    async def set(self, task_id: str, artifacts: dict[str, ArtifactRef | None]) -> None: ...
+
+    async def pop(self, task_id: str) -> dict[str, ArtifactRef | None] | None: ...
+
+    async def clear(self) -> None: ...
 
     async def close(self) -> None: ...
 
@@ -160,6 +173,116 @@ class SQLiteTaskOwnershipStore:
     async def close(self) -> None:
         async with self._lock:
             self._connection.close()
+
+
+class SQLiteTaskArtifactCache:
+    """SQLite-backed cache mapping provider task IDs to persisted artifact refs."""
+
+    def __init__(
+        self,
+        database_path: Path,
+        *,
+        ttl_seconds: int = 86_400,
+        max_size: int = 10_000,
+    ) -> None:
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        self._connection = sqlite3.connect(database_path)
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS task_artifacts (
+                task_id TEXT PRIMARY KEY,
+                artifacts_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.commit()
+        self._lock = asyncio.Lock()
+        self._ttl_seconds = ttl_seconds
+        self._max_size = max_size
+
+    async def get(self, task_id: str) -> dict[str, ArtifactRef | None] | None:
+        async with self._lock:
+            row = self._connection.execute(
+                "SELECT artifacts_json, created_at FROM task_artifacts WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        artifacts_json, created_at_str = row
+        created_at = datetime.fromisoformat(created_at_str)
+        if (datetime.now(UTC) - created_at).total_seconds() > self._ttl_seconds:
+            return None
+        return self._deserialize(artifacts_json)
+
+    async def set(self, task_id: str, artifacts: dict[str, ArtifactRef | None]) -> None:
+        artifacts_json = self._serialize(artifacts)
+        now = datetime.now(UTC).isoformat()
+        async with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO task_artifacts(task_id, artifacts_json, created_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(task_id) DO UPDATE SET
+                    artifacts_json = excluded.artifacts_json,
+                    created_at = excluded.created_at
+                """,
+                (task_id, artifacts_json, now),
+            )
+            self._connection.commit()
+            count_row = self._connection.execute("SELECT COUNT(*) FROM task_artifacts").fetchone()
+            if count_row is not None and count_row[0] > self._max_size:
+                self._connection.execute(
+                    """
+                    DELETE FROM task_artifacts WHERE task_id NOT IN (
+                        SELECT task_id FROM task_artifacts
+                        ORDER BY created_at DESC LIMIT ?
+                    )
+                    """,
+                    (self._max_size,),
+                )
+                self._connection.commit()
+
+    async def pop(self, task_id: str) -> dict[str, ArtifactRef | None] | None:
+        async with self._lock:
+            row = self._connection.execute(
+                "SELECT artifacts_json, created_at FROM task_artifacts WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if row is not None:
+                self._connection.execute(
+                    "DELETE FROM task_artifacts WHERE task_id = ?",
+                    (task_id,),
+                )
+                self._connection.commit()
+        if row is None:
+            return None
+        created_at = datetime.fromisoformat(row[1])
+        if (datetime.now(UTC) - created_at).total_seconds() > self._ttl_seconds:
+            return None
+        return self._deserialize(row[0])
+
+    async def clear(self) -> None:
+        async with self._lock:
+            self._connection.execute("DELETE FROM task_artifacts")
+            self._connection.commit()
+
+    async def close(self) -> None:
+        async with self._lock:
+            self._connection.close()
+
+    @staticmethod
+    def _serialize(artifacts: dict[str, ArtifactRef | None]) -> str:
+        return json.dumps(
+            {k: v.model_dump(mode="json") if v is not None else None for k, v in artifacts.items()}
+        )
+
+    @staticmethod
+    def _deserialize(raw: str) -> dict[str, ArtifactRef | None]:
+        data = json.loads(raw)
+        return {
+            k: ArtifactRef.model_validate(v) if v is not None else None for k, v in data.items()
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,7 +400,7 @@ class RuntimeServices:
     ownership_store: TaskOwnershipStore
     budget_ledger: BudgetLedger
     provider_limiters: ProviderLimiters
-    persistence_cache: TTLCache[str, dict[str, ArtifactRef | None]]
+    task_artifact_cache: TaskArtifactCache
 
 
 @dataclass(slots=True)
@@ -310,7 +433,11 @@ async def create_runtime_services(settings: Settings) -> RuntimeServices:
             provider_limit=settings.provider_max_concurrency,
             principal_limit=settings.principal_max_concurrency,
         ),
-        persistence_cache=TTLCache(maxsize=10_000, ttl=86_400),
+        task_artifact_cache=SQLiteTaskArtifactCache(
+            database_path,
+            ttl_seconds=settings.persistence_cache_ttl_seconds,
+            max_size=settings.persistence_cache_max_size,
+        ),
     )
 
 
@@ -318,6 +445,7 @@ async def close_runtime_services(runtime: RuntimeServices) -> None:
     await runtime.artifact_store.close()
     await runtime.ownership_store.close()
     await runtime.budget_ledger.close()
+    await runtime.task_artifact_cache.close()
 
 
 RuntimeFactory = Callable[[Settings], Awaitable[RuntimeServices]]

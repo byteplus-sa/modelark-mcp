@@ -152,5 +152,6 @@ scheduled task if you need proactive cleanup.
 - **Seedance task ownership** and the **budget ledger** live in SQLite
   (`runtime.sqlite3`), not in the artifact store. See
   [runtime.md](runtime.md).
-- **Provider task lookups** are cached in `RuntimeServices.persistence_cache`
-  (`TTLCache`, 24h) to avoid re-resolving still-valid provider URLs.
+- **Provider task lookups** are cached in `RuntimeServices.task_artifact_cache`
+  (`SQLiteTaskArtifactCache`, same database as ownership/budget) to avoid
+  re-resolving still-valid provider URLs. The cache survives server restarts.
