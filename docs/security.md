@@ -132,6 +132,22 @@ enforce the limit on streamed bodies; if the response has already started,
 it re-raises `RequestBodyTooLarge` (the connection errors out rather than
 sending a clean 413 mid-stream).
 
+## Rate limiting (`security/http_middleware.py`)
+
+`RateLimitMiddleware` (ASGI) — a per-client-IP token bucket rate limiter,
+wired for HTTP transport only when `RATE_LIMIT_RPM > 0`. Disabled by default.
+
+| Env var | Default | Notes |
+|---|---|---|
+| `RATE_LIMIT_RPM` | `0` (disabled) | Maximum HTTP requests per minute per client IP |
+| `RATE_LIMIT_BURST` | `0` (defaults to `RATE_LIMIT_RPM`) | Token bucket burst capacity |
+
+Behavior: each client IP gets an in-memory token bucket. The refill rate is
+`rpm / 60` tokens per second. Each request consumes one token. When the
+bucket is empty, the middleware returns `429 "Rate limit exceeded"` with a
+`Retry-After` header indicating the seconds until the next token is
+available. The bucket dict is protected by an `asyncio.Lock`.
+
 ## SSRF-safe downloader (`security/safe_downloader.py`)
 
 `SafeDownloader` downloads provider media (for `copy_from_trusted_url`) with

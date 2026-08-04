@@ -342,7 +342,59 @@ def create_server(
                 raise RuntimeError("Artifact storage is not writable.")
         except Exception:
             return JSONResponse({"status": "not_ready"}, status_code=503)
-        return JSONResponse({"status": "ready"})
+
+        if not resolved_settings.readiness_check_providers:
+            return JSONResponse({"status": "ready"})
+
+        providers: dict[str, str] = {}
+        timeout = resolved_settings.readiness_provider_timeout_seconds
+
+        if resolved_settings.has_modelark:
+            from modelark_mcp.providers.modelark.client import ModelArkGateway
+
+            modelark_gw = ModelArkGateway()
+            try:
+                providers["modelark"] = (
+                    "reachable"
+                    if await modelark_gw.health_check(timeout_seconds=timeout)
+                    else "unreachable"
+                )
+            finally:
+                await modelark_gw.close()
+
+        if resolved_settings.has_seed_audio:
+            from modelark_mcp.providers.seed_speech.client import SeedSpeechGateway
+
+            audio_gw = SeedSpeechGateway()
+            try:
+                providers["seed_audio"] = (
+                    "reachable"
+                    if await audio_gw.health_check(timeout_seconds=timeout)
+                    else "unreachable"
+                )
+            finally:
+                await audio_gw.close()
+
+        if resolved_settings.has_stt:
+            from modelark_mcp.providers.seed_speech.asr_http import SeedSpeechAsrHttpGateway
+
+            stt_gw = SeedSpeechAsrHttpGateway()
+            try:
+                providers["stt"] = (
+                    "reachable"
+                    if await stt_gw.health_check(timeout_seconds=timeout)
+                    else "unreachable"
+                )
+            finally:
+                await stt_gw.close()
+
+        all_reachable = all(v == "reachable" for v in providers.values())
+        if all_reachable:
+            return JSONResponse({"status": "ready", "providers": providers})
+        return JSONResponse(
+            {"status": "degraded", "providers": providers},
+            status_code=503,
+        )
 
     @server.custom_route("/metrics", methods=["GET"])
     async def metrics(_request: Request) -> Response:

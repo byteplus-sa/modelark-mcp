@@ -47,7 +47,7 @@ Terminate TLS at a trusted reverse proxy and pass the original Host header.
 | Route | Authentication | Meaning |
 |---|---|---|
 | `/health` | none | Process liveness |
-| `/ready` | none | Runtime, database, and artifact-directory readiness |
+| `/ready` | none | Runtime, database, and artifact-directory readiness. When `READINESS_CHECK_PROVIDERS=true`, also checks provider connectivity and includes a `providers` field; returns 503 `"degraded"` if any provider is unreachable |
 | `/metrics` | none | Prometheus exposition |
 
 Restrict `/metrics` at the network or reverse-proxy layer if metric labels or

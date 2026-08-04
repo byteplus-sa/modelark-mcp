@@ -215,8 +215,7 @@ class TestSeedanceGetTaskTool:
         temp_store: Any,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # Clear persistence cache before test.
-        fake_ctx.lifespan_context["runtime"].persistence_cache.clear()
+        await fake_ctx.lifespan_context["runtime"].task_artifact_cache.clear()
 
         task = SeedanceTaskResponse(
             id="task-succ",
@@ -269,8 +268,8 @@ class TestSeedanceGetTaskTool:
         temp_store: Any,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        persistence_cache = fake_ctx.lifespan_context["runtime"].persistence_cache
-        persistence_cache.clear()
+        task_artifact_cache = fake_ctx.lifespan_context["runtime"].task_artifact_cache
+        await task_artifact_cache.clear()
 
         # Pre-populate cache to simulate a previous get call.
         from datetime import UTC, datetime
@@ -286,7 +285,7 @@ class TestSeedanceGetTaskTool:
             sha256="abc123",
             created_at=datetime.now(UTC).isoformat(),
         )
-        persistence_cache["task-cached"] = {"video": cached_ref, "last_frame": None}
+        await task_artifact_cache.set("task-cached", {"video": cached_ref, "last_frame": None})
 
         task = SeedanceTaskResponse(
             id="task-cached",
@@ -312,7 +311,7 @@ class TestSeedanceGetTaskTool:
         assert result.video is not None
         assert result.video.id == "cached-video-id"
 
-        fake_ctx.lifespan_context["runtime"].persistence_cache.clear()
+        await fake_ctx.lifespan_context["runtime"].task_artifact_cache.clear()
 
     async def test_get_failed_task_with_error(
         self,

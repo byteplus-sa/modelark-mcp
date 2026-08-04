@@ -27,6 +27,7 @@ def test_main_configures_protected_http(monkeypatch) -> None:
         allowed_hosts=["127.0.0.1"],
         allowed_origins=["https://client.example.com"],
         mcp_http_max_body_bytes=1234,
+        rate_limit_rpm=0,
     )
     monkeypatch.setattr(entrypoint, "get_settings", lambda: settings)
     monkeypatch.setattr(entrypoint.mcp, "run", run)
@@ -44,3 +45,26 @@ def test_main_configures_protected_http(monkeypatch) -> None:
     middleware = kwargs["middleware"][0]
     assert middleware.cls is entrypoint.RequestBodyLimitMiddleware
     assert middleware.kwargs == {"max_bytes": 1234}
+
+
+def test_main_wires_rate_limiter_when_enabled(monkeypatch) -> None:
+    run = Mock()
+    settings = SimpleNamespace(
+        mcp_transport="http",
+        mcp_host="127.0.0.1",
+        mcp_port=3100,
+        allowed_hosts=["127.0.0.1"],
+        allowed_origins=["https://client.example.com"],
+        mcp_http_max_body_bytes=1234,
+        rate_limit_rpm=60,
+        rate_limit_burst=10,
+    )
+    monkeypatch.setattr(entrypoint, "get_settings", lambda: settings)
+    monkeypatch.setattr(entrypoint.mcp, "run", run)
+
+    entrypoint.main()
+
+    kwargs = run.call_args.kwargs
+    assert len(kwargs["middleware"]) == 2
+    assert kwargs["middleware"][1].cls is entrypoint.RateLimitMiddleware
+    assert kwargs["middleware"][1].kwargs == {"rpm": 60, "burst": 10}

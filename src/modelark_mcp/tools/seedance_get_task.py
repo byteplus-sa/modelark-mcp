@@ -108,7 +108,7 @@ async def seedance_get_task(
     last_frame_ref: ArtifactRef | None = None
 
     if task.status == "succeeded" and input.persist_output:
-        cache = runtime.persistence_cache.get(input.task_id)
+        cache = await runtime.task_artifact_cache.get(input.task_id)
         if cache:
             video_ref = cache.get("video")
             last_frame_ref = cache.get("last_frame")
@@ -159,10 +159,13 @@ async def seedance_get_task(
             # Only cache if at least one artifact was persisted.
             # Don't cache failures — allow retry on next poll.
             if video_ref is not None or last_frame_ref is not None:
-                runtime.persistence_cache[input.task_id] = {
-                    "video": video_ref,
-                    "last_frame": last_frame_ref,
-                }
+                await runtime.task_artifact_cache.set(
+                    input.task_id,
+                    {
+                        "video": video_ref,
+                        "last_frame": last_frame_ref,
+                    },
+                )
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

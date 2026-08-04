@@ -105,7 +105,7 @@ full detail):
 | `ownership_store` | `SQLiteTaskOwnershipStore` — Seedance task ownership |
 | `budget_ledger` | `BudgetLedger` — per-principal UTC daily budget |
 | `provider_limiters` | `ProviderLimiters` — provider + principal concurrency |
-| `persistence_cache` | `TTLCache` — provider task → artifact ref cache |
+| `task_artifact_cache` | `SQLiteTaskArtifactCache` — provider task → artifact ref cache |
 
 `close_runtime_services` closes exactly three of these: `artifact_store`,
 `ownership_store`, and `budget_ledger`.

@@ -62,6 +62,48 @@ class TestSettings:
         assert settings.connect_timeout_ms == 10000
         assert settings.request_timeout_ms == 600000
 
+    def test_persistence_cache_defaults(self) -> None:
+        settings = Settings(_env_file=None)
+        assert settings.persistence_cache_max_size == 10_000
+        assert settings.persistence_cache_ttl_seconds == 86_400
+
+    def test_persistence_cache_env_overrides(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            PERSISTENCE_CACHE_MAX_SIZE=500,
+            PERSISTENCE_CACHE_TTL_SECONDS=3600,
+        )
+        assert settings.persistence_cache_max_size == 500
+        assert settings.persistence_cache_ttl_seconds == 3600
+
+    def test_readiness_defaults(self) -> None:
+        settings = Settings(_env_file=None)
+        assert settings.readiness_check_providers is False
+        assert settings.readiness_provider_timeout_seconds == 2.0
+
+    def test_readiness_env_overrides(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            READINESS_CHECK_PROVIDERS=True,
+            READINESS_PROVIDER_TIMEOUT_SECONDS=5.0,
+        )
+        assert settings.readiness_check_providers is True
+        assert settings.readiness_provider_timeout_seconds == 5.0
+
+    def test_rate_limit_defaults(self) -> None:
+        settings = Settings(_env_file=None)
+        assert settings.rate_limit_rpm == 0
+        assert settings.rate_limit_burst == 0
+
+    def test_rate_limit_env_overrides(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            RATE_LIMIT_RPM=60,
+            RATE_LIMIT_BURST=10,
+        )
+        assert settings.rate_limit_rpm == 60
+        assert settings.rate_limit_burst == 10
+
     def test_model_bindings(self) -> None:
         settings = Settings(
             _env_file=None,

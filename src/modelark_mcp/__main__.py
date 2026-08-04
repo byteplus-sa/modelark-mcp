@@ -18,6 +18,7 @@ truststore.inject_into_ssl()
 
 from modelark_mcp.config.env import get_settings  # noqa: E402
 from modelark_mcp.security.http_middleware import (  # noqa: E402
+    RateLimitMiddleware,
     RequestBodyLimitMiddleware,
 )
 from modelark_mcp.server import mcp  # noqa: E402
@@ -27,6 +28,20 @@ def main() -> None:
     settings = get_settings()
 
     if settings.mcp_transport == "http":
+        middleware = [
+            Middleware(
+                RequestBodyLimitMiddleware,
+                max_bytes=settings.mcp_http_max_body_bytes,
+            ),
+        ]
+        if settings.rate_limit_rpm > 0:
+            middleware.append(
+                Middleware(
+                    RateLimitMiddleware,
+                    rpm=settings.rate_limit_rpm,
+                    burst=settings.rate_limit_burst or settings.rate_limit_rpm,
+                )
+            )
         mcp.run(
             transport="http",
             host=settings.mcp_host,
@@ -34,12 +49,7 @@ def main() -> None:
             host_origin_protection=True,
             allowed_hosts=settings.allowed_hosts,
             allowed_origins=settings.allowed_origins,
-            middleware=[
-                Middleware(
-                    RequestBodyLimitMiddleware,
-                    max_bytes=settings.mcp_http_max_body_bytes,
-                )
-            ],
+            middleware=middleware,
         )
     else:
         mcp.run(transport="stdio")

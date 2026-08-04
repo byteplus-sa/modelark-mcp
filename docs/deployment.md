@@ -45,7 +45,8 @@ curl --fail http://127.0.0.1:3000/metrics
 ```
 
 - `/health` reports process liveness without contacting providers.
-- `/ready` checks the runtime-owned SQLite state and artifact directory.
+- `/ready` checks the runtime-owned SQLite state, artifact directory, and (when
+  `READINESS_CHECK_PROVIDERS=true`) provider connectivity.
 - `/metrics` exports tool/provider request counts, duration, retries, artifact
   writes, and budget rejections for Prometheus.
 
@@ -94,6 +95,8 @@ provider credentials from a Secret rather than literal manifest values.
 - Use HTTPS and JWT mode for every non-loopback bind.
 - Pin issuer, audience, and JWKS URI; issue least-privilege tool scopes.
 - Set explicit Host and Origin allowlists.
+- Set `RATE_LIMIT_RPM` to cap per-client-IP request frequency when exposed
+  to untrusted clients.
 - Keep the HTTP body limit and provider URL SSRF checks enabled.
 - Mount the artifact directory with least privilege and protect backups.
 - Restrict operational endpoints at the proxy/network layer as appropriate.

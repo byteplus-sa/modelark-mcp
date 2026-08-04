@@ -104,6 +104,18 @@ class BaseHttpGateway(ABC):
             await self._client.aclose()
             self._client = None
 
+    async def health_check(self, *, timeout_seconds: float = 2.0) -> bool:
+        """Return True if the provider base URL responds within the timeout."""
+        client = await self._ensure_client()
+        try:
+            await client.get(
+                self._base_url,
+                timeout=httpx.Timeout(timeout_seconds, connect=timeout_seconds),
+            )
+        except Exception:
+            return False
+        return True
+
     @classmethod
     def normalize_timeout(cls, operation: str) -> ProviderError:
         return ProviderError(

@@ -40,6 +40,10 @@ registered.
 | `MCP_ALLOWED_HOSTS` | loopback hosts | Comma-separated accepted Host headers |
 | `MCP_ALLOWED_ORIGINS` | empty | Comma-separated accepted browser Origins |
 | `MCP_HTTP_MAX_BODY_BYTES` | `10485760` | Maximum HTTP request body |
+| `READINESS_CHECK_PROVIDERS` | `false` | When true, `/ready` also checks provider connectivity |
+| `READINESS_PROVIDER_TIMEOUT_SECONDS` | `2.0` | Per-provider timeout for readiness checks |
+| `RATE_LIMIT_RPM` | `0` | Max HTTP requests per minute per client IP; 0 disables |
+| `RATE_LIMIT_BURST` | `0` | Token bucket burst size; 0 defaults to `RATE_LIMIT_RPM` |
 | `MCP_AUTH_MODE` | `local` | `local` or `jwt` |
 | `MCP_JWT_JWKS_URI` | empty | HTTPS JWKS endpoint for JWT verification |
 | `MCP_JWT_ISSUER` | empty | Required token issuer |
@@ -128,6 +132,8 @@ S3-compatible storage.
 | `PROVIDER_MAX_CONCURRENCY` | `5` | Process-wide slots per provider |
 | `PRINCIPAL_MAX_CONCURRENCY` | `3` | Shared slots per authenticated principal |
 | `DAILY_BUDGET_USD` | `0` | Per-principal UTC daily estimate limit; zero records only |
+| `PERSISTENCE_CACHE_MAX_SIZE` | `10000` | Max cached provider task IDs in artifact-resolution cache |
+| `PERSISTENCE_CACHE_TTL_SECONDS` | `86400` | TTL for cached task-to-artifact mappings (seconds) |
 
 The filesystem backend enforces principal and tenant ownership. It is suitable
 for one process. Multiple replicas require shared artifact, task-ownership,
