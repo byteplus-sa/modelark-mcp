@@ -25,6 +25,9 @@ def configured_server(
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test")
     monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+    monkeypatch.setenv("TOS_ACCESS_KEY", "ak-test-tos")
+    monkeypatch.setenv("TOS_SECRET_KEY", "sk-test-tos")
+    monkeypatch.setenv("TOS_BUCKET", "test-bucket")
 
     # Clear cached settings.
     get_settings.cache_clear()
