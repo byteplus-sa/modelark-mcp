@@ -265,3 +265,41 @@ class TestSeedUnderstandTool:
         ]
         with pytest.raises(ValueError, match="at most 32"):
             await seed_understand(SeedUnderstandInput(prompt="test", images=images), fake_ctx)
+
+    async def test_reasoning_effort_without_thinking_silently_dropped(
+        self,
+        test_env: None,
+        fake_ctx: FakeContext,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """reasoning_effort is ignored when thinking=false (documented behavior)."""
+        captured_request: list[Any] = []
+
+        async def mock_generate(
+            self: SeedUnderstandingService, request: Any
+        ) -> tuple[ChatCompletionProviderResponse, str | None]:
+            captured_request.append(request)
+            response = ChatCompletionProviderResponse.model_validate(
+                {
+                    "id": "chatcmpl-005",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+                }
+            )
+            return response, "req-test"
+
+        monkeypatch.setattr(SeedUnderstandingService, "generate", mock_generate)
+
+        result = await seed_understand(
+            SeedUnderstandInput(prompt="test", thinking=False, reasoning_effort="high"),
+            fake_ctx,
+        )
+
+        assert isinstance(result, SeedUnderstandOutput)
+        assert captured_request[0].reasoning_effort is None

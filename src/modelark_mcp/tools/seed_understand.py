@@ -38,14 +38,15 @@ class UnderstandingVideoInput(MediaSource):
 
     MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.VIDEO
 
-    @model_validator(mode="after")
-    def reject_video_base64(self) -> UnderstandingVideoInput:
-        if self.kind == "base64":
+    @model_validator(mode="before")
+    @classmethod
+    def reject_video_base64(cls, data: object) -> object:
+        if isinstance(data, dict) and data.get("kind") == "base64":
             raise ValueError(
                 "Video Base64 is not supported by the chat endpoint; "
                 "upload via media_upload and pass a URL."
             )
-        return self
+        return data
 
 
 class SeedUnderstandInput(BaseModel):
@@ -252,5 +253,5 @@ TOOL_ANNOTATIONS = {
     "readOnlyHint": True,
     "destructiveHint": False,
     "idempotentHint": False,
-    "openWorldHint": False,
+    "openWorldHint": True,
 }
