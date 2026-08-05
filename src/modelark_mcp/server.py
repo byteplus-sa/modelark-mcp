@@ -142,6 +142,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
         log_info("tools_skipped", reason="BYTEPLUS_MODELARK_API_KEY not configured")
         return
 
+    from modelark_mcp.tools.seed_understand import (
+        TOOL_ANNOTATIONS as understand_annotations,
+    )
+    from modelark_mcp.tools.seed_understand import (
+        SeedUnderstandOutput,
+        seed_understand,
+    )
     from modelark_mcp.tools.seedance_cancel_or_delete_task import (
         TOOL_ANNOTATIONS as cancel_annotations,
     )
@@ -246,6 +253,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             "seedance:delete",
             seedance_cancel_or_delete_task,
         ),
+        (
+            "seed_understand",
+            understand_annotations,
+            SeedUnderstandOutput,
+            "understanding:read",
+            seed_understand,
+        ),
     )
     for name, tool_annotations, output_model, scope, handler in registrations:
         server.tool(
@@ -270,8 +284,8 @@ def create_server(
         "ModelArk Seed Multimodal",
         instructions=(
             "BytePlus multimodal generation server. Provides Seed Audio, Seedream, "
-            "Seedance, and Speech-to-Text tools. Generated media is persisted as "
-            "durable MCP resources."
+            "Seedance, Seed 2.1 multimodal understanding, and Speech-to-Text tools. "
+            "Generated media is persisted as durable MCP resources."
         ),
         auth=auth_provider or build_auth_provider(resolved_settings),
         lifespan=build_lifespan(resolved_settings, runtime_factory, runtime_state),

@@ -199,3 +199,79 @@ class SeedanceTaskListResponse(BaseModel):
     )
     total: int = 0
     has_more: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# Chat Completions (Seed 2.1 multimodal understanding)
+# ---------------------------------------------------------------------------
+
+
+class ChatContentPart(BaseModel):
+    """A single content part in a chat completion message."""
+
+    type: str
+    text: str | None = None
+    image_url: dict[str, str] | None = None
+    video_url: dict[str, str] | None = None
+
+
+class ChatMessage(BaseModel):
+    """A message in a chat completion conversation."""
+
+    role: str
+    content: str | list[ChatContentPart]
+
+
+class ChatThinkingConfig(BaseModel):
+    """Thinking/reasoning configuration for deep-thinking models."""
+
+    type: str = "enabled"
+
+
+class ChatCompletionProviderRequest(BaseModel):
+    """Raw request body for ``POST /chat/completions``."""
+
+    model: str
+    messages: list[ChatMessage]
+    temperature: float | None = None
+    max_tokens: int | None = None
+    top_p: float | None = None
+    repetition_penalty: float | None = None
+    reasoning_effort: str | None = None
+    thinking: ChatThinkingConfig | None = None
+    service_tier: str | None = None
+    stream: bool = False
+
+
+class ChatUsage(BaseModel):
+    """Token usage in a chat completion response."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+class ChatChoiceMessage(BaseModel):
+    """The assistant message in a chat completion choice."""
+
+    role: str = "assistant"
+    content: str | None = None
+    reasoning_content: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+
+
+class ChatChoice(BaseModel):
+    """A single choice in a chat completion response."""
+
+    index: int = 0
+    message: ChatChoiceMessage = Field(default_factory=ChatChoiceMessage)
+    finish_reason: str | None = None
+
+
+class ChatCompletionProviderResponse(BaseModel):
+    """Raw response from ``POST /chat/completions``."""
+
+    id: str | None = None
+    model: str | None = None
+    choices: list[ChatChoice] = Field(default_factory=list)
+    usage: ChatUsage | None = None

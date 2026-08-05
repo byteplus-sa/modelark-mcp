@@ -15,6 +15,8 @@ behind one server:
   and watermarking.
 - **Seedance** — asynchronous video generation with task-based lifecycle
   (create, poll, list, cancel/delete).
+- **Seed 2.1 Understanding** — multimodal video/image understanding and
+  reasoning through ModelArk Chat Completions; supports deep-thinking mode.
 - **Speech-to-Text** — synchronous audio transcription via Seed Speech ASR.
 - **Artifacts** — durable media access after provider URLs expire.
 - **Object storage upload** — presigned URL generation for URL-only media
@@ -32,6 +34,7 @@ Invoke this skill when the user wants to:
 - generate or edit an image;
 - generate audio, voice-clone from references, or request several variations;
 - create, poll, list, cancel, or delete Seedance video tasks;
+- understand images or videos, or use a multimodal reasoning sub-agent;
 - transcribe audio or video into timestamped, speaker-diarized text;
 - fetch a previously persisted artifact by ID;
 - upload local or Base64 media to object storage (TOS or S3) to obtain a
@@ -68,6 +71,7 @@ gracefully degrades to whatever is configured.
 - `seedance_get_task`
 - `seedance_list_tasks`
 - `seedance_cancel_or_delete_task`
+- `seed_understand`
 
 ### Requires object storage credentials (TOS or S3)
 
