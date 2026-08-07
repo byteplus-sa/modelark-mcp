@@ -14,8 +14,9 @@ behind one server:
 - **Seed Audio** — full-scene audio generation with voice cloning, subtitles,
   and watermarking.
 - **Seedance** — asynchronous video generation with task-based lifecycle
-  (create, poll, list, cancel/delete). Two model generations: 2.0 (4K, 15s)
-  and 2.5 (30s, 50 references, timestamp editing).
+  (create, poll, list, cancel/delete). Supports two model generations: 2.5
+  (default, 30s, 30/10/10 refs, 480p/720p) and 2.0 (legacy, 15s, 9/3/3 refs,
+  480p–4K, Fast/Mini variants).
 - **Seed 2.1 Understanding** — multimodal video/image understanding and
   reasoning through ModelArk Chat Completions; supports deep-thinking mode.
   Use for OCR, scene analysis, content review, and as a visual reasoning
@@ -36,7 +37,7 @@ Invoke this skill when the user wants to:
 
 - generate or edit an image;
 - generate audio, voice-clone from references, or request several variations;
-- create, poll, list, cancel, or delete Seedance video tasks (2.0 or 2.5);
+- create, poll, list, cancel, or delete Seedance video tasks (Seedance 2.0 and 2.5);
 - understand images or videos (OCR, scene analysis, content review), or use a
   multimodal reasoning sub-agent;
 - transcribe audio or video into timestamped, speaker-diarized text;
@@ -72,11 +73,11 @@ gracefully degrades to whatever is configured.
 - `seedream_generate_image_variations`
 - `seedance_create_task`
 - `seedance_create_task_variations`
+- `seedance_get_task`               # shared: retrieves both 2.0 and 2.5 tasks
+- `seedance_list_tasks`             # shared: lists both 2.0 and 2.5 tasks
+- `seedance_cancel_or_delete_task`  # shared: acts on both 2.0 and 2.5 tasks
 - `seedance_2_5_create_task`
 - `seedance_2_5_create_task_variations`
-- `seedance_get_task`
-- `seedance_list_tasks`
-- `seedance_cancel_or_delete_task`
 - `seed_understand`
 
 ### Requires object storage credentials (TOS or S3)
@@ -538,103 +539,69 @@ Returns `SeedanceCancelOrDeleteOutput`.
 
 ### Seedance 2.5 (Video) Tools
 
-Requires `BYTEPLUS_MODELARK_API_KEY` and a Seedance 2.5 model binding. Auth
-scope: `seedance:create`.
+Requires `BYTEPLUS_MODELARK_API_KEY`. Same auth scopes as 2.0.
 
-Seedance 2.5 (`dreamina-seedance-2-5-260628`) is the next-generation
-audio-video joint generation model. Key differences from 2.0:
+Seedance 2.5 (`dreamina-seedance-2-5-260628`) is the newer, higher-capability model. Key differences from 2.0:
 
-- **30-second max duration** (up from 15s)
-- **50 multimodal references** (30 images, 10 videos, 10 audio — up from 9/3/3)
-- **480p and 720p** resolution (1080p/4K not in initial API)
-- **Timestamp-level prompt control** for narrative pacing and editing
-- **Multi-round extension** for multi-minute content
-- **10+ languages** with native lip-sync
-- **Activation-gated** — returns `404 ModelNotOpen` until enabled in Ark Console
+| Capability | Seedance 2.0 | Seedance 2.5 |
+|---|---|---|
+| Max duration | 15s | 30s |
+| Max images | 9 | 30 |
+| Max videos | 3 | 10 |
+| Max audios | 3 | 10 |
+| Resolution | 480p, 720p, 1080p, 4K | 480p, 720p only |
+| Fast/Mini variants | Yes | No |
+| Structured editing | No | Subject replacement, background replacement, audio editing |
+| Forward/backward extension | No (manual `return_last_frame` chaining) | Yes (native) |
+| Keyframe sequences | No | Yes |
 
-The API contract (endpoint, auth, `content[]` structure) is identical to 2.0.
-The get/list/cancel tools are shared — they work for both 2.0 and 2.5 tasks.
+**When to choose 2.5:** longer single-pass videos (up to 30s), richer multimodal references (30/10/10), structured editing, native extension.
+
+**When to choose 2.0:** 1080p or 4K output resolution, Fast/Mini speed variants, lower cost per generation.
 
 #### `seedance_2_5_create_task`
 
-Create an async Seedance 2.5 video generation task. Returns a task ID for
-polling via `seedance_get_task`.
-
-**Constraints:**
-- At least one of `prompt`, `images`, or `videos` is required.
-- Audio references cannot be the sole media input.
-- Text-only (prompt with no media) is supported.
-- The tool resolves a `SEEDANCE_2_5`-family model from the registry. If no 2.5
-  model is configured, it raises a clear error.
+Create an asynchronous Seedance 2.5 video generation task.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `prompt` | `str` | No | 1–32,000 characters. |
+| `prompt` | `str` | No | Text prompt (up to 32,000 chars). Optional when media inputs are provided. |
 | `images` | `list[SeedanceImageInput]` | No | Up to 30 images with roles: `first_frame`, `last_frame`, `reference_image` |
 | `videos` | `list[SeedanceVideoInput]` | No | Up to 10 videos with role: `reference_video` |
-| `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio` |
-| `model` | `str` | No | Model ID. Defaults to `dreamina-seedance-2-5-260628`. |
-| `resolution` | `"480p"` \| `"720p"` | No | |
-| `ratio` | `str` | No | Aspect ratio |
-| `duration` | `int` | No | -1 to 30 seconds |
-| `generate_audio` | `bool` | No | Generate audio track |
-| `watermark` | `bool` | No | Provider watermark + C2PA Content Credentials |
-| `return_last_frame` | `bool` | No | Include last frame for chaining clips |
-| `execution_expires_after` | `int` | No | 3600–259200 seconds |
-| `priority` | `int` | No | 0–9 |
-| `safety_identifier` | `str` | No | Max 64 characters |
+| `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Cannot be the sole media input. |
+| `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
+| `resolution` | `"480p"` \| `"720p"` | No | 2.5 supports only 480p and 720p. |
+| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). |
+| `duration` | `int` | No | -1 (auto) to 30 seconds. |
+| `generate_audio` | `bool` | No | Whether to generate an audio track. |
+| `watermark` | `bool` | No | Apply AIGC watermark. |
+| `return_last_frame` | `bool` | No | Return the last frame as a separate image. |
+| `execution_expires_after` | `int` | No | Max execution time in seconds (3600–259200). |
+| `priority` | `int` | No | Task priority (0–9). |
+| `safety_identifier` | `str` | No | Content safety tracking ID (max 64 chars). |
 
-Returns `Seedance25CreateTaskOutput` with `task_id`, `status="queued"`, and
-`recommended_poll_after_ms`.
+Returns `Seedance25CreateTaskOutput` with `task_id`, `status="queued"`, and `recommended_poll_after_ms`.
 
-**Example — 30-second multi-reference narrative:**
+**Example — 30s text-to-video with native audio:**
 
 ```json
 {
-  "prompt": "First-person POV fruit tea ad. 0-4s: hand picks apple. 4-8s: drops into shaker, adds ice, shakes. 6-8s: finished drink close-up with brand sticker. Final frame freezes on product.",
-  "images": [
-    { "role": "reference_image", "kind": "url", "url": "https://cdn.example.com/product1.jpg" },
-    { "role": "reference_image", "kind": "url", "url": "https://cdn.example.com/product2.jpg" }
-  ],
-  "videos": [
-    { "url": "https://cdn.example.com/pov-reference.mp4" }
-  ],
-  "audios": [
-    { "kind": "url", "url": "https://cdn.example.com/bgm.mp3" }
-  ],
-  "duration": 8,
+  "prompt": "A cinematic 30-second scene...",
+  "model": "dreamina-seedance-2-5-260628",
   "resolution": "720p",
   "ratio": "16:9",
+  "duration": 30,
   "generate_audio": true
 }
 ```
 
-**Configuration:**
-
-To enable Seedance 2.5, add a 2.5 binding to `SEEDANCE_MODEL_BINDINGS`:
-
-```bash
-SEEDANCE_MODEL_BINDINGS=[{"model_id":"dreamina-seedance-2-0-260128","family":"standard"},{"model_id":"dreamina-seedance-2-5-260628","family":"seedance_2_5"}]
-```
-
-Or set it as the default:
-
-```bash
-SEEDANCE_DEFAULT_MODEL=dreamina-seedance-2-5-260628
-SEEDANCE_MODEL_FAMILY=seedance_2_5
-```
-
 #### `seedance_2_5_create_task_variations`
 
-Create 1–5 Seedance 2.5 video generation tasks in parallel.
+Create multiple Seedance 2.5 video tasks in parallel. Inherits all parameters from `seedance_2_5_create_task` and adds `variations` (1–5) and `variation_prompts`.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| Same as `seedance_2_5_create_task` | — | — | — |
-| `variations` | `int` | Yes | 1–5 |
-| `variation_prompts` | `list[str]` | No | Per-variation prompts |
-
-Returns `Seedance25VariationsOutput` with per-variation task IDs.
+> **Shared lifecycle tools:** `seedance_get_task`, `seedance_list_tasks`, and
+> `seedance_cancel_or_delete_task` work with both 2.0 and 2.5 task IDs. Use
+> them the same way regardless of which create tool produced the task.
 
 ---
 
@@ -918,10 +885,10 @@ quota. Nine model families, with these default model IDs:
 | **Seedream Pro** | `dola-seedream-5-0-pro-260628` | 10 refs, no batch, PNG/JPEG |
 | **Seedream Lite** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, PNG/JPEG |
 | **Seedream 4.x** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, JPEG only |
+| **Seedance 2.5** | `dreamina-seedance-2-5-260628` | 30 imgs / 10 vids / 10 audios, 480p / 720p, up to 30s, structured editing + extension |
 | **Seedance 2 Standard** | `dreamina-seedance-2-0-260128` | 9 imgs / 3 vids / 3 audios, 480p–4K, 0–15s |
 | **Seedance 2 Fast** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
 | **Seedance 2 Mini** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
-| **Seedance 2.5** | `dreamina-seedance-2-5-260628` | 30 imgs / 10 vids / 10 audios, 480p–720p, 0–30s, activation-gated |
 | **Seed 2.1 Pro** | *(configured via `SEED_UNDERSTANDING_MODEL_BINDINGS`)* | 256K context, images + videos, deep-thinking |
 | **Seed 2.1 Turbo** | `dola-seed-2-1-turbo-260628` | 256K context, images + videos, deep-thinking |
 
@@ -943,7 +910,7 @@ default model for that product is used.
 
 ### Seedance Async Workflow
 
-1. Call `seedance_create_task` (or `seedance_2_5_create_task` for 2.5) to create a task.
+1. Call `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5) to create a task.
 2. Immediately persist the returned `task_id`, request parameters, prompt hash,
    and intended output path to the shot manifest before polling.
 3. Poll `seedance_get_task` with the persisted `task_id` until the status is terminal.
@@ -958,9 +925,11 @@ default model for that product is used.
 7. Call `seedance_cancel_or_delete_task` only when cleanup is explicitly wanted.
 
 > **Choosing 2.0 vs 2.5:** Use `seedance_2_5_create_task` when you need
-> 30-second generation, 50 multimodal references, timestamp-level prompt
-> control, or multi-round extension. Use `seedance_create_task` for 4K,
-> 1080p, or lower cost per task. The get/list/cancel tools are shared.
+> 30-second generation, 50 multimodal references, structured editing, or
+> native extension. Use `seedance_create_task` for 4K, 1080p, or lower
+> cost per task. The get/list/cancel tools are shared — `seedance_get_task`,
+> `seedance_list_tasks`, and `seedance_cancel_or_delete_task` work with
+> task IDs from either version.
 
 ### URL-only Video References
 
@@ -1014,8 +983,7 @@ Use variation tools when you want to give the user multiple options:
 
 - `seedream_generate_image_variations` — up to 10 distinct images in one call.
 - `seed_audio_generate_variations` — up to 5 audio clips in one call.
-- `seedance_create_task_variations` — up to 5 parallel Seedance 2.0 video tasks.
-- `seedance_2_5_create_task_variations` — up to 5 parallel Seedance 2.5 video tasks.
+- `seedance_create_task_variations` (2.0) / `seedance_2_5_create_task_variations` (2.5) — up to 5 parallel video tasks.
 
 Each variation is independent. Partial failures are captured — if 4 of 5
 succeed, the tool returns 4 results and 1 error. The `VariationSummary` reports
@@ -1093,7 +1061,7 @@ Set to `0` (default) for record-only mode with no enforcement.
    durable access.
 
 2. **Poll with backoff for Seedance.** Use the `recommended_poll_after_ms`
-   from `seedance_create_task` or `seedance_2_5_create_task` output. Don't
+   from `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5) output. Don't
    poll faster than the interval — it
    wastes quota and can hit rate limits.
 
@@ -1134,8 +1102,7 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 12. **Use `media_upload` for URL-only workflows.** Seedance video references
     are URL-only. When starting with a local or Base64 video, upload it first
-    and pass the presigned URL into `seedance_create_task` or
-    `seedance_2_5_create_task`.
+     and pass the presigned URL into `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5).
 
 13. **`speech_to_text` is synchronous.** It blocks until transcription completes
     or the poll cap is reached. Provide appropriately sized audio and plan for
