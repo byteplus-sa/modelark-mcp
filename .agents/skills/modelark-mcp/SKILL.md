@@ -68,6 +68,8 @@ gracefully degrades to whatever is configured.
 - `seedream_generate_image_variations`
 - `seedance_create_task`
 - `seedance_create_task_variations`
+- `seedance_2_5_create_task`
+- `seedance_2_5_create_task_variations`
 - `seedance_get_task`
 - `seedance_list_tasks`
 - `seedance_cancel_or_delete_task`

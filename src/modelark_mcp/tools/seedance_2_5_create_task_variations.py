@@ -87,8 +87,6 @@ async def seedance_2_5_create_task_variations(
     await ctx.info(f"Starting {input.variations} parallel Seedance 2.5 task creations")
     await ctx.report_progress(progress=10, total=100)
 
-    log_cost_estimate(product="video", variations=input.variations)
-
     settings = get_settings()
     if not settings.has_modelark:
         raise ValueError("BYTEPLUS_MODELARK_API_KEY is not configured.")
@@ -136,6 +134,8 @@ async def seedance_2_5_create_task_variations(
                 f"'{caps.model_id}'."
             )
 
+    log_cost_estimate(product="video", variations=input.variations, model_id=caps.model_id)
+
     prompts = resolve_prompts(input.prompt, input.variation_prompts, input.variations)
 
     images_data: list[dict[str, Any]] | None = (
@@ -178,7 +178,9 @@ async def seedance_2_5_create_task_variations(
                 ctx,
                 provider="modelark",
                 product="video",
-                estimated_cost_usd=estimate_cost(product="video", variations=1),
+                estimated_cost_usd=estimate_cost(
+                    product="video", variations=1, model_id=caps.model_id
+                ),
             ):
                 task_id, request_id = await call_with_retry(lambda: service.create_task(request))
             await get_runtime(ctx).ownership_store.record(task_id, get_principal(ctx))

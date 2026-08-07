@@ -38,7 +38,7 @@ Key features:
 - **Runtime controls** — shared provider/principal concurrency, daily budget
   reservations, safe retries, task ownership, readiness with optional provider
   health checks, per-IP HTTP rate limiting, metrics, and tracing
-- **662 offline tests** — unit, contract, integration, HTTP security, E2E, and
+- **696 offline tests** — unit, contract, integration, HTTP security, E2E, and
   MCP conformance with 88% branch coverage
 
 ## Supported Input Modalities
@@ -53,11 +53,15 @@ accepts as reference input:
 | `seedance_create_task` | Image | ✓ | ✓ | — | `first_frame` · `last_frame` · `reference_image` | 9 | — |
 | `seedance_create_task` | Video | ✓ | — | — | `reference_video` | 3 | URL only |
 | `seedance_create_task` | Audio | ✓ | ✓ | — | `reference_audio` | 3 | Not sole input |
+| `seedance_2_5_create_task` | Image | ✓ | ✓ | — | `first_frame` · `last_frame` · `reference_image` | 30 | — |
+| `seedance_2_5_create_task` | Video | ✓ | — | — | `reference_video` | 10 | URL only |
+| `seedance_2_5_create_task` | Audio | ✓ | ✓ | — | `reference_audio` | 10 | Not sole input |
 | `seed_audio_generate` | Audio | ✓ | ✓ | ✓ | — | 3 | Exclusive w/ image |
 | `seed_audio_generate` | Image | ✓ | ✓ | — | — | 1 | Exclusive w/ audio |
 
 > The `_variations` siblings (`seedream_generate_image_variations`,
-> `seedance_create_task_variations`, `seed_audio_generate_variations`) accept
+> `seedance_create_task_variations`, `seedance_2_5_create_task_variations`,
+> `seed_audio_generate_variations`) accept
 > the same input modalities as their base tools.
 
 > [!NOTE]

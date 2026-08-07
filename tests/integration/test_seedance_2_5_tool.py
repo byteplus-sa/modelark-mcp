@@ -184,3 +184,30 @@ class TestSeedance25CreateTaskVariationsTool:
         assert result.summary.total == 3
         assert result.summary.succeeded == 3
         assert result.summary.failed == 0
+
+    async def test_variations_no_2_5_model_configured(
+        self,
+        test_env: None,
+        fake_ctx: FakeContext,
+    ) -> None:
+        """When no 2.5 model is in bindings, the variations tool raises."""
+        with pytest.raises(ValueError, match=r"No Seedance 2\.5 model is configured"):
+            await seedance_2_5_create_task_variations(
+                Seedance25VariationsInput(variations=1, prompt="test"),
+                fake_ctx,
+            )
+
+    async def test_variations_2_0_model_rejected(
+        self,
+        seedance_2_5_ctx: FakeContext,
+    ) -> None:
+        """Passing a 2.0 model ID to the 2.5 variations tool raises an error."""
+        with pytest.raises(ValueError, match=r"not a Seedance 2\.5 model"):
+            await seedance_2_5_create_task_variations(
+                Seedance25VariationsInput(
+                    variations=1,
+                    prompt="test",
+                    model="dreamina-seedance-2-0-260128",
+                ),
+                seedance_2_5_ctx,
+            )
