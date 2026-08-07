@@ -1,0 +1,151 @@
+"""Seed 2.1 understanding adapter — multimodal understanding through ModelArk.
+
+Translates domain input models to provider DTOs, calls the ModelArk Chat
+Completions API, and maps provider responses to domain output models.
+Forces ``stream: false`` for MVP — SSE streaming is deferred per the plan.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+
+from modelark_mcp.providers.modelark.client import ModelArkGateway
+from modelark_mcp.providers.modelark.schemas import (
+    ChatCompletionProviderRequest,
+    ChatCompletionProviderResponse,
+    ChatContentPart,
+    ChatMessage,
+    ChatThinkingConfig,
+    ChatUsage,
+)
+
+
+class SeedUnderstandingService:
+    """Service layer for Seed 2.1 multimodal understanding."""
+
+    def __init__(self, gateway: ModelArkGateway | None = None) -> None:
+        self._gateway = gateway or ModelArkGateway()
+
+    async def generate(
+        self,
+        request: ChatCompletionProviderRequest,
+    ) -> tuple[ChatCompletionProviderResponse, str | None]:
+        """Call the ModelArk Chat Completions API.
+
+        Returns the parsed provider response and the ModelArk request ID.
+        Raises ``ProviderError`` on non-2xx responses or timeouts.
+        """
+        try:
+            response = await self._gateway.post(
+                "/chat/completions", request.model_dump(exclude_none=True)
+            )
+        except httpx.TimeoutException:
+            raise ModelArkGateway.normalize_timeout("chat_completion") from None
+        except httpx.ConnectError as exc:
+            raise ModelArkGateway.normalize_connection_error("chat_completion", exc) from exc
+        except httpx.TransportError as exc:
+            raise ModelArkGateway.normalize_transport_error("chat_completion", exc) from exc
+
+        request_id = ModelArkGateway.extract_request_id(response)
+
+        if response.status_code >= 400:
+            raise ModelArkGateway.normalize_error(response, "chat_completion")
+
+        body = response.json()
+        return ChatCompletionProviderResponse.model_validate(body), request_id
+
+    @staticmethod
+    def build_request(
+        *,
+        model: str,
+        prompt: str,
+        image_parts: list[dict[str, Any]] | None = None,
+        video_parts: list[dict[str, Any]] | None = None,
+        system: str | None = None,
+        thinking: bool = False,
+        reasoning_effort: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        top_p: float | None = None,
+        repetition_penalty: float | None = None,
+    ) -> ChatCompletionProviderRequest:
+        """Build a provider request from domain-level parameters.
+
+        - Translates image/video URL/Base64 inputs into Chat API content parts.
+        - Forces ``stream: false`` for MVP.
+        - Video Base64 is rejected (the chat endpoint does not support it).
+        """
+        content_parts: list[ChatContentPart] = []
+
+        if image_parts:
+            for part in image_parts:
+                if part.get("kind") == "url":
+                    content_parts.append(
+                        ChatContentPart(
+                            type="image_url",
+                            image_url={"url": part["url"]},
+                        )
+                    )
+                elif part.get("kind") == "base64":
+                    mime = part.get("mime_type", "image/png")
+                    content_parts.append(
+                        ChatContentPart(
+                            type="image_url",
+                            image_url={"url": f"data:{mime};base64,{part['data']}"},
+                        )
+                    )
+
+        if video_parts:
+            for part in video_parts:
+                if part.get("kind") == "url":
+                    content_parts.append(
+                        ChatContentPart(
+                            type="video_url",
+                            video_url={"url": part["url"]},
+                        )
+                    )
+                elif part.get("kind") == "base64":
+                    raise ValueError(
+                        "Video Base64 is not supported by the chat endpoint; "
+                        "upload via media_upload and pass a URL."
+                    )
+
+        content_parts.append(ChatContentPart(type="text", text=prompt))
+
+        messages: list[ChatMessage] = []
+        if system:
+            messages.append(ChatMessage(role="system", content=system))
+        messages.append(ChatMessage(role="user", content=content_parts))
+
+        thinking_config: ChatThinkingConfig | None = None
+        if thinking:
+            thinking_config = ChatThinkingConfig(type="enabled")
+
+        return ChatCompletionProviderRequest(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+            reasoning_effort=reasoning_effort if thinking else None,
+            thinking=thinking_config,
+            stream=False,
+        )
+
+    @staticmethod
+    def extract_usage(response: ChatCompletionProviderResponse) -> ChatUsage:
+        """Extract usage info from the provider response."""
+        if response.usage is not None:
+            return response.usage
+        return ChatUsage()
+
+    @staticmethod
+    def extract_completion_id(response: ChatCompletionProviderResponse) -> str | None:
+        """Extract the provider completion ID for tracing."""
+        return response.id
+
+    async def close(self) -> None:
+        await self._gateway.close()

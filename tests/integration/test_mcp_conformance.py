@@ -93,6 +93,7 @@ class TestToolDiscovery:
             "seedance_get_task",
             "seedance_list_tasks",
             "seedance_cancel_or_delete_task",
+            "seed_understand",
             "speech_to_text",
             "media_upload",
             "media_presign",

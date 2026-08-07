@@ -315,6 +315,54 @@ for async polling via `seedance_get_task`.
 
 **Output:** `VariationSummary` + `recommended_poll_after_ms`.
 
+## seed_understand
+
+Understand images and videos, or reason about a task, through the Seed 2.1
+multimodal model.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | The question or task for the model to reason about (1-32,000 chars) |
+| `images` | list[UnderstandingImageInput] | No | Images to understand (URL or Base64, max 32) |
+| `videos` | list[UnderstandingVideoInput] | No | Videos to understand (URL only, max 32) |
+| `system` | string | No | Optional system instruction (max 32,000 chars) |
+| `model` | string | No | Override the configured Seed 2.1 model ID |
+| `thinking` | boolean | No | Enable deep-thinking reasoning (default: false) |
+| `reasoning_effort` | "low" \| "medium" \| "high" | No | Reasoning effort level (only when thinking=true) |
+| `temperature` | float | No | Sampling temperature (0.0-2.0) |
+| `max_tokens` | integer | No | Maximum output tokens (1-32,768) |
+| `top_p` | float | No | Nucleus sampling probability (0.0-1.0) |
+| `repetition_penalty` | float | No | Repetition penalty (0.0-2.0). Ark-only parameter. |
+
+**UnderstandingImageInput** and **UnderstandingVideoInput** are `MediaSource`
+subclasses with the appropriate MIME validation and size limits. Video Base64
+is not supported by the chat endpoint — upload local videos via `media_upload`
+first to get an HTTPS URL.
+
+### Output
+
+Returns `SeedUnderstandOutput` with `model`, `completion_id`, `choices`
+(each containing `content`, optional `reasoning_content`, and
+`finish_reason`), `usage` (token counts), and `request_id`.
+
+### Example
+
+```json
+{
+  "prompt": "Describe what happens in this video and identify the objects in this image.",
+  "videos": [{"kind": "url", "url": "https://.../sample.mp4", "mime_type": "video/mp4"}],
+  "images": [{"kind": "url", "url": "https://.../frame.png", "mime_type": "image/png"}],
+  "thinking": true,
+  "reasoning_effort": "medium",
+  "max_tokens": 4096
+}
+```
+
 ## speech_to_text
 
 Transcribe audio to text via Seed Speech ASR. Submits audio via HTTP, polls

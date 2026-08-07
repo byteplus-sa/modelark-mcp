@@ -7,16 +7,19 @@ Settings. Copy `.env.example` to `.env`. Empty values are ignored.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream and Seedance; sent as Bearer auth |
+| `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream, Seedance, and Seed 2.1 understanding; sent as Bearer auth |
 | `BYTEPLUS_SEED_AUDIO_API_KEY` | empty | Enables Seed Audio; sent as `X-Api-Key` |
 | `BYTEPLUS_MODELARK_BASE_URL` | AP Southeast ModelArk URL | HTTPS data-plane base URL |
 | `BYTEPLUS_SEED_AUDIO_BASE_URL` | AP Southeast Seed Speech URL | HTTPS service base URL |
 | `SEEDREAM_DEFAULT_MODEL` | `dola-seedream-5-0-pro-260628` | Default image model/endpoint ID |
 | `SEEDANCE_DEFAULT_MODEL` | `dreamina-seedance-2-0-260128` | Default video model/endpoint ID |
+| `SEED_UNDERSTANDING_DEFAULT_MODEL` | `dola-seed-2-1-turbo-260628` | Default understanding model/endpoint ID |
 | `SEEDREAM_MODEL_FAMILY` | empty | Family for a custom default: `pro`, `lite`, or `4x` |
 | `SEEDANCE_MODEL_FAMILY` | empty | Family for a custom default: `standard`, `fast`, or `mini` |
+| `SEED_UNDERSTANDING_MODEL_FAMILY` | empty | Family for a custom default: `pro` or `turbo` |
 | `SEEDREAM_MODEL_BINDINGS` | empty | JSON list of `{model_id, family}` bindings |
 | `SEEDANCE_MODEL_BINDINGS` | empty | JSON list of `{model_id, family}` bindings |
+| `SEED_UNDERSTANDING_MODEL_BINDINGS` | empty | JSON list of `{model_id, family}` bindings |
 
 The two built-in default IDs have known families. A custom ID must be bound
 explicitly; the server does not infer capabilities from substrings in an ID.
@@ -61,6 +64,7 @@ claim. Tool scopes are enforced by FastMCP:
 - `seed:audio:generate`
 - `seedream:generate`
 - `seedance:create`, `seedance:read`, `seedance:delete`
+- `understanding:read`
 - `media:upload`
 - `media:presign`
 - `artifacts:read`

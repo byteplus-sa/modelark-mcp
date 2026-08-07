@@ -7,6 +7,7 @@ models live alongside their tool handlers in ``tools/``.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -147,4 +148,31 @@ class VariationSummary(BaseModel):
     failed: int = Field(..., description="Variations that failed.")
     variations: list[VariationResult] = Field(
         default_factory=list, description="Per-variation results (artifacts, errors, and metadata)."
+    )
+
+
+class UnderstandingUsage(BaseModel):
+    """Token usage for a Seed 2.1 multimodal understanding call."""
+
+    prompt_tokens: int = Field(..., description="Number of input (prompt) tokens consumed.")
+    completion_tokens: int = Field(
+        ..., description="Number of output (completion) tokens consumed."
+    )
+    total_tokens: int = Field(..., description="Total tokens consumed (prompt + completion).")
+
+
+class UnderstandingChoice(BaseModel):
+    """A single completion choice returned by the Seed 2.1 model."""
+
+    role: Literal["assistant"] = Field(
+        "assistant", description="Message role (always 'assistant')."
+    )
+    content: str = Field(..., description="The model's text answer.")
+    reasoning_content: str | None = Field(
+        None,
+        description="Chain-of-thought reasoning text. Present only when thinking was enabled.",
+    )
+    finish_reason: str = Field(
+        ...,
+        description="Why generation stopped: 'stop', 'length', 'tool_calls', or 'content_filter'.",
     )

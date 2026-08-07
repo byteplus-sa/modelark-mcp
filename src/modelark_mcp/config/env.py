@@ -39,6 +39,11 @@ class SeedanceFamily(StrEnum):
     MINI = "mini"
 
 
+class SeedUnderstandingFamily(StrEnum):
+    PRO = "pro"
+    TURBO = "turbo"
+
+
 class AuthMode(StrEnum):
     LOCAL = "local"
     JWT = "jwt"
@@ -52,6 +57,11 @@ class ImageModelBinding(BaseModel):
 class VideoModelBinding(BaseModel):
     model_id: str = Field(min_length=1)
     family: SeedanceFamily
+
+
+class UnderstandingModelBinding(BaseModel):
+    model_id: str = Field(min_length=1)
+    family: SeedUnderstandingFamily
 
 
 class Settings(BaseSettings):
@@ -146,6 +156,19 @@ class Settings(BaseSettings):
     seedance_model_bindings: list[VideoModelBinding] = Field(
         default_factory=list,
         validation_alias="SEEDANCE_MODEL_BINDINGS",
+    )
+    seed_understanding_default_model: str = Field(
+        default="dola-seed-2-1-turbo-260628",
+        validation_alias="SEED_UNDERSTANDING_DEFAULT_MODEL",
+    )
+    seed_understanding_model_family: str = Field(
+        default="",
+        validation_alias="SEED_UNDERSTANDING_MODEL_FAMILY",
+        description="Explicit family: 'pro' or 'turbo'. Empty = infer from default model ID.",
+    )
+    seed_understanding_model_bindings: list[UnderstandingModelBinding] = Field(
+        default_factory=list,
+        validation_alias="SEED_UNDERSTANDING_MODEL_BINDINGS",
     )
 
     # --- MCP transport -------------------------------------------------------
@@ -317,6 +340,11 @@ class Settings(BaseSettings):
         return bool(self.modelark_api_key)
 
     @property
+    def has_understanding(self) -> bool:
+        """Whether Seed 2.1 understanding is configured (reuses ModelArk key)."""
+        return bool(self.modelark_api_key)
+
+    @property
     def has_seed_audio(self) -> bool:
         """Whether Seed Audio credentials are configured."""
         return bool(self.seed_audio_api_key)
@@ -427,9 +455,31 @@ class Settings(BaseSettings):
                 )
             ]
 
+        if not self.seed_understanding_model_bindings:
+            family = self.seed_understanding_model_family.strip().lower()
+            if not family:
+                if self.seed_understanding_default_model == "dola-seed-2-1-turbo-260628":
+                    family = SeedUnderstandingFamily.TURBO
+                else:
+                    raise ValueError(
+                        "A custom SEED_UNDERSTANDING_DEFAULT_MODEL requires "
+                        "SEED_UNDERSTANDING_MODEL_FAMILY or SEED_UNDERSTANDING_MODEL_BINDINGS."
+                    )
+            self.seed_understanding_model_bindings = [
+                UnderstandingModelBinding(
+                    model_id=self.seed_understanding_default_model,
+                    family=SeedUnderstandingFamily(family),
+                )
+            ]
+
         for label, bindings, default_model in (
             ("Seedream", self.seedream_model_bindings, self.seedream_default_model),
             ("Seedance", self.seedance_model_bindings, self.seedance_default_model),
+            (
+                "SeedUnderstanding",
+                self.seed_understanding_model_bindings,
+                self.seed_understanding_default_model,
+            ),
         ):
             ids = [binding.model_id for binding in bindings]
             if len(ids) != len(set(ids)):

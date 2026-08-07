@@ -16,7 +16,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from modelark_mcp.config.env import SeedanceFamily, SeedreamFamily, get_settings
+from modelark_mcp.config.env import (
+    SeedanceFamily,
+    SeedreamFamily,
+    SeedUnderstandingFamily,
+    get_settings,
+)
 
 
 class ModelFamily(StrEnum):
@@ -28,6 +33,8 @@ class ModelFamily(StrEnum):
     SEEDANCE_2 = "seedance_2"
     SEEDANCE_2_FAST = "seedance_2_fast"
     SEEDANCE_2_MINI = "seedance_2_mini"
+    SEED_2_1_PRO = "seed_2_1_pro"
+    SEED_2_1_TURBO = "seed_2_1_turbo"
 
 
 @dataclass(frozen=True)
@@ -66,6 +73,21 @@ class VideoCapabilities:
     supports_return_last_frame: bool = True
     supports_watermark: bool = True
     supports_safety_identifier: bool = True
+
+
+@dataclass(frozen=True)
+class UnderstandingCapabilities:
+    """Capabilities for multimodal understanding models (Seed 2.1)."""
+
+    family: ModelFamily
+    model_id: str
+    context_window_tokens: int = 256_000
+    supports_image: bool = True
+    supports_video: bool = True
+    supports_audio: bool = False
+    supports_thinking: bool = True
+    max_media_parts: int = 32
+    reasoning_efforts: tuple[str, ...] = ("low", "medium", "high")
 
 
 def _seedream_capabilities() -> dict[str, ImageCapabilities]:
@@ -138,12 +160,31 @@ def _seedance_capabilities() -> dict[str, VideoCapabilities]:
     return capabilities
 
 
+def _seed_understanding_capabilities() -> dict[str, UnderstandingCapabilities]:
+    """Build the Seed 2.1 understanding capability registry from configured model IDs."""
+    settings = get_settings()
+    capabilities: dict[str, UnderstandingCapabilities] = {}
+    for binding in settings.seed_understanding_model_bindings:
+        if binding.family is SeedUnderstandingFamily.PRO:
+            family = ModelFamily.SEED_2_1_PRO
+        else:
+            family = ModelFamily.SEED_2_1_TURBO
+        capabilities[binding.model_id] = UnderstandingCapabilities(
+            family=family,
+            model_id=binding.model_id,
+        )
+    return capabilities
+
+
 class CapabilityRegistry:
     """Registry of model capabilities, keyed by configured model ID."""
 
     def __init__(self) -> None:
         self._image_caps: dict[str, ImageCapabilities] = _seedream_capabilities()
         self._video_caps: dict[str, VideoCapabilities] = _seedance_capabilities()
+        self._understanding_caps: dict[str, UnderstandingCapabilities] = (
+            _seed_understanding_capabilities()
+        )
 
     def get_image_capabilities(self, model_id: str | None = None) -> ImageCapabilities:
         """Return image capabilities for the given model or the default."""
@@ -174,6 +215,23 @@ class CapabilityRegistry:
     def list_video_models(self) -> list[str]:
         """Return all configured video model IDs."""
         return list(self._video_caps.keys())
+
+    def get_understanding_capabilities(
+        self, model_id: str | None = None
+    ) -> UnderstandingCapabilities:
+        """Return understanding capabilities for the given model or the default."""
+        if model_id is None:
+            return self._understanding_caps[get_settings().seed_understanding_default_model]
+        if model_id not in self._understanding_caps:
+            raise ValueError(
+                f"Model '{model_id}' is not in the configured understanding capability "
+                f"registry. Allowed: {list(self._understanding_caps.keys())}"
+            )
+        return self._understanding_caps[model_id]
+
+    def list_understanding_models(self) -> list[str]:
+        """Return all configured understanding model IDs."""
+        return list(self._understanding_caps.keys())
 
     def validate_image_size(self, model_id: str | None, size: str | None) -> str | None:
         """Validate that the size is supported by the model, if sizes are restricted."""
