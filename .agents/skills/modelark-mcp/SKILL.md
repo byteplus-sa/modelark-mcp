@@ -712,6 +712,39 @@ Returns `SeedUnderstandOutput` with `model`, `completion_id`, `choices`
 }
 ```
 
+**Deep-thinking mode:** When `thinking=true`, the model produces
+chain-of-thought reasoning visible in `choices[].reasoning_content`. Use
+`reasoning_effort` to control depth:
+
+| Level | When to Use | Latency |
+|---|---|---|
+| `low` | Quick checks, simple OCR, basic descriptions | Fastest |
+| `medium` | Balanced analysis, moderate comparisons | Moderate |
+| `high` | Deep analysis, complex reasoning, detailed reviews | Slowest |
+
+Keep `thinking=false` for simple extraction, description, or lookup tasks
+where speed matters more than reasoning depth.
+
+**Prompt engineering tips:**
+
+- **Specify output format** — ask for JSON, markdown tables, or numbered lists
+  to get structured results
+- **Use system instructions** for role and constraints (e.g., "You are a
+  senior data analyst. Be thorough and systematic.")
+- **Break complex tasks into steps** — make focused calls (extract, then
+  analyze, then summarize) instead of one massive prompt
+- **Ask for timestamps** when referencing specific video moments
+- **For multi-language OCR**, mention expected languages in the prompt
+
+**Limitations:**
+
+- Video Base64 is not supported — upload via `media_upload` first
+- 32 media parts max (images + videos combined)
+- Synchronous call — blocks until the model responds (long videos with
+  deep-thinking can take 30+ seconds)
+- No streaming — the full response is returned at once
+- No artifact persistence — understanding returns text, not media
+
 ---
 
 ### Speech-to-Text
