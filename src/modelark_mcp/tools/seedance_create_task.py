@@ -8,7 +8,7 @@ cannot be the sole media input.
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import Literal
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
@@ -16,59 +16,18 @@ from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import get_capability_registry
-from modelark_mcp.domain.artifacts import MediaType
 from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.domain.media import MediaSource
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedance import SeedanceService
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
-from modelark_mcp.security.url_policy import validate_url
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
-
-# ---------------------------------------------------------------------------
-# Input / Output models
-# ---------------------------------------------------------------------------
-
-
-class SeedanceImageInput(MediaSource):
-    """Image input with an optional role for Seedance."""
-
-    MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.IMAGE
-    role: Literal["first_frame", "last_frame", "reference_image"] | None = Field(
-        None,
-        description="Role of this image: first_frame, last_frame, or reference_image. If omitted, provider default applies.",
-    )
-
-
-class SeedanceVideoInput(BaseModel):
-    """Video reference input for Seedance."""
-
-    kind: Literal["url"] = Field(
-        "url",
-        description="Media source kind. Always 'url' for video references.",
-    )
-    url: str = Field(..., description="HTTPS URL of the reference video.")
-    role: Literal["reference_video"] = Field(
-        "reference_video",
-        description="Role of this input. Always 'reference_video'.",
-    )
-
-    @model_validator(mode="after")
-    def validate_video_url(self) -> SeedanceVideoInput:
-        validate_url(self.url)
-        return self
-
-
-class SeedanceAudioInput(MediaSource):
-    """Audio reference input for Seedance."""
-
-    MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.AUDIO
-    role: Literal["reference_audio"] = Field(
-        "reference_audio",
-        description="Role of this input. Always 'reference_audio'.",
-    )
+from modelark_mcp.tools._seedance_shared import (
+    SeedanceAudioInput,
+    SeedanceImageInput,
+    SeedanceVideoInput,
+)
 
 
 class SeedanceCreateTaskInput(BaseModel):
@@ -93,7 +52,9 @@ class SeedanceCreateTaskInput(BaseModel):
         None,
         description=(
             "Model ID. Available: 'dreamina-seedance-2-0-260128' (Standard, default, 480p-4K, 9 imgs/3 vids/3 audios). "
-            "Fast and Mini model IDs are configured via SEEDANCE_MODEL_BINDINGS. Omit to use the default."
+            "Fast and Mini model IDs are configured via SEEDANCE_MODEL_BINDINGS. "
+            "For Seedance 2.5 (30s duration, 30 imgs/10 vids/10 audios), use seedance_2_5_create_task instead. "
+            "Omit to use the default."
         ),
     )
     resolution: Literal["480p", "720p", "1080p", "4k"] | None = Field(

@@ -37,6 +37,7 @@ class SeedanceFamily(StrEnum):
     STANDARD = "standard"
     FAST = "fast"
     MINI = "mini"
+    SEEDANCE_2_5 = "seedance_2_5"
 
 
 class SeedUnderstandingFamily(StrEnum):
@@ -147,7 +148,7 @@ class Settings(BaseSettings):
     seedance_model_family: str = Field(
         default="",
         validation_alias="SEEDANCE_MODEL_FAMILY",
-        description="Explicit family: 'standard', 'fast', or 'mini'. Empty = infer.",
+        description="Explicit family: 'standard', 'fast', 'mini', or 'seedance_2_5'. Empty = infer.",
     )
     seedream_model_bindings: list[ImageModelBinding] = Field(
         default_factory=list,
@@ -443,6 +444,8 @@ class Settings(BaseSettings):
             if not family:
                 if self.seedance_default_model == "dreamina-seedance-2-0-260128":
                     family = SeedanceFamily.STANDARD
+                elif self.seedance_default_model == "dreamina-seedance-2-5-260628":
+                    family = SeedanceFamily.SEEDANCE_2_5
                 else:
                     raise ValueError(
                         "A custom SEEDANCE_DEFAULT_MODEL requires "

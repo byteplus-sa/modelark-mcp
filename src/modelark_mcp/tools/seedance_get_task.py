@@ -33,7 +33,11 @@ class SeedanceGetTaskInput(BaseModel):
 
     task_id: str = Field(
         ...,
-        description="The task ID returned by seedance_create_task or seedance_create_task_variations.",
+        description=(
+            "The task ID returned by seedance_create_task, "
+            "seedance_create_task_variations, seedance_2_5_create_task, "
+            "or seedance_2_5_create_task_variations."
+        ),
     )
     persist_output: bool = Field(
         True,

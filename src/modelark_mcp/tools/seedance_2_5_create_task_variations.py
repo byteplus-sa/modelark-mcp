@@ -1,0 +1,226 @@
+"""``seedance_2_5_create_task_variations`` tool — parallel Seedance 2.5 video task creation.
+
+Creates N independent Seedance 2.5 video generation tasks in parallel.
+Each variation creates a separate task; the caller polls each task ID
+via ``seedance_get_task``.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated, Any
+
+from fastmcp import Context
+from pydantic import BaseModel, Field, model_validator
+
+from modelark_mcp.config.env import get_settings
+from modelark_mcp.config.model_capabilities import ModelFamily, get_capability_registry
+from modelark_mcp.domain.errors import ProviderError
+from modelark_mcp.domain.models import VariationError, VariationResult, VariationSummary
+from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.providers.modelark.seedance import SeedanceService
+from modelark_mcp.providers.retry import call_with_retry
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
+from modelark_mcp.tools._cost import DEFAULT_MAX_CONCURRENT, estimate_cost, log_cost_estimate
+from modelark_mcp.tools._parallel import resolve_prompts, run_variation_batch
+from modelark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
+
+
+class Seedance25VariationsInput(Seedance25CreateTaskInput):
+    """Input for parallel Seedance 2.5 video task creation.
+
+    Inherits all fields and validators from Seedance25CreateTaskInput
+    (prompt, images, videos, audios, model, resolution, duration, etc.)
+    and adds variations-specific fields.
+    """
+
+    prompt: str | None = Field(
+        None,
+        min_length=1,
+        max_length=32000,
+        description="Base prompt. Required if variation_prompts is None.",
+    )
+    variations: int = Field(1, ge=1, le=5, description="Number of variations.")
+    variation_prompts: list[Annotated[str, Field(min_length=1, max_length=32000)]] | None = Field(
+        None, description="Explicit prompts per variation."
+    )
+
+    @model_validator(mode="after")
+    def validate_prompt_required(self) -> Seedance25VariationsInput:
+        if self.prompt is None and not self.variation_prompts:
+            raise ValueError("Either prompt or variation_prompts must be provided.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_prompts_length(self) -> Seedance25VariationsInput:
+        if self.variation_prompts and len(self.variation_prompts) != self.variations:
+            raise ValueError(f"variation_prompts must have exactly {self.variations} entries")
+        return self
+
+
+class Seedance25VariationsOutput(BaseModel):
+    """Output for parallel Seedance 2.5 video task creation."""
+
+    summary: VariationSummary = Field(
+        ..., description="Aggregate result with per-variation task IDs and errors."
+    )
+    recommended_poll_after_ms: int = Field(
+        ..., description="Suggested delay in milliseconds before first poll."
+    )
+
+
+TOOL_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+    "openWorldHint": True,
+}
+
+
+async def seedance_2_5_create_task_variations(
+    input: Seedance25VariationsInput, ctx: Context
+) -> Seedance25VariationsOutput:
+    """Create multiple Seedance 2.5 video tasks in parallel.
+
+    Each variation creates a separate task. The caller polls each task ID
+    via ``seedance_get_task``. Partial failures are captured per variation.
+    """
+    await ctx.info(f"Starting {input.variations} parallel Seedance 2.5 task creations")
+    await ctx.report_progress(progress=10, total=100)
+
+    log_cost_estimate(product="video", variations=input.variations)
+
+    settings = get_settings()
+    if not settings.has_modelark:
+        raise ValueError("BYTEPLUS_MODELARK_API_KEY is not configured.")
+
+    registry = get_capability_registry()
+
+    if input.model:
+        caps = registry.get_video_capabilities(input.model)
+        if caps.family is not ModelFamily.SEEDANCE_2_5:
+            raise ValueError(
+                f"Model '{input.model}' is not a Seedance 2.5 model. "
+                f"Use seedance_create_task_variations for Seedance 2.0 models."
+            )
+    else:
+        video_models = registry.list_video_models()
+        seedance_2_5_ids = [
+            mid
+            for mid in video_models
+            if registry.get_video_capabilities(mid).family is ModelFamily.SEEDANCE_2_5
+        ]
+        if not seedance_2_5_ids:
+            raise ValueError(
+                "No Seedance 2.5 model is configured. Set SEEDANCE_MODEL_BINDINGS "
+                'to include a {"model_id": "dreamina-seedance-2-5-260628", "family": "seedance_2_5"} binding.'
+            )
+        caps = registry.get_video_capabilities(seedance_2_5_ids[0])
+
+    registry.validate_resolution(caps.model_id, input.resolution)
+    registry.validate_duration(caps.model_id, input.duration)
+
+    if input.priority is not None:
+        lo, hi = caps.priority_range
+        if input.priority < lo or input.priority > hi:
+            raise ValueError(
+                f"Priority {input.priority} is outside the supported range "
+                f"[{lo}, {hi}] for model '{caps.model_id}'."
+            )
+
+    if input.execution_expires_after is not None:
+        lo, hi = caps.execution_expires_after_range
+        if input.execution_expires_after < lo or input.execution_expires_after > hi:
+            raise ValueError(
+                f"execution_expires_after {input.execution_expires_after} is "
+                f"outside the supported range [{lo}, {hi}] for model "
+                f"'{caps.model_id}'."
+            )
+
+    prompts = resolve_prompts(input.prompt, input.variation_prompts, input.variations)
+
+    images_data: list[dict[str, Any]] | None = (
+        [img.model_dump() for img in input.images] if input.images else None
+    )
+    videos_data: list[dict[str, Any]] | None = (
+        [vid.model_dump() for vid in input.videos] if input.videos else None
+    )
+    audios_data: list[dict[str, Any]] | None = (
+        [aud.model_dump() for aud in input.audios] if input.audios else None
+    )
+
+    timeout = settings.request_timeout_ms / 1000
+    service = SeedanceService()
+
+    async def _create_single(idx: int) -> VariationResult:
+        try:
+            content = SeedanceService.build_content(
+                prompt=prompts[idx],
+                images=images_data,
+                videos=videos_data,
+                audios=audios_data,
+            )
+
+            request = SeedanceService.build_request(
+                model=caps.model_id,
+                content=content,
+                resolution=input.resolution,
+                ratio=input.ratio,
+                duration=input.duration,
+                generate_audio=input.generate_audio,
+                watermark=input.watermark,
+                return_last_frame=input.return_last_frame,
+                execution_expires_after=input.execution_expires_after,
+                priority=input.priority,
+                safety_identifier=input.safety_identifier,
+            )
+
+            async with billed_provider_slot(
+                ctx,
+                provider="modelark",
+                product="video",
+                estimated_cost_usd=estimate_cost(product="video", variations=1),
+            ):
+                task_id, request_id = await call_with_retry(lambda: service.create_task(request))
+            await get_runtime(ctx).ownership_store.record(task_id, get_principal(ctx))
+
+            return VariationResult(index=idx, task_id=task_id, request_id=request_id)
+        except ProviderError as exc:
+            return VariationResult(
+                index=idx,
+                error=VariationError(
+                    code=exc.code or "PROVIDER_ERROR",
+                    message=exc.message,
+                    request_id=exc.request_id,
+                    retryable=exc.retryable,
+                    ambiguous_completion=bool(exc.ambiguous_completion),
+                ),
+                request_id=exc.request_id,
+            )
+        except Exception as exc:
+            return VariationResult(
+                index=idx,
+                error=VariationError(code="UNEXPECTED_ERROR", message=str(exc)),
+            )
+
+    try:
+        summary = await run_variation_batch(
+            count=input.variations,
+            timeout=timeout,
+            factory=_create_single,
+            max_concurrent=DEFAULT_MAX_CONCURRENT,
+        )
+    finally:
+        await service.close()
+
+    await ctx.report_progress(progress=100, total=100)
+    log_info(
+        "seedance_2_5_variations_complete",
+        total=summary.total,
+        succeeded=summary.succeeded,
+        failed=summary.failed,
+    )
+
+    return Seedance25VariationsOutput(
+        summary=summary,
+        recommended_poll_after_ms=5000,
+    )
