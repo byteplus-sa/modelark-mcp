@@ -149,6 +149,20 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
         SeedUnderstandOutput,
         seed_understand,
     )
+    from modelark_mcp.tools.seedance_2_5_create_task import (
+        TOOL_ANNOTATIONS as create_2_5_annotations,
+    )
+    from modelark_mcp.tools.seedance_2_5_create_task import (
+        Seedance25CreateTaskOutput,
+        seedance_2_5_create_task,
+    )
+    from modelark_mcp.tools.seedance_2_5_create_task_variations import (
+        TOOL_ANNOTATIONS as seedance_2_5_var_annotations,
+    )
+    from modelark_mcp.tools.seedance_2_5_create_task_variations import (
+        Seedance25VariationsOutput,
+        seedance_2_5_create_task_variations,
+    )
     from modelark_mcp.tools.seedance_cancel_or_delete_task import (
         TOOL_ANNOTATIONS as cancel_annotations,
     )
@@ -231,6 +245,20 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             SeedanceVariationsOutput,
             "seedance:create",
             seedance_create_task_variations,
+        ),
+        (
+            "seedance_2_5_create_task",
+            create_2_5_annotations,
+            Seedance25CreateTaskOutput,
+            "seedance:create",
+            seedance_2_5_create_task,
+        ),
+        (
+            "seedance_2_5_create_task_variations",
+            seedance_2_5_var_annotations,
+            Seedance25VariationsOutput,
+            "seedance:create",
+            seedance_2_5_create_task_variations,
         ),
         (
             "seedance_get_task",

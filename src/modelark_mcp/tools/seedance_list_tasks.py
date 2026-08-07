@@ -48,7 +48,8 @@ class SeedanceListTasksInput(BaseModel):
     model: str | None = Field(
         None,
         description=(
-            "Filter tasks by model ID. Default available: 'dreamina-seedance-2-0-260128' (Standard). "
+            "Filter tasks by model ID. Available: 'dreamina-seedance-2-0-260128' (Standard), "
+            "'dreamina-seedance-2-5-260628' (2.5). "
             "Fast and Mini model IDs may also be configured via SEEDANCE_MODEL_BINDINGS."
         ),
     )

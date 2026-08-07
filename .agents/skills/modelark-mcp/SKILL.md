@@ -1,6 +1,6 @@
 ---
 name: modelark-mcp
-description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video, transcribe speech to text, poll and manage Seedance tasks, upload reference media to object storage (TOS or S3), and fetch persisted artifacts.
+description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video (including Seedance 2.5 with 30-second generation and 50 multimodal references), understand images and videos through Seed 2.1 (OCR, scene analysis, multimodal reasoning), transcribe speech to text, poll and manage Seedance tasks, upload reference media to object storage (TOS or S3), and fetch persisted artifacts.
 ---
 
 # ModelArk Seed Multimodal MCP Server
@@ -14,9 +14,12 @@ behind one server:
 - **Seed Audio** — full-scene audio generation with voice cloning, subtitles,
   and watermarking.
 - **Seedance** — asynchronous video generation with task-based lifecycle
-  (create, poll, list, cancel/delete).
+  (create, poll, list, cancel/delete). Two model generations: 2.0 (4K, 15s)
+  and 2.5 (30s, 50 references, timestamp editing).
 - **Seed 2.1 Understanding** — multimodal video/image understanding and
   reasoning through ModelArk Chat Completions; supports deep-thinking mode.
+  Use for OCR, scene analysis, content review, and as a visual reasoning
+  sub-agent.
 - **Speech-to-Text** — synchronous audio transcription via Seed Speech ASR.
 - **Artifacts** — durable media access after provider URLs expire.
 - **Object storage upload** — presigned URL generation for URL-only media
@@ -33,8 +36,9 @@ Invoke this skill when the user wants to:
 
 - generate or edit an image;
 - generate audio, voice-clone from references, or request several variations;
-- create, poll, list, cancel, or delete Seedance video tasks;
-- understand images or videos, or use a multimodal reasoning sub-agent;
+- create, poll, list, cancel, or delete Seedance video tasks (2.0 or 2.5);
+- understand images or videos (OCR, scene analysis, content review), or use a
+  multimodal reasoning sub-agent;
 - transcribe audio or video into timestamped, speaker-diarized text;
 - fetch a previously persisted artifact by ID;
 - upload local or Base64 media to object storage (TOS or S3) to obtain a
@@ -68,6 +72,8 @@ gracefully degrades to whatever is configured.
 - `seedream_generate_image_variations`
 - `seedance_create_task`
 - `seedance_create_task_variations`
+- `seedance_2_5_create_task`
+- `seedance_2_5_create_task_variations`
 - `seedance_get_task`
 - `seedance_list_tasks`
 - `seedance_cancel_or_delete_task`
@@ -530,6 +536,217 @@ Returns `SeedanceCancelOrDeleteOutput`.
 
 ---
 
+### Seedance 2.5 (Video) Tools
+
+Requires `BYTEPLUS_MODELARK_API_KEY` and a Seedance 2.5 model binding. Auth
+scope: `seedance:create`.
+
+Seedance 2.5 (`dreamina-seedance-2-5-260628`) is the next-generation
+audio-video joint generation model. Key differences from 2.0:
+
+- **30-second max duration** (up from 15s)
+- **50 multimodal references** (30 images, 10 videos, 10 audio — up from 9/3/3)
+- **480p and 720p** resolution (1080p/4K not in initial API)
+- **Timestamp-level prompt control** for narrative pacing and editing
+- **Multi-round extension** for multi-minute content
+- **10+ languages** with native lip-sync
+- **Activation-gated** — returns `404 ModelNotOpen` until enabled in Ark Console
+
+The API contract (endpoint, auth, `content[]` structure) is identical to 2.0.
+The get/list/cancel tools are shared — they work for both 2.0 and 2.5 tasks.
+
+#### `seedance_2_5_create_task`
+
+Create an async Seedance 2.5 video generation task. Returns a task ID for
+polling via `seedance_get_task`.
+
+**Constraints:**
+- At least one of `prompt`, `images`, or `videos` is required.
+- Audio references cannot be the sole media input.
+- Text-only (prompt with no media) is supported.
+- The tool resolves a `SEEDANCE_2_5`-family model from the registry. If no 2.5
+  model is configured, it raises a clear error.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | `str` | No | 1–32,000 characters. |
+| `images` | `list[SeedanceImageInput]` | No | Up to 30 images with roles: `first_frame`, `last_frame`, `reference_image` |
+| `videos` | `list[SeedanceVideoInput]` | No | Up to 10 videos with role: `reference_video` |
+| `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio` |
+| `model` | `str` | No | Model ID. Defaults to `dreamina-seedance-2-5-260628`. |
+| `resolution` | `"480p"` \| `"720p"` | No | |
+| `ratio` | `str` | No | Aspect ratio |
+| `duration` | `int` | No | -1 to 30 seconds |
+| `generate_audio` | `bool` | No | Generate audio track |
+| `watermark` | `bool` | No | Provider watermark + C2PA Content Credentials |
+| `return_last_frame` | `bool` | No | Include last frame for chaining clips |
+| `execution_expires_after` | `int` | No | 3600–259200 seconds |
+| `priority` | `int` | No | 0–9 |
+| `safety_identifier` | `str` | No | Max 64 characters |
+
+Returns `Seedance25CreateTaskOutput` with `task_id`, `status="queued"`, and
+`recommended_poll_after_ms`.
+
+**Example — 30-second multi-reference narrative:**
+
+```json
+{
+  "prompt": "First-person POV fruit tea ad. 0-4s: hand picks apple. 4-8s: drops into shaker, adds ice, shakes. 6-8s: finished drink close-up with brand sticker. Final frame freezes on product.",
+  "images": [
+    { "role": "reference_image", "kind": "url", "url": "https://cdn.example.com/product1.jpg" },
+    { "role": "reference_image", "kind": "url", "url": "https://cdn.example.com/product2.jpg" }
+  ],
+  "videos": [
+    { "url": "https://cdn.example.com/pov-reference.mp4" }
+  ],
+  "audios": [
+    { "kind": "url", "url": "https://cdn.example.com/bgm.mp3" }
+  ],
+  "duration": 8,
+  "resolution": "720p",
+  "ratio": "16:9",
+  "generate_audio": true
+}
+```
+
+**Configuration:**
+
+To enable Seedance 2.5, add a 2.5 binding to `SEEDANCE_MODEL_BINDINGS`:
+
+```bash
+SEEDANCE_MODEL_BINDINGS=[{"model_id":"dreamina-seedance-2-0-260128","family":"standard"},{"model_id":"dreamina-seedance-2-5-260628","family":"seedance_2_5"}]
+```
+
+Or set it as the default:
+
+```bash
+SEEDANCE_DEFAULT_MODEL=dreamina-seedance-2-5-260628
+SEEDANCE_MODEL_FAMILY=seedance_2_5
+```
+
+#### `seedance_2_5_create_task_variations`
+
+Create 1–5 Seedance 2.5 video generation tasks in parallel.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| Same as `seedance_2_5_create_task` | — | — | — |
+| `variations` | `int` | Yes | 1–5 |
+| `variation_prompts` | `list[str]` | No | Per-variation prompts |
+
+Returns `Seedance25VariationsOutput` with per-variation task IDs.
+
+---
+
+### Seed 2.1 Multimodal Understanding
+
+Requires `BYTEPLUS_MODELARK_API_KEY`. Auth scope: `understanding:read`.
+
+#### `seed_understand`
+
+Understand images and videos, or reason about a task, through the Seed 2.1
+multimodal model via ModelArk Chat Completions. Supports deep-thinking
+(chain-of-thought) reasoning. Use this for:
+
+- **Video understanding** — describe, summarize, or answer questions about video content
+- **Image understanding / OCR** — extract text, describe scenes, analyze visual content
+- **Multimodal reasoning** — combine text + images + videos for complex analysis
+- **As a reasoning sub-agent** — delegate analysis tasks that need visual context
+
+Video inputs must be HTTPS URLs (Base64 not supported by the chat endpoint).
+Upload local videos via `media_upload` first.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | `str` | Yes | 1–32,000 characters. The question or task for the model. |
+| `images` | `list[UnderstandingImageInput]` | No | Up to 32 images (URL or Base64) |
+| `videos` | `list[UnderstandingVideoInput]` | No | Up to 32 videos (URL only, no Base64) |
+| `system` | `str` | No | Optional system instruction (max 32,000 chars) |
+| `model` | `str` | No | Override the configured Seed 2.1 model ID |
+| `thinking` | `bool` | No (default `false`) | Enable deep-thinking chain-of-thought reasoning |
+| `reasoning_effort` | `"low"` \| `"medium"` \| `"high"` | No | Only when `thinking=true` |
+| `temperature` | `float` | No | 0.0–2.0. Lower = more deterministic |
+| `max_tokens` | `int` | No | 1–32768 |
+| `top_p` | `float` | No | 0.0–1.0 nucleus sampling |
+| `repetition_penalty` | `float` | No | 0.0–2.0 (Ark-only parameter) |
+
+Returns `SeedUnderstandOutput` with `model`, `completion_id`, `choices`
+(each with `content` and optional `reasoning_content`), `usage`
+(prompt_tokens, completion_tokens, total_tokens), and `request_id`.
+
+**Example — image OCR / understanding:**
+
+```json
+{
+  "prompt": "Extract all text visible in this image and describe the scene.",
+  "images": [
+    { "kind": "url", "url": "https://cdn.example.com/document.png" }
+  ]
+}
+```
+
+**Example — video understanding with deep thinking:**
+
+```json
+{
+  "prompt": "Analyze this product demo video. What are the key features shown? Are there any UI issues or bugs visible? Rate the overall production quality.",
+  "videos": [
+    { "kind": "url", "url": "https://cdn.example.com/demo.mp4" }
+  ],
+  "thinking": true,
+  "reasoning_effort": "high",
+  "max_tokens": 4096
+}
+```
+
+**Example — multimodal reasoning as a sub-agent:**
+
+```json
+{
+  "prompt": "Compare the UI in screenshot 1 with the design spec in screenshot 2. List all differences in spacing, color, and typography.",
+  "images": [
+    { "kind": "url", "url": "https://cdn.example.com/screenshot.png" },
+    { "kind": "url", "url": "https://cdn.example.com/design-spec.png" }
+  ],
+  "system": "You are a meticulous UI/UX reviewer. Be specific about pixel-level differences."
+}
+```
+
+**Deep-thinking mode:** When `thinking=true`, the model produces
+chain-of-thought reasoning visible in `choices[].reasoning_content`. Use
+`reasoning_effort` to control depth:
+
+| Level | When to Use | Latency |
+|---|---|---|
+| `low` | Quick checks, simple OCR, basic descriptions | Fastest |
+| `medium` | Balanced analysis, moderate comparisons | Moderate |
+| `high` | Deep analysis, complex reasoning, detailed reviews | Slowest |
+
+Keep `thinking=false` for simple extraction, description, or lookup tasks
+where speed matters more than reasoning depth.
+
+**Prompt engineering tips:**
+
+- **Specify output format** — ask for JSON, markdown tables, or numbered lists
+  to get structured results
+- **Use system instructions** for role and constraints (e.g., "You are a
+  senior data analyst. Be thorough and systematic.")
+- **Break complex tasks into steps** — make focused calls (extract, then
+  analyze, then summarize) instead of one massive prompt
+- **Ask for timestamps** when referencing specific video moments
+- **For multi-language OCR**, mention expected languages in the prompt
+
+**Limitations:**
+
+- Video Base64 is not supported — upload via `media_upload` first
+- 32 media parts max (images + videos combined)
+- Synchronous call — blocks until the model responds (long videos with
+  deep-thinking can take 30+ seconds)
+- No streaming — the full response is returned at once
+- No artifact persistence — understanding returns text, not media
+
+---
+
 ### Speech-to-Text
 
 Requires `SEED_SPEECH_ASR_API_KEY`. Auth scope: `seed:asr:transcribe`.
@@ -694,7 +911,7 @@ Each server process maintains shared runtime services:
 ### Model Capability Registry
 
 The server validates inputs against known model capabilities before spending
-quota. Six model families, with these default model IDs:
+quota. Nine model families, with these default model IDs:
 
 | Family | Default Model ID | Key Traits |
 |---|---|---|
@@ -704,6 +921,9 @@ quota. Six model families, with these default model IDs:
 | **Seedance 2 Standard** | `dreamina-seedance-2-0-260128` | 9 imgs / 3 vids / 3 audios, 480p–4K, 0–15s |
 | **Seedance 2 Fast** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
 | **Seedance 2 Mini** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
+| **Seedance 2.5** | `dreamina-seedance-2-5-260628` | 30 imgs / 10 vids / 10 audios, 480p–720p, 0–30s, activation-gated |
+| **Seed 2.1 Pro** | *(configured via `SEED_UNDERSTANDING_MODEL_BINDINGS`)* | 256K context, images + videos, deep-thinking |
+| **Seed 2.1 Turbo** | `dola-seed-2-1-turbo-260628` | 256K context, images + videos, deep-thinking |
 
 Custom model IDs must be explicitly bound via `SEEDREAM_MODEL_BINDINGS` or
 `SEEDANCE_MODEL_BINDINGS` JSON. When a client omits the `model` parameter, the
@@ -723,7 +943,7 @@ default model for that product is used.
 
 ### Seedance Async Workflow
 
-1. Call `seedance_create_task` to create a task.
+1. Call `seedance_create_task` (or `seedance_2_5_create_task` for 2.5) to create a task.
 2. Immediately persist the returned `task_id`, request parameters, prompt hash,
    and intended output path to the shot manifest before polling.
 3. Poll `seedance_get_task` with the persisted `task_id` until the status is terminal.
@@ -737,11 +957,16 @@ default model for that product is used.
 6. Optionally call `seedance_list_tasks` to browse recent tasks.
 7. Call `seedance_cancel_or_delete_task` only when cleanup is explicitly wanted.
 
+> **Choosing 2.0 vs 2.5:** Use `seedance_2_5_create_task` when you need
+> 30-second generation, 50 multimodal references, timestamp-level prompt
+> control, or multi-round extension. Use `seedance_create_task` for 4K,
+> 1080p, or lower cost per task. The get/list/cancel tools are shared.
+
 ### URL-only Video References
 
 1. If the user has Base64 video or a local video file, call `media_upload`.
-2. Pass the returned presigned HTTPS URL into `seedance_create_task` as a
-   video reference.
+2. Pass the returned presigned HTTPS URL into `seedance_create_task` or
+   `seedance_2_5_create_task` as a video reference.
 
 ### Speech-to-Text Transcription
 
@@ -789,7 +1014,8 @@ Use variation tools when you want to give the user multiple options:
 
 - `seedream_generate_image_variations` — up to 10 distinct images in one call.
 - `seed_audio_generate_variations` — up to 5 audio clips in one call.
-- `seedance_create_task_variations` — up to 5 parallel video tasks.
+- `seedance_create_task_variations` — up to 5 parallel Seedance 2.0 video tasks.
+- `seedance_2_5_create_task_variations` — up to 5 parallel Seedance 2.5 video tasks.
 
 Each variation is independent. Partial failures are captured — if 4 of 5
 succeed, the tool returns 4 results and 1 error. The `VariationSummary` reports
@@ -867,7 +1093,8 @@ Set to `0` (default) for record-only mode with no enforcement.
    durable access.
 
 2. **Poll with backoff for Seedance.** Use the `recommended_poll_after_ms`
-   from `seedance_create_task` output. Don't poll faster than the interval — it
+   from `seedance_create_task` or `seedance_2_5_create_task` output. Don't
+   poll faster than the interval — it
    wastes quota and can hit rate limits.
 
 3. **Make polling resumable.** Save the task ID and request metadata before the
@@ -907,11 +1134,22 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 12. **Use `media_upload` for URL-only workflows.** Seedance video references
     are URL-only. When starting with a local or Base64 video, upload it first
-    and pass the presigned URL into `seedance_create_task`.
+    and pass the presigned URL into `seedance_create_task` or
+    `seedance_2_5_create_task`.
 
 13. **`speech_to_text` is synchronous.** It blocks until transcription completes
     or the poll cap is reached. Provide appropriately sized audio and plan for
     the blocking duration.
+
+14. **Use `seed_understand` for multimodal reasoning.** It can analyze images
+    (OCR, scene description), videos (content analysis, UI review), and
+    reason across multiple media inputs. Enable `thinking=true` for complex
+    analysis. Video Base64 is not supported — upload via `media_upload` first.
+
+15. **Choose the right Seedance model.** Use 2.0 (`seedance_create_task`)
+    for 4K/1080p or lower cost. Use 2.5 (`seedance_2_5_create_task`) for
+    30-second generation, 50 references, timestamp editing, or multi-round
+    extension. The get/list/cancel tools are shared.
 
 ---
 

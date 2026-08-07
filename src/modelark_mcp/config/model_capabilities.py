@@ -33,6 +33,7 @@ class ModelFamily(StrEnum):
     SEEDANCE_2 = "seedance_2"
     SEEDANCE_2_FAST = "seedance_2_fast"
     SEEDANCE_2_MINI = "seedance_2_mini"
+    SEEDANCE_2_5 = "seedance_2_5"
     SEED_2_1_PRO = "seed_2_1_pro"
     SEED_2_1_TURBO = "seed_2_1_turbo"
 
@@ -132,7 +133,10 @@ def _seedance_capabilities() -> dict[str, VideoCapabilities]:
     capabilities: dict[str, VideoCapabilities] = {}
     for binding in settings.seedance_model_bindings:
         resolutions: tuple[str, ...]
-        if binding.family is SeedanceFamily.MINI:
+        if binding.family is SeedanceFamily.SEEDANCE_2_5:
+            family = ModelFamily.SEEDANCE_2_5
+            resolutions = ("480p", "720p")
+        elif binding.family is SeedanceFamily.MINI:
             family = ModelFamily.SEEDANCE_2_MINI
             resolutions = ("480p", "720p")
         elif binding.family is SeedanceFamily.FAST:
@@ -142,21 +146,38 @@ def _seedance_capabilities() -> dict[str, VideoCapabilities]:
             family = ModelFamily.SEEDANCE_2
             resolutions = ("480p", "720p", "1080p", "4k")
 
-        capabilities[binding.model_id] = VideoCapabilities(
-            family=family,
-            model_id=binding.model_id,
-            max_reference_images=9,
-            max_reference_videos=3,
-            max_reference_audios=3,
-            supported_resolutions=resolutions,
-            supports_seed=False,
-            supports_camera_fixed=False,
-            supports_frames=False,
-            supports_service_tier_flex=False,
-            duration_range=(-1, 15),
-            priority_range=(0, 9),
-            execution_expires_after_range=(3600, 259200),
-        )
+        if binding.family is SeedanceFamily.SEEDANCE_2_5:
+            capabilities[binding.model_id] = VideoCapabilities(
+                family=family,
+                model_id=binding.model_id,
+                max_reference_images=30,
+                max_reference_videos=10,
+                max_reference_audios=10,
+                supported_resolutions=resolutions,
+                supports_seed=False,
+                supports_camera_fixed=False,
+                supports_frames=False,
+                supports_service_tier_flex=False,
+                duration_range=(-1, 30),
+                priority_range=(0, 9),
+                execution_expires_after_range=(3600, 259200),
+            )
+        else:
+            capabilities[binding.model_id] = VideoCapabilities(
+                family=family,
+                model_id=binding.model_id,
+                max_reference_images=9,
+                max_reference_videos=3,
+                max_reference_audios=3,
+                supported_resolutions=resolutions,
+                supports_seed=False,
+                supports_camera_fixed=False,
+                supports_frames=False,
+                supports_service_tier_flex=False,
+                duration_range=(-1, 15),
+                priority_range=(0, 9),
+                execution_expires_after_range=(3600, 259200),
+            )
     return capabilities
 
 
