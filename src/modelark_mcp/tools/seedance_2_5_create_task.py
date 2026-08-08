@@ -69,7 +69,7 @@ class Seedance25CreateTaskInput(BaseModel):
         None, description="Whether to generate an audio track for the video."
     )
     watermark: bool | None = Field(
-        None, description="Whether to apply an AIGC watermark to the video."
+        False, description="Whether to apply an AIGC watermark to the video."
     )
     return_last_frame: bool | None = Field(
         None, description="Whether to return the last frame as a separate image output."
