@@ -45,7 +45,7 @@ class Seedance25CreateTaskInput(BaseModel):
     audios: list[SeedanceAudioInput] | None = Field(
         None,
         max_length=10,
-        description="Reference audio for audio-driven generation. Max 10 for Seedance 2.5. Cannot be the sole media input.",
+        description="Reference audio for audio-driven generation. Max 10 for Seedance 2.5. Audio-only input is supported (unique to 2.5): a single BGM, voice, or sound-effect track can drive visual pacing, beat matching, and lip-sync.",
     )
     model: str | None = Field(
         None,
@@ -94,20 +94,14 @@ class Seedance25CreateTaskInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_media_required(self) -> Seedance25CreateTaskInput:
-        """Audio cannot be the sole media input; text-only is allowed."""
+        """Seedance 2.5 supports audio-only input; no media at all is rejected."""
         has_images = bool(self.images)
         has_videos = bool(self.videos)
         has_audios = bool(self.audios)
         has_prompt = bool(self.prompt) or bool(getattr(self, "variation_prompts", None))
 
-        if not has_images and not has_videos:
-            if has_audios:
-                raise ValueError(
-                    "Audio references cannot be the sole media input. "
-                    "At least one image or video is required."
-                )
-            if not has_prompt:
-                raise ValueError("At least one of prompt, images, or videos is required.")
+        if not has_images and not has_videos and not has_audios and not has_prompt:
+            raise ValueError("At least one of prompt, images, videos, or audios is required.")
         return self
 
     @model_validator(mode="after")

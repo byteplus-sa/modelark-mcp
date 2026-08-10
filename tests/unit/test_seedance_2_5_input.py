@@ -91,10 +91,19 @@ class TestSeedance25CreateTaskInput:
         with pytest.raises(ValidationError):
             Seedance25CreateTaskInput(prompt="test", videos=videos, audios=audios)
 
-    def test_audio_only_rejected(self) -> None:
+    def test_audio_only_accepted(self) -> None:
+        """Seedance 2.5 supports audio-only input (unique to 2.5)."""
         audios = [SeedanceAudioInput(kind="url", url="https://example.com/aud.mp3")]
-        with pytest.raises(ValidationError, match="sole media input"):
-            Seedance25CreateTaskInput(audios=audios)
+        inp = Seedance25CreateTaskInput(audios=audios)
+        assert inp.audios is not None
+        assert len(inp.audios) == 1
+
+    def test_audio_only_with_prompt_accepted(self) -> None:
+        """Audio + prompt is also valid."""
+        audios = [SeedanceAudioInput(kind="url", url="https://example.com/aud.mp3")]
+        inp = Seedance25CreateTaskInput(prompt="dancing to the beat", audios=audios)
+        assert inp.prompt == "dancing to the beat"
+        assert len(inp.audios or []) == 1
 
     def test_no_prompt_no_media_rejected(self) -> None:
         with pytest.raises(ValidationError, match="At least one"):

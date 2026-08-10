@@ -568,7 +568,7 @@ Create an asynchronous Seedance 2.5 video generation task.
 | `prompt` | `str` | No | Text prompt (up to 32,000 chars). Optional when media inputs are provided. |
 | `images` | `list[SeedanceImageInput]` | No | Up to 30 images with roles: `first_frame`, `last_frame`, `reference_image` |
 | `videos` | `list[SeedanceVideoInput]` | No | Up to 10 videos with role: `reference_video` |
-| `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Cannot be the sole media input. |
+| `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). |
 | `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
 | `resolution` | `"480p"` \| `"720p"` | No | 2.5 supports only 480p and 720p. |
 | `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). |
@@ -581,6 +581,10 @@ Create an asynchronous Seedance 2.5 video generation task.
 | `safety_identifier` | `str` | No | Content safety tracking ID (max 64 chars). |
 
 Returns `Seedance25CreateTaskOutput` with `task_id`, `status="queued"`, and `recommended_poll_after_ms`.
+
+> **Audio-only input:** Unlike Seedance 2.0, 2.5 supports audio as the sole
+> media input — a single BGM, voice, or sound-effect track can drive visual
+> pacing, beat matching, and lip-sync without any image or video reference.
 
 **Example — 30s text-to-video with native audio:**
 

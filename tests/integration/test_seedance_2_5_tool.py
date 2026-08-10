@@ -12,6 +12,7 @@ import pytest
 
 from modelark_mcp.providers.modelark.seedance import SeedanceService
 from modelark_mcp.tools._seedance_shared import (
+    SeedanceAudioInput,
     SeedanceImageInput,
     SeedanceVideoInput,
 )
@@ -124,6 +125,31 @@ class TestSeedance25CreateTaskTool:
 
         assert isinstance(result, Seedance25CreateTaskOutput)
         assert result.task_id == "task-refs"
+
+    async def test_create_task_audio_only(
+        self,
+        seedance_2_5_ctx: FakeContext,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Seedance 2.5 supports audio-only input (unique to 2.5)."""
+
+        async def mock_create(self: SeedanceService, request: Any) -> tuple[str, str | None]:
+            return "task-audio", "req-audio"
+
+        monkeypatch.setattr(SeedanceService, "create_task", mock_create)
+        monkeypatch.setattr(SeedanceService, "close", _mock_close)
+
+        result = await seedance_2_5_create_task(
+            Seedance25CreateTaskInput(
+                prompt="visualize the music",
+                audios=[SeedanceAudioInput(kind="url", url="https://example.com/song.mp3")],
+                duration=10,
+            ),
+            seedance_2_5_ctx,
+        )
+
+        assert isinstance(result, Seedance25CreateTaskOutput)
+        assert result.task_id == "task-audio"
 
     async def test_create_task_no_2_5_model_configured(
         self,
