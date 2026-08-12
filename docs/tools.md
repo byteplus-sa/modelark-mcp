@@ -51,6 +51,43 @@ Retrieve persisted media inline by artifact ID.
 Returns `SeedMediaGetArtifactOutput` with `artifact_id`, `media_type`,
 `mime_type`, `sha256`, `bytes`, and Base64 `data`.
 
+## vod_enhance_video
+
+Enhance a public HTTPS source video through BytePlus VOD AI MediaKit. This
+tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses
+the `vod:enhance` JWT scope.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `video_url` | URL | Yes | Public HTTPS source; private and link-local destinations are rejected |
+| `scene` | `"common"` | No | Fixed current scene profile |
+| `tool_version` | `"professional"` | No | Fixed current enhancement profile |
+| `resolution` | `"4k"` | No | Fixed current output resolution |
+| `bitrate_level` | `"high"` | No | Fixed current bitrate profile |
+| `fps` | `24` | No | Fixed current frame rate in frames per second |
+| `project` | string | No | Defaults to `default`; serialized upstream as `Project` |
+| `input_duration_seconds` | number | No | Reserved for future pricing support; currently produces no estimate |
+| `persist` | boolean | No | Best-effort artifact copy (default: true) |
+
+### Output and execution limits
+
+The verified provider contract returns `status="accepted"` with a task ID.
+There is no verified Bearer-surface polling tool, so accepted tasks cannot yet
+be completed through MCP. The non-idempotent POST is not retried automatically
+because a timeout can have ambiguous completion. A completed output always
+preserves `source_url`. Persistence is reported as `not_applicable`, `persisted`,
+`failed`, or `not_requested`, and a failed artifact copy does not erase provider success.
+Durable video copies remain subject to the 200 MiB limit.
+
+The success-body mapping remains provisional and rejects unknown response
+shapes. `estimated_cost_usd` is always null until convenience-endpoint pricing
+is confirmed.
+
 ## seed_audio_generate
 
 Generate full-scene audio through Seed Speech.
@@ -156,8 +193,9 @@ Create an asynchronous Seedance video generation task.
 | `audios` | list[SeedanceAudioInput] | No | Reference audio (max 3) |
 | `model` | string | No | Override configured model ID |
 | `resolution` | "480p" \| "720p" \| "1080p" \| "4k" | No | Output resolution |
-| `ratio` | string | No | Aspect ratio |
-| `duration` | integer | No | Duration in seconds (-1 for auto, 4-15) |
+| `ratio` | string | No | Aspect ratio. Ignored for edit/extend (auto-derived from input video) |
+| `duration` | integer | No | Duration in seconds (-1 for auto, 4-15). Ignored for edit tasks (auto-derived) |
+| `omni_reference_task_type` | string | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
 | `generate_audio` | boolean | No | Generate audio for the video |
 | `watermark` | boolean | No | AIGC watermark |
 | `return_last_frame` | boolean | No | Return last frame as image |
@@ -168,6 +206,19 @@ Create an asynchronous Seedance video generation task.
 Text-only input (prompt with no media) is supported for pure text-to-video
 generation. Audio cannot be the sole media input — at least a prompt,
 image, or video is required.
+
+#### Auto-locked parameters by task type
+
+When the provider detects (or is hinted via `omni_reference_task_type`)
+that the task is video editing, extension, or first/last-frame generation,
+certain parameters are auto-derived from the input media:
+
+| Task type | Aspect ratio | Duration |
+|---|---|---|
+| Video editing | Locked to input video | Locked to input video (±0.3s) |
+| Video extension | Locked to input video | Set freely |
+| First/last-frame | Locked to first image | Set freely |
+| Text-to-video / reference | Set freely | Set freely (or `-1`) |
 
 ### Output
 

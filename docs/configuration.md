@@ -9,8 +9,10 @@ Settings. Copy `.env.example` to `.env`. Empty values are ignored.
 |---|---|---|
 | `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream, Seedance, and Seed 2.1 understanding; sent as Bearer auth |
 | `BYTEPLUS_SEED_AUDIO_API_KEY` | empty | Enables Seed Audio; sent as `X-Api-Key` |
+| `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | Enables `vod_enhance_video`; sent as Bearer auth |
 | `BYTEPLUS_MODELARK_BASE_URL` | AP Southeast ModelArk URL | HTTPS data-plane base URL |
 | `BYTEPLUS_SEED_AUDIO_BASE_URL` | AP Southeast Seed Speech URL | HTTPS service base URL |
+| `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | HTTPS VOD AI MediaKit convenience-endpoint base URL |
 | `SEEDREAM_DEFAULT_MODEL` | `dola-seedream-5-0-pro-260628` | Default image model/endpoint ID |
 | `SEEDANCE_DEFAULT_MODEL` | `dreamina-seedance-2-0-260128` | Default video model/endpoint ID |
 | `SEED_UNDERSTANDING_DEFAULT_MODEL` | `dola-seed-2-1-turbo-260628` | Default understanding model/endpoint ID |
@@ -31,7 +33,10 @@ SEEDREAM_MODEL_BINDINGS=[{"model_id":"my-image-endpoint","family":"pro"}]
 ```
 
 Credentials are startup-only. If a provider key is absent, its tools are not
-registered.
+registered. Specifically, `vod_enhance_video` is registered independently
+when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is non-empty; it does not require the
+ModelArk key. Provider base URLs must use HTTPS, include a hostname, and must
+not contain embedded credentials.
 
 ## Transport and authentication
 
@@ -65,6 +70,7 @@ claim. Tool scopes are enforced by FastMCP:
 - `seedream:generate`
 - `seedance:create`, `seedance:read`, `seedance:delete`
 - `understanding:read`
+- `vod:enhance`
 - `media:upload`
 - `media:presign`
 - `artifacts:read`
@@ -87,6 +93,15 @@ accepts URL, Base64, or local file path (stdio only).
 JWT tool scope for speech-to-text:
 
 - `seed:asr:transcribe`
+
+## VOD AI MediaKit
+
+`vod_enhance_video` is registered when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is
+set. The initial tool intentionally exposes only the exact
+`common`/`professional`/`4k`/`high`/24-fps profile and serializes the project
+label upstream as case-sensitive `Project`. Submission returns an asynchronous
+task ID; there is no verified polling tool or automatic POST retry. Convenience-endpoint
+pricing is not yet confirmed, so the tool does not emit a cost estimate.
 
 ## Object storage (TOS or S3, optional)
 

@@ -29,6 +29,7 @@ def _jwt_settings(tmp_path: Path) -> Settings:
         MCP_ALLOWED_ORIGINS="https://client.example.com",
         ARTIFACT_DIR=str(tmp_path / "artifacts"),
         BYTEPLUS_MODELARK_API_KEY="test-modelark-key",  # pragma: allowlist secret
+        BYTEPLUS_VOD_MEDIAKIT_API_KEY="test-mediakit-key",  # pragma: allowlist secret
     )
 
 
@@ -47,6 +48,11 @@ def _verifier() -> StaticTokenVerifier:
                 "client_id": "read-client",
                 "scopes": ["artifacts:read"],
                 "claims": {"sub": "reader", "tenant_id": "tenant-a"},
+            },
+            "vod-token": {
+                "client_id": "vod-client",
+                "scopes": ["vod:enhance"],
+                "claims": {"sub": "video-user", "tenant_id": "tenant-a"},
             },
         }
     )
@@ -172,6 +178,80 @@ async def test_component_scope_rejects_under_scoped_token(tmp_path: Path) -> Non
     payload = response.json()
     assert payload["result"]["isError"] is True
     assert "unknown tool" in payload["result"]["content"][0]["text"].lower()
+
+
+async def test_vod_scope_rejects_under_scoped_token(tmp_path: Path) -> None:
+    async with _http_client(tmp_path) as http_client:
+        response = await http_client.post(
+            "/mcp",
+            headers={
+                "Authorization": "Bearer read-only-token",
+                "Origin": "https://client.example.com",
+                "Accept": "application/json, text/event-stream",
+            },
+            json={
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "vod_enhance_video",
+                    "arguments": {
+                        "input": {"video_url": "https://example.com/input.mp4", "persist": False}
+                    },
+                },
+            },
+        )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"]["isError"] is True
+    assert "unknown tool" in payload["result"]["content"][0]["text"].lower()
+
+
+async def test_vod_scope_allows_dispatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from modelark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
+    from modelark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission
+    from modelark_mcp.security.auth_context import AuthContext
+
+    async def enhance(
+        _self: VodMediaKitEnhancementService, _request: object
+    ) -> EnhancementSubmission:
+        return EnhancementSubmission(
+            status="succeeded", output_url="https://output.example.com/enhanced.mp4"
+        )
+
+    async def close(_self: VodMediaKitEnhancementService) -> None:
+        return None
+
+    monkeypatch.setattr(VodMediaKitEnhancementService, "enhance", enhance)
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", close)
+    monkeypatch.setattr(
+        "modelark_mcp.tools.vod_enhance_video.get_principal",
+        lambda _ctx: AuthContext(principal_id="video-user", tenant_id="tenant-a"),
+    )
+    async with _http_client(tmp_path) as http_client:
+        response = await http_client.post(
+            "/mcp",
+            headers={
+                "Authorization": "Bearer vod-token",
+                "Origin": "https://client.example.com",
+                "Accept": "application/json, text/event-stream",
+            },
+            json={
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "vod_enhance_video",
+                    "arguments": {
+                        "input": {"video_url": "https://example.com/input.mp4", "persist": False}
+                    },
+                },
+            },
+        )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"]["isError"] is False
+    assert payload["result"]["structuredContent"]["provider"] == "byteplus-vod-mediakit"
 
 
 async def test_oversized_body_is_rejected_before_mcp(tmp_path: Path) -> None:

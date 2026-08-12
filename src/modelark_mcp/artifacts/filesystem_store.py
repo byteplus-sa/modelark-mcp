@@ -13,7 +13,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from modelark_mcp.artifacts.store import ArtifactMetadata, ArtifactStore, StoredArtifact
+from modelark_mcp.artifacts.store import (
+    ArtifactMetadata,
+    ArtifactPersistenceError,
+    ArtifactPersistenceErrorCode,
+    ArtifactStore,
+    StoredArtifact,
+)
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.observability.logger import info as log_info
@@ -27,9 +33,14 @@ from modelark_mcp.security.media_policy import (
     validate_image_mime,
     validate_video_mime,
 )
-from modelark_mcp.security.safe_downloader import SafeDownloader
+from modelark_mcp.security.safe_downloader import (
+    SafeDownloader,
+    SafeDownloadError,
+    SafeDownloadErrorCode,
+)
 
 # Host allowlist for downloading provider output URLs.
+_TRUSTED_EXACT_HOSTS: frozenset[str] = frozenset()
 _TRUSTED_HOST_SUFFIXES: tuple[str, ...] = (
     ".bytepluses.com",
     ".byteplus.com",
@@ -43,7 +54,26 @@ _TRUSTED_HOST_SUFFIXES: tuple[str, ...] = (
 def _is_trusted_host(hostname: str) -> bool:
     """Check if a hostname is in the trusted provider/TOS allowlist."""
     hostname_lower = hostname.lower()
-    return any(hostname_lower.endswith(suffix) for suffix in _TRUSTED_HOST_SUFFIXES)
+    return hostname_lower in _TRUSTED_EXACT_HOSTS or any(
+        hostname_lower.endswith(suffix) for suffix in _TRUSTED_HOST_SUFFIXES
+    )
+
+
+def _translate_download_error(exc: SafeDownloadError) -> ArtifactPersistenceError:
+    code_map: dict[SafeDownloadErrorCode, ArtifactPersistenceErrorCode] = {
+        "untrusted_host": "untrusted_output_host",
+        "redirect_rejected": "untrusted_output_host",
+        "too_large": "output_too_large",
+        "source_expired": "source_expired",
+        "invalid_url": "download_failed",
+        "http_error": "download_failed",
+        "network_error": "download_failed",
+    }
+    return ArtifactPersistenceError(
+        code_map[exc.code],
+        exc.safe_message,
+        retryable=exc.retryable,
+    )
 
 
 def _mime_to_media_type(mime_type: str) -> MediaType:
@@ -152,11 +182,14 @@ class FilesystemArtifactStore(ArtifactStore):
             "audio": limits.audio_max_bytes,
             "video": limits.video_max_bytes,
         }[media_type]
-        downloaded = await self._downloader.download(
-            url,
-            trusted_hosts=_is_trusted_host,
-            max_bytes=max_bytes,
-        )
+        try:
+            downloaded = await self._downloader.download(
+                url,
+                trusted_hosts=_is_trusted_host,
+                max_bytes=max_bytes,
+            )
+        except SafeDownloadError as exc:
+            raise _translate_download_error(exc) from exc
 
         # Validate MIME from content-type if the header is present.
         content_type = downloaded.content_type or ""
@@ -169,9 +202,31 @@ class FilesystemArtifactStore(ArtifactStore):
             )
             mime_type = content_type or mime_type
 
-        return await self._store_bytes(
-            downloaded.body, media_type, mime_type, source_expires_at, auth
-        )
+        if len(downloaded.body) > max_bytes:
+            raise ArtifactPersistenceError(
+                "output_too_large",
+                f"Provider output exceeds the {max_bytes}-byte artifact limit.",
+                retryable=False,
+            )
+
+        try:
+            return await self._store_bytes(
+                downloaded.body, media_type, mime_type, source_expires_at, auth
+            )
+        except ArtifactPersistenceError:
+            raise
+        except ValueError as exc:
+            raise ArtifactPersistenceError(
+                "invalid_output_mime",
+                "Provider output has an unsupported media type.",
+                retryable=False,
+            ) from exc
+        except OSError as exc:
+            raise ArtifactPersistenceError(
+                "storage_failed",
+                "Provider output could not be written to artifact storage.",
+                retryable=True,
+            ) from exc
 
     async def _store_bytes(
         self,

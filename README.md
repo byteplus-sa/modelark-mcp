@@ -6,7 +6,7 @@ generation through a typed, safe tool surface.
 
 ## What It Does
 
-The server provides a conditional MCP tool surface across four BytePlus
+The server provides a conditional MCP tool surface across several BytePlus
 products plus artifact access and an optional media upload helper:
 
 | Product | Tools | Description |
@@ -16,14 +16,16 @@ products plus artifact access and an optional media upload helper:
 | **Seedance** | `seedance_create_task`, `seedance_create_task_variations`, `seedance_get_task`, `seedance_list_tasks`, `seedance_cancel_or_delete_task` | Async video generation and task management through ModelArk |
 | **Seed 2.1 Understanding** | `seed_understand` | Multimodal video/image understanding and reasoning through ModelArk Chat Completions |
 | **Speech-to-Text** | `speech_to_text` | Synchronous audio transcription through Seed Speech ASR (HTTP) |
+| **VOD AI MediaKit** | `vod_enhance_video` | Submit asynchronous AI enhancement for the exact common/professional/4K/high/24-fps profile |
 | **Artifacts** | `seed_media_get_artifact` | Retrieve persisted media inline by artifact ID |
 | **Object storage** (optional) | `media_upload`, `media_presign` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL; renew expired URLs without re-uploading |
 
 Key features:
 
-- **Durable artifacts** — all generated media is persisted locally so MCP
-  resources remain usable after provider URLs expire (2h audio, 24h
-  image/video)
+- **Durable artifacts** — generated media is persisted locally so MCP
+  resources remain usable after known provider URL lifetimes (2h audio, 24h
+  ModelArk image/video); VOD MediaKit persistence is best-effort and capped at
+  200 MiB while its source URL lifetime remains unconfirmed
 - **Parallel variations** — generate N independent variations in a single
   call with `asyncio.gather`, partial failures captured per variation
 - **Per-variation seeds** — Seedream supports reproducible generation with
@@ -76,7 +78,7 @@ accepts as reference input:
 
 ## Architecture
 
-The server uses two provider gateways behind one normalized domain layer, a
+The server uses dedicated provider gateways behind one normalized domain layer, a
 lifespan-owned runtime for concurrency/budget/ownership, and a durable
 artifact store. See [docs/architecture.md](docs/architecture.md) for the full
 overview.
@@ -92,7 +94,7 @@ flowchart TB
     TR[TRAE IDE]
   end
   subgraph Server["ModelArk MCP Server (FastMCP)"]
-    Tools["Tools<br/>Seedream · Seedance · Seed Audio · Artifacts · Object storage"]
+    Tools["Tools<br/>Seedream · Seedance · Seed Audio · VOD AI MediaKit · Artifacts · Object storage"]
     Domain["Domain layer<br/>models · capability registry · errors"]
     Runtime["Runtime services<br/>concurrency · budget · ownership · retry"]
     Store["Artifact store<br/>filesystem + .meta.json"]
@@ -102,6 +104,7 @@ flowchart TB
   subgraph Providers["BytePlus"]
     MA["ModelArk gateway<br/>Bearer auth"]
     SS["Seed Speech gateway<br/>X-Api-Key"]
+    VOD["VOD AI MediaKit gateway<br/>Bearer auth"]
   end
   Client <-->|"stdio / HTTP"| Tools
   Tools --> Domain
@@ -175,6 +178,7 @@ Edit `.env` with your BytePlus credentials:
 ```dotenv
 BYTEPLUS_MODELARK_API_KEY=your_modelark_key
 BYTEPLUS_SEED_AUDIO_API_KEY=your_seed_audio_key  # pragma: allowlist secret
+BYTEPLUS_VOD_MEDIAKIT_API_KEY=your_vod_mediakit_key
 SEEDREAM_DEFAULT_MODEL=dola-seedream-5-0-pro-260628
 SEEDANCE_DEFAULT_MODEL=dreamina-seedance-2-0-260128
 ```
@@ -184,6 +188,7 @@ tools. `seed_media_get_artifact` is always available, provider tools appear only
 when their credentials are configured, `media_upload` and `media_presign` appear
 only when object storage credentials (TOS or S3) are configured, and
 `speech_to_text` appears only when `SEED_SPEECH_ASR_API_KEY` is set.
+`vod_enhance_video` appears only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set.
 
 See [Configuration](docs/configuration.md) for the full environment
 variable reference.

@@ -141,7 +141,7 @@ async def execute_seedance_create(
     finally:
         await service.close()
 
-    await get_runtime(ctx).ownership_store.record(task_id, get_principal(ctx))
+    await get_runtime(ctx).ownership_store.record("modelark", task_id, get_principal(ctx))
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

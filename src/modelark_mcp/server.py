@@ -138,6 +138,22 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             auth=component_auth(settings, "seed:asr:transcribe"),
         )(speech_to_text)
 
+    if settings.has_vod_mediakit:
+        from modelark_mcp.tools.vod_enhance_video import (
+            TOOL_ANNOTATIONS as vod_enhance_annotations,
+        )
+        from modelark_mcp.tools.vod_enhance_video import (
+            VodEnhanceVideoOutput,
+            vod_enhance_video,
+        )
+
+        server.tool(
+            name="vod_enhance_video",
+            annotations={**vod_enhance_annotations},
+            output_schema=VodEnhanceVideoOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:enhance"),
+        )(vod_enhance_video)
+
     if not settings.has_modelark:
         log_info("tools_skipped", reason="BYTEPLUS_MODELARK_API_KEY not configured")
         return
@@ -313,6 +329,7 @@ def create_server(
         instructions=(
             "BytePlus multimodal generation server. Provides Seed Audio, Seedream, "
             "Seedance, Seed 2.1 multimodal understanding, and Speech-to-Text tools. "
+            "BytePlus VOD AI MediaKit enhancement is available when configured. "
             "Generated media is persisted as durable MCP resources."
         ),
         auth=auth_provider or build_auth_provider(resolved_settings),
@@ -360,6 +377,7 @@ def create_server(
             "Status: healthy\n"
             f"ModelArk configured: {resolved_settings.has_modelark}\n"
             f"Seed Audio configured: {resolved_settings.has_seed_audio}\n"
+            f"VOD AI MediaKit configured: {resolved_settings.has_vod_mediakit}\n"
             f"TOS configured: {resolved_settings.has_tos}\n"
             f"S3 configured: {resolved_settings.has_s3}\n"
             f"Object storage backend: {resolved_settings.object_storage_backend}\n"
@@ -429,6 +447,19 @@ def create_server(
                 )
             finally:
                 await stt_gw.close()
+
+        if resolved_settings.has_vod_mediakit:
+            from modelark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
+
+            vod_gw = VodMediaKitGateway()
+            try:
+                providers["vod_mediakit"] = (
+                    "reachable"
+                    if await vod_gw.health_check(timeout_seconds=timeout)
+                    else "unreachable"
+                )
+            finally:
+                await vod_gw.close()
 
         all_reachable = all(v == "reachable" for v in providers.values())
         if all_reachable:

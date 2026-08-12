@@ -8,12 +8,14 @@ Server as shipped today. For the original design rationale, see
 
 - **Small, typed tool surface** — a handful of Pydantic-validated tools rather
   than a wide REST API.
-- **Two provider gateways, one domain layer** — Seedance and Seedream share
-  the ModelArk host and Bearer auth; Seed Audio uses a separate host and
-  `X-Api-Key`. The difference is hidden behind a normalized domain layer.
-- **Durable artifacts** — provider media URLs expire (2h audio, 24h
-  image/video), so outputs are persisted to a local store and re-exposed as
-  stable `seed-media://artifacts/{id}` MCP resources.
+- **Dedicated provider gateways, one domain layer** — Seedance and Seedream
+  share the ModelArk host and Bearer auth; Seed Audio uses a separate host and
+  `X-Api-Key`; VOD AI MediaKit uses its own Bearer-authenticated convenience
+  endpoint. The differences are hidden behind normalized adapters.
+- **Durable artifacts** — known provider media URLs expire (2h audio, 24h
+  ModelArk image/video), so outputs are persisted to a local store and
+  re-exposed as stable `seed-media://artifacts/{id}` MCP resources. MediaKit
+  source lifetime is unconfirmed and its persistence is best-effort.
 - **Safe by default** — local `stdio` requires no auth; remote HTTP requires
   JWT verification, Host/Origin protection, and body limits.
 - **Observable and budget-aware** — structured logs, Prometheus metrics, and a
@@ -34,7 +36,7 @@ src/modelark_mcp/
 │   ├── models.py
 │   └── errors.py
 ├── tools/                 # MCP tool implementations (+ _cost, _parallel, _errors)
-├── providers/             # two HTTP gateways + retry policy
+├── providers/             # dedicated HTTP gateways + retry policy
 │   ├── base.py            # BaseHttpGateway: spans, metrics, error normalization
 │   ├── retry.py
 │   ├── modelark.py        # Seedream + Seedance
@@ -48,7 +50,7 @@ src/modelark_mcp/
 └── transports (via FastMCP) # stdio + Streamable HTTP
 ```
 
-## Two-gateway domain layer
+## Provider gateway domain layer
 
 ```mermaid
 flowchart LR
@@ -57,6 +59,7 @@ flowchart LR
     Domain --> Gateway["Provider gateways\n(providers/)"]
     Gateway -->|"Bearer auth"| ModelArk["ModelArk\nSeedream + Seedance"]
     Gateway -->|"X-Api-Key"| SeedSpeech["Seed Speech\nSeed Audio"]
+    Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nvideo enhancement"]
     Server -.durable.-> Store["Artifact store\n(filesystem)"]
     Server -.state.-> Runtime["Runtime services\n(runtime.py)"]
 ```
@@ -66,10 +69,23 @@ flowchart LR
   `https://ark.ap-southeast.bytepluses.com/api/v3`.
 - **Seed Speech gateway** (`providers/seed_speech.py`) — serves Seed Audio.
   Uses `X-Api-Key` and base URL `https://voice.ap-southeast-1.bytepluses.com`.
-- Both extend `BaseHttpGateway` (`providers/base.py`), which wraps every
+- **VOD AI MediaKit gateway** (`providers/vod_mediakit/`) — serves the
+  asynchronous `vod_enhance_video` submission endpoint. It uses Bearer auth
+  and defaults to
+  `https://mediakit.ap-southeast-1.bytepluses.com/api/v1`. Its success schema
+  is provisional and isolated in the adapter; the gateway accepts only known
+  result aliases and rejects unknown shapes.
+- These gateways extend `BaseHttpGateway` (`providers/base.py`), which wraps every
   outbound request in an OpenTelemetry span, records Prometheus
   provider metrics, and normalizes transport/HTTP errors into a single
   `ProviderError` carrying a `NormalizedProviderError`.
+
+MediaKit enhancement is a non-idempotent mutation and bypasses the automatic
+retry helper: a timeout can be ambiguous after the provider has begun work.
+The current integration accepts asynchronous task submission and exposes no
+polling tool because none is verified for this Bearer surface. If a completed
+result is returned, the provider URL is preserved and persistence is
+attempted separately as a best-effort operation under the 200 MiB video limit.
 
 ## Server lifecycle and runtime services
 

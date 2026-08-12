@@ -4,15 +4,52 @@ from __future__ import annotations
 
 import base64
 import uuid
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
 
-from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
+from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore, _is_trusted_host
+from modelark_mcp.artifacts.store import ArtifactPersistenceError
 from modelark_mcp.security.auth_context import AuthContext
+from modelark_mcp.security.safe_downloader import (
+    DownloadedMedia,
+    HostPolicy,
+    SafeDownloadError,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+class StubDownloader:
+    def __init__(
+        self,
+        result: DownloadedMedia | None = None,
+        error: SafeDownloadError | None = None,
+    ) -> None:
+        self.result = result
+        self.error = error
+        self.trusted_hosts: HostPolicy | None = None
+
+    async def download(
+        self,
+        _url: str,
+        *,
+        trusted_hosts: HostPolicy,
+        max_bytes: int,
+        max_redirects: int = 5,
+    ) -> DownloadedMedia:
+        del max_bytes, max_redirects
+        self.trusted_hosts = trusted_hosts
+        if self.error is not None:
+            raise self.error
+        if self.result is None:
+            raise AssertionError("StubDownloader requires a result or error")
+        return self.result
+
+    async def close(self) -> None:
+        return None
 
 
 @pytest.fixture
@@ -149,3 +186,188 @@ class TestFilesystemArtifactStore:
         # Verify it's gone.
         with pytest.raises(FileNotFoundError):
             await store.get(ref.id)
+
+
+@pytest.mark.parametrize(
+    ("hostname", "expected"),
+    [
+        ("media.bytepluses.com", True),
+        ("MEDIA.BYTEPLUSES.COM", True),
+        ("bytepluses.com", False),
+        ("bytepluses.com.attacker.example", False),
+        ("notbytepluses.com", False),
+    ],
+)
+def test_trusted_host_policy_rejects_suffix_confusion(hostname: str, expected: bool) -> None:
+    assert _is_trusted_host(hostname) is expected
+
+
+async def test_copy_from_trusted_url_stores_valid_video(tmp_path: Path) -> None:
+    downloader = StubDownloader(
+        result=DownloadedMedia(
+            body=b"video-bytes",
+            content_type="video/mp4",
+            final_url="https://media.bytepluses.com/output.mp4",
+        )
+    )
+    store = FilesystemArtifactStore(
+        artifact_dir=str(tmp_path),
+        ttl_seconds=3600,
+        downloader=downloader,  # type: ignore[arg-type]
+    )
+    try:
+        ref = await store.copy_from_trusted_url(
+            "https://media.bytepluses.com/output.mp4?signature=secret",
+            media_type="video",
+            mime_type="video/mp4",
+        )
+    finally:
+        await store.close()
+
+    assert ref.media_type == "video"
+    assert ref.bytes == len(b"video-bytes")
+    assert downloader.trusted_hosts is not None
+    assert downloader.trusted_hosts("media.bytepluses.com") is True
+
+
+@pytest.mark.parametrize(
+    ("download_code", "artifact_code", "retryable"),
+    [
+        ("untrusted_host", "untrusted_output_host", False),
+        ("redirect_rejected", "untrusted_output_host", False),
+        ("too_large", "output_too_large", False),
+        ("source_expired", "source_expired", False),
+        ("network_error", "download_failed", True),
+        ("http_error", "download_failed", True),
+        ("invalid_url", "download_failed", False),
+    ],
+)
+async def test_copy_translates_safe_download_errors(
+    tmp_path: Path,
+    download_code: str,
+    artifact_code: str,
+    retryable: bool,
+) -> None:
+    downloader = StubDownloader(
+        error=SafeDownloadError(  # type: ignore[arg-type]
+            download_code,
+            "Safe failure without URL details.",
+            retryable=retryable,
+        )
+    )
+    store = FilesystemArtifactStore(
+        artifact_dir=str(tmp_path),
+        downloader=downloader,  # type: ignore[arg-type]
+    )
+    try:
+        with pytest.raises(ArtifactPersistenceError) as exc_info:
+            await store.copy_from_trusted_url(
+                "https://media.bytepluses.com/output.mp4?signature=must-not-leak",
+                media_type="video",
+                mime_type="video/mp4",
+            )
+    finally:
+        await store.close()
+
+    assert exc_info.value.code == artifact_code
+    assert exc_info.value.retryable is retryable
+    assert "signature=" not in str(exc_info.value)
+
+
+async def test_copy_translates_invalid_mime(tmp_path: Path) -> None:
+    downloader = StubDownloader(
+        result=DownloadedMedia(
+            body=b"html-not-video",
+            content_type="text/html",
+            final_url="https://media.bytepluses.com/output.mp4",
+        )
+    )
+    store = FilesystemArtifactStore(
+        artifact_dir=str(tmp_path),
+        downloader=downloader,  # type: ignore[arg-type]
+    )
+    try:
+        with pytest.raises(ArtifactPersistenceError) as exc_info:
+            await store.copy_from_trusted_url(
+                "https://media.bytepluses.com/output.mp4",
+                media_type="video",
+                mime_type="video/mp4",
+            )
+    finally:
+        await store.close()
+
+    assert exc_info.value.code == "invalid_output_mime"
+    assert exc_info.value.retryable is False
+
+
+async def test_copy_preserves_artifact_size_ceiling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    downloader = StubDownloader(
+        result=DownloadedMedia(
+            body=b"1234567",
+            content_type="video/mp4",
+            final_url="https://media.bytepluses.com/output.mp4",
+        )
+    )
+    store = FilesystemArtifactStore(
+        artifact_dir=str(tmp_path),
+        downloader=downloader,  # type: ignore[arg-type]
+    )
+    monkeypatch.setattr(
+        "modelark_mcp.artifacts.filesystem_store.get_media_limits",
+        lambda: SimpleNamespace(
+            image_max_bytes=4,
+            audio_max_bytes=4,
+            video_max_bytes=6,
+        ),
+    )
+    try:
+        with pytest.raises(ArtifactPersistenceError) as exc_info:
+            await store.copy_from_trusted_url(
+                "https://media.bytepluses.com/output.mp4",
+                media_type="video",
+                mime_type="video/mp4",
+            )
+    finally:
+        await store.close()
+
+    assert exc_info.value.code == "output_too_large"
+    assert exc_info.value.retryable is False
+
+
+async def test_copy_translates_storage_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    downloader = StubDownloader(
+        result=DownloadedMedia(
+            body=b"video-bytes",
+            content_type="video/mp4",
+            final_url="https://media.bytepluses.com/output.mp4",
+        )
+    )
+    store = FilesystemArtifactStore(
+        artifact_dir=str(tmp_path),
+        downloader=downloader,  # type: ignore[arg-type]
+    )
+
+    def fail_write(_path: Path, _data: bytes) -> None:
+        raise OSError("disk failure at /private/sensitive/path")
+
+    monkeypatch.setattr(store, "_atomic_write", fail_write)
+    try:
+        with pytest.raises(ArtifactPersistenceError) as exc_info:
+            await store.copy_from_trusted_url(
+                "https://media.bytepluses.com/output.mp4?signature=must-not-leak",
+                media_type="video",
+                mime_type="video/mp4",
+            )
+    finally:
+        await store.close()
+
+    assert exc_info.value.code == "storage_failed"
+    assert exc_info.value.retryable is True
+    assert "sensitive" not in str(exc_info.value)
+    assert "signature=" not in str(exc_info.value)

@@ -285,7 +285,9 @@ class TestSeedanceGetTaskTool:
             sha256="abc123",
             created_at=datetime.now(UTC).isoformat(),
         )
-        await task_artifact_cache.set("task-cached", {"video": cached_ref, "last_frame": None})
+        await task_artifact_cache.set(
+            "modelark", "task-cached", {"video": cached_ref, "last_frame": None}
+        )
 
         task = SeedanceTaskResponse(
             id="task-cached",

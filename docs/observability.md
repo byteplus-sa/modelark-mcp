@@ -64,6 +64,12 @@ Policy (per the module docstring): never log prompt text, full media URLs,
 Base64, subtitles, or credentials. Redaction is a safety net; call sites
 avoid passing these fields in the first place.
 
+`vod_enhance_video` logs lifecycle and safe persistence messages only. Its
+source and output URLs and Bearer credential are not logged. A successful
+enhancement whose best-effort artifact copy fails remains a successful tool
+result with `persistence="failed"`; operators should therefore monitor the
+returned persistence field in addition to MCP/provider success metrics.
+
 ## Prometheus metrics (`observability/metrics.py`)
 
 Seven metrics total — 5 Counters + 2 Histograms. **There are no Gauges.**
@@ -80,6 +86,11 @@ labels). Both Histograms use the `prometheus_client` default buckets
 | `modelark_mcp_artifact_operations_total` | Counter | `operation`, `status`, `media_type` | artifact store put/get | `operation` = `put` / `get`; only `status="success"` is emitted in current call sites |
 | `modelark_mcp_budget_rejections_total` | Counter | `product` | requests rejected for exceeding daily budget | one inc per rejection |
 | `modelark_mcp_retry_attempts_total` | Counter | `provider`, `operation` | retried provider attempts (excluding the initial attempt) | one inc per retry |
+
+VOD AI MediaKit POSTs are intentionally not passed through the automatic
+retry helper because they are non-idempotent and a timeout may be ambiguous.
+Consequently, `modelark_mcp_retry_attempts_total` should not increase for
+`provider="byteplus-vod-mediakit"` enhancement calls.
 
 ### `MetricsMiddleware`
 

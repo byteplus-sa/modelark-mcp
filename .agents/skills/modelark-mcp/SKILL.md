@@ -1,6 +1,6 @@
 ---
 name: modelark-mcp
-description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video (including Seedance 2.5 with 30-second generation and 50 multimodal references), understand images and videos through Seed 2.1 (OCR, scene analysis, multimodal reasoning), transcribe speech to text, poll and manage Seedance tasks, upload reference media to object storage (TOS or S3), and fetch persisted artifacts.
+description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video (including Seedance 2.5 and BytePlus VOD AI MediaKit enhancement), understand images and videos through Seed 2.1, transcribe speech to text, manage Seedance tasks, upload reference media, and fetch persisted artifacts.
 ---
 
 # ModelArk Seed Multimodal MCP Server
@@ -22,6 +22,8 @@ behind one server:
   Use for OCR, scene analysis, content review, and as a visual reasoning
   sub-agent.
 - **Speech-to-Text** — synchronous audio transcription via Seed Speech ASR.
+- **VOD AI MediaKit** — asynchronous video-enhancement submission using the exact
+  common/professional/4K/high/24-fps profile.
 - **Artifacts** — durable media access after provider URLs expire.
 - **Object storage upload** — presigned URL generation for URL-only media
   workflows such as Seedance video references.
@@ -29,7 +31,8 @@ behind one server:
 The server is built on FastMCP v3 and runs locally via `stdio` or as a
 deployable Streamable HTTP service. Generated media is persisted to a local
 artifact store with stable `seed-media://` resource URIs that survive provider
-URL expiry (2 hours for audio, 24 hours for image/video).
+URL expiry (2 hours for audio, 24 hours for ModelArk image/video). MediaKit's
+source URL lifetime is unconfirmed and its durable copy is best-effort.
 
 ## When To Use
 
@@ -41,6 +44,7 @@ Invoke this skill when the user wants to:
 - understand images or videos (OCR, scene analysis, content review), or use a
   multimodal reasoning sub-agent;
 - transcribe audio or video into timestamped, speaker-diarized text;
+- enhance a public HTTPS video with the supported VOD AI MediaKit profile;
 - fetch a previously persisted artifact by ID;
 - upload local or Base64 media to object storage (TOS or S3) to obtain a
   presigned HTTPS URL;
@@ -65,6 +69,10 @@ gracefully degrades to whatever is configured.
 ### Requires `SEED_SPEECH_ASR_API_KEY`
 
 - `speech_to_text`
+
+### Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY`
+
+- `vod_enhance_video`
 
 ### Requires `BYTEPLUS_MODELARK_API_KEY`
 
@@ -102,6 +110,7 @@ Copy `.env.example` to `.env` and configure at minimum:
 ```bash
 BYTEPLUS_MODELARK_API_KEY=your-modelark-key   # required for Seedream + Seedance
 BYTEPLUS_SEED_AUDIO_API_KEY=your-audio-key    # required for Seed Audio
+BYTEPLUS_VOD_MEDIAKIT_API_KEY=your-mediakit-key # required for VOD enhancement
 SEED_SPEECH_ASR_API_KEY=your-asr-key          # required for Speech-to-Text
 ```
 
@@ -152,6 +161,38 @@ resource URI. Read-only, idempotent, ownership-checked. Requires
 
 Returns `SeedMediaGetArtifactOutput` with `artifact_id`, `media_type`,
 `mime_type`, `sha256`, `bytes`, optional `expires_at`, and Base64 `data`.
+
+---
+
+### VOD AI MediaKit
+
+Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY`. Auth scope: `vod:enhance`.
+
+#### `vod_enhance_video`
+
+Enhance a public HTTPS video using the exact currently supported profile. The
+operation is asynchronous, mutating, non-idempotent, and open-world. Do
+not retry it automatically: a timeout may be ambiguous after provider work has
+started, and there is no MediaKit polling tool in the current integration.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `video_url` | URL | Yes | Public HTTPS source; private/link-local targets rejected |
+| `scene` | `"common"` | No | Fixed current scene profile |
+| `tool_version` | `"professional"` | No | Fixed current enhancement profile |
+| `resolution` | `"4k"` | No | Fixed current output resolution |
+| `bitrate_level` | `"high"` | No | Fixed current bitrate profile |
+| `fps` | `24` | No | Fixed current frame rate |
+| `project` | string | No | Defaults to `default`; sent upstream as `Project` |
+| `input_duration_seconds` | number | No | Reserved; no price estimate is currently produced |
+| `persist` | boolean | No | Best-effort durable artifact copy; default `true` |
+
+The verified response is `status="accepted"` with a task ID. No Bearer-surface
+polling route is verified, so do not substitute the separate AK/SK VOD APIs.
+If a completed response supplies `source_url`, retain it even when the best-effort
+copy fails. `persistence` is `not_applicable`, `persisted`, `failed`, or `not_requested`; durable
+video copies are capped at 200 MiB. `estimated_cost_usd` remains null until
+convenience-endpoint pricing and billing-unit mapping are confirmed.
 
 ---
 
@@ -426,8 +467,9 @@ polling.
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 3 audios with role: `reference_audio` |
 | `model` | `str` | No | Model ID. Default: `dreamina-seedance-2-0-260128` (Standard). Fast and Mini IDs are configured via `SEEDANCE_MODEL_BINDINGS`. |
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` \| `"4k"` | No | |
-| `ratio` | `str` | No | Aspect ratio |
-| `duration` | `int` | No | -1 to 15 seconds |
+| `ratio` | `str` | No | Aspect ratio. Ignored for edit/extend tasks (auto-derived from input video) |
+| `duration` | `int` | No | -1 (auto) to 15 seconds. Ignored for edit tasks (auto-derived from input video) |
+| `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
 | `generate_audio` | `bool` | No | Generate audio track |
 | `watermark` | `bool` | No | Provider watermark |
 | `return_last_frame` | `bool` | No | Include last frame image in output |
@@ -462,6 +504,25 @@ Returns `SeedanceCreateTaskOutput` with `task_id`, `status="queued"`, and
   "duration": 5
 }
 ```
+
+#### Auto-locked parameters by task type
+
+When the provider detects (or is hinted via `omni_reference_task_type`)
+that the task is video editing, extension, or first/last-frame generation,
+certain parameters are auto-derived from the input media and cannot be
+overridden:
+
+| Task type | Aspect ratio | Duration |
+|---|---|---|
+| Video editing | Locked to input video's ratio | Locked to input video's duration (±0.3s) |
+| Video extension | Locked to input video's ratio | Set freely |
+| First/last-frame generation | Locked to first image's ratio | Set freely |
+| Text-to-video / standard reference | Set freely | Set freely (or `-1` for auto) |
+
+Use `omni_reference_task_type` to force a specific task type when
+auto-detection is ambiguous (e.g. set to `"edit_video"` or
+`"extend_video"`). When omitted, the provider defaults to `"auto"` which
+infers the task type from the prompt and media inputs.
 
 #### `seedance_create_task_variations`
 
@@ -571,8 +632,9 @@ Create an asynchronous Seedance 2.5 video generation task.
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). |
 | `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
 | `resolution` | `"480p"` \| `"720p"` | No | 2.5 supports only 480p and 720p. |
-| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). |
-| `duration` | `int` | No | -1 (auto) to 30 seconds. |
+| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). Ignored for edit/extend tasks (auto-derived from input video). |
+| `duration` | `int` | No | -1 (auto) to 30 seconds. Ignored for edit tasks (auto-derived from input video). |
+| `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto`. |
 | `generate_audio` | `bool` | No | Whether to generate an audio track. |
 | `watermark` | `bool` | No | Apply AIGC watermark. |
 | `return_last_frame` | `bool` | No | Return the last frame as a separate image. |
@@ -836,30 +898,33 @@ The server exposes two MCP resources:
 Retrieves a persisted media artifact by its UUID. Requires `artifacts:read`
 scope in JWT mode. Returns the media content with the correct MIME type.
 
-Artifacts are the durable, locally-persisted copies of generated media. Provider
-URLs expire (2h for audio, 24h for image/video), but artifacts survive for 7
+Artifacts are the durable, locally-persisted copies of generated media. Known
+provider URLs expire (2h for audio, 24h for ModelArk image/video), but
+artifacts survive for 7
 days (configurable via `ARTIFACT_TTL_SECONDS`). Always use `persist=true` (the
 default) and reference the returned `ArtifactRef.uri` for long-lived access.
 
 ### `seed-health://status`
 
 Returns a health summary with no authentication required. Lists which products
-are configured (ModelArk, Seed Audio, Seed Speech ASR, object storage), the
+are configured (ModelArk, Seed Audio, Seed Speech ASR, VOD AI MediaKit,
+object storage), the
 artifact backend, and the active transport.
 
 ---
 
 ## Architecture
 
-### Three-Provider Design
+### Four-Provider Design
 
-The server normalizes three distinct BytePlus API surfaces:
+The server normalizes four distinct BytePlus API surfaces:
 
 | Provider | Auth | Base URL | Products |
 |---|---|---|---|
 | **ModelArk** | `Authorization: Bearer <key>` | `https://ark.ap-southeast.bytepluses.com/api/v3` | Seedream, Seedance |
 | **Seed Speech (TTS)** | `X-Api-Key: <key>` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Audio |
 | **Seed Speech (ASR)** | `X-Api-Key: <key>` (separate key) | `https://voice.ap-southeast-1.bytepluses.com` | Speech-to-Text |
+| **VOD AI MediaKit** | `Authorization: Bearer <key>` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | Video enhancement |
 
 ModelArk and Seed Speech ASR use separate API keys even though ASR shares the
 host with TTS. Tools for a product are only registered when its provider API
@@ -1028,6 +1093,10 @@ The server retries only explicitly retryable, non-ambiguous errors:
 - Timeouts are NOT retried (the operation may have succeeded server-side).
 - Provider errors with `retryable=true` are retried.
 
+Exception: `vod_enhance_video` is never automatically retried. Its POST is
+non-idempotent and a transport failure may have ambiguous completion. There is
+no verified polling tool for this asynchronous acceptance contract.
+
 For Seedance task polling, a local watcher timeout is not a generation failure.
 Resume `seedance_get_task` with the existing task ID. Only create a new task
 after the previous task reaches a terminal state and the user requests another
@@ -1122,6 +1191,13 @@ Set to `0` (default) for record-only mode with no enforcement.
     30-second generation, 50 references, timestamp editing, or multi-round
     extension. The get/list/cancel tools are shared.
 
+16. **Treat MediaKit persistence separately from enhancement.** Keep the
+    returned `source_url` whenever `vod_enhance_video` succeeds. Prefer
+    `persist=true`, but inspect `persistence` and `persistence_issue`: the
+    200 MiB limit or a safe-download/storage failure can prevent the durable
+    copy without invalidating the provider result. Do not poll, resubmit after
+    an ambiguous timeout, or present `estimated_cost_usd` as available.
+
 ---
 
 ## Environment Essentials
@@ -1131,9 +1207,11 @@ Set to `0` (default) for record-only mode with no enforcement.
 - `BYTEPLUS_MODELARK_API_KEY` — enables Seedream and Seedance
 - `BYTEPLUS_SEED_AUDIO_API_KEY` — enables Seed Audio (TTS)
 - `SEED_SPEECH_ASR_API_KEY` — enables Speech-to-Text (ASR)
+- `BYTEPLUS_VOD_MEDIAKIT_API_KEY` — enables VOD AI MediaKit enhancement
 - `BYTEPLUS_MODELARK_BASE_URL` — override ModelArk data-plane host
 - `BYTEPLUS_SEED_AUDIO_BASE_URL` — override Seed Audio host
 - `SEED_SPEECH_ASR_BASE_URL` — override ASR host
+- `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` — override the VOD AI MediaKit HTTPS API base
 - `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` — seconds between ASR query polls (default 3)
 - `SEED_SPEECH_ASR_POLL_MAX_SECONDS` — maximum total seconds to wait for ASR result (default 600)
 
