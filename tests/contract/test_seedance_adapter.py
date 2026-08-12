@@ -81,6 +81,23 @@ class TestSeedanceContentBuilding:
         )
         assert len(content) == 5  # 1 text + 2 images + 1 video + 1 audio
 
+    def test_build_request_passes_omni_reference_task_type(self) -> None:
+        content = SeedanceService.build_content(prompt="edit this video")
+        request = SeedanceService.build_request(
+            model="dreamina-seedance-2-5-260628",
+            content=content,
+            omni_reference_task_type="edit_video",
+        )
+        assert request.omni_reference_task_type == "edit_video"
+
+    def test_build_request_omni_reference_task_type_defaults_none(self) -> None:
+        content = SeedanceService.build_content(prompt="generate a video")
+        request = SeedanceService.build_request(
+            model="dreamina-seedance-2-0-260128",
+            content=content,
+        )
+        assert request.omni_reference_task_type is None
+
     def test_prompt_with_video_and_audio(self) -> None:
         content = SeedanceService.build_content(
             prompt="A dancer moving to music",

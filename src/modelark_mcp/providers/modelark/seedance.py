@@ -221,6 +221,7 @@ class SeedanceService:
         execution_expires_after: int | None = None,
         priority: int | None = None,
         safety_identifier: str | None = None,
+        omni_reference_task_type: str | None = None,
     ) -> SeedanceCreateProviderRequest:
         """Build a provider request from domain-level parameters."""
         return SeedanceCreateProviderRequest(
@@ -235,6 +236,7 @@ class SeedanceService:
             execution_expires_after=execution_expires_after,
             priority=priority,
             safety_identifier=safety_identifier,
+            omni_reference_task_type=omni_reference_task_type,
         )
 
     @staticmethod
