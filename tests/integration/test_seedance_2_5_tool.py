@@ -177,6 +177,32 @@ class TestSeedance25CreateTaskTool:
                 seedance_2_5_ctx,
             )
 
+    async def test_create_task_passes_omni_reference_task_type(
+        self,
+        seedance_2_5_ctx: FakeContext,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        captured_request: list[Any] = []
+
+        async def mock_create(self: SeedanceService, request: Any) -> tuple[str, str | None]:
+            captured_request.append(request)
+            return "task-edit-2-5", "req-edit-2-5"
+
+        monkeypatch.setattr(SeedanceService, "create_task", mock_create)
+        monkeypatch.setattr(SeedanceService, "close", _mock_close)
+
+        result = await seedance_2_5_create_task(
+            Seedance25CreateTaskInput(
+                prompt="extend the video with a sunset scene",
+                videos=[SeedanceVideoInput(url="https://example.com/source.mp4")],
+                omni_reference_task_type="extend_video",
+            ),
+            seedance_2_5_ctx,
+        )
+
+        assert isinstance(result, Seedance25CreateTaskOutput)
+        assert captured_request[0].omni_reference_task_type == "extend_video"
+
 
 class TestSeedance25CreateTaskVariationsTool:
     """Integration tests for seedance_2_5_create_task_variations."""

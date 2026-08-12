@@ -62,13 +62,31 @@ class SeedanceCreateTaskInput(BaseModel):
     )
     ratio: str | None = Field(
         None,
-        description="Output aspect ratio (e.g. '16:9', '9:16'). Must be supported by the selected model.",
+        description=(
+            "Output aspect ratio (e.g. '16:9', '9:16'). Must be supported by the selected model. "
+            "Ignored for video editing and extension tasks — the ratio is auto-derived from the "
+            "input video. For first/last-frame tasks, the ratio locks to the first image."
+        ),
     )
     duration: int | None = Field(
         None,
         ge=-1,
         le=15,
-        description="Video duration in seconds (-1 for auto). Max 15. Must be within the selected model's supported range.",
+        description=(
+            "Video duration in seconds (-1 for auto). Max 15. Must be within the selected "
+            "model's supported range. Ignored for video editing tasks — the duration is "
+            "auto-derived from the input video (within ~0.3s)."
+        ),
+    )
+    omni_reference_task_type: str | None = Field(
+        None,
+        description=(
+            "Task type hint for the provider. The provider defaults to 'auto' which "
+            "auto-detects from the prompt and media. Set explicitly to force a specific "
+            "task type (e.g. 'edit_video', 'extend_video') when auto-detection is "
+            "ambiguous. When set, ratio and duration may be auto-derived from input "
+            "media depending on the task type."
+        ),
     )
     generate_audio: bool | None = Field(
         None, description="Whether to generate an audio track for the video."
@@ -220,6 +238,7 @@ async def seedance_create_task(
         execution_expires_after=input.execution_expires_after,
         priority=input.priority,
         safety_identifier=input.safety_identifier,
+        omni_reference_task_type=input.omni_reference_task_type,
     )
 
     await ctx.report_progress(progress=50, total=100)

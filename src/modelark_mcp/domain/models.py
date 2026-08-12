@@ -118,6 +118,10 @@ class SeedanceTaskSettings(BaseModel):
     resolution: str | None = Field(None, description="Output video resolution.")
     ratio: str | None = Field(None, description="Output aspect ratio (e.g. 16:9).")
     duration: int | str | None = Field(None, description="Video duration in seconds, or 'auto'.")
+    omni_reference_task_type: str | None = Field(
+        None,
+        description="Provider task type hint (e.g. auto, edit_video, extend_video).",
+    )
     generate_audio: bool | None = Field(None, description="Whether an audio track was generated.")
     return_last_frame: bool | None = Field(
         None, description="Whether the last frame was returned as a separate image."

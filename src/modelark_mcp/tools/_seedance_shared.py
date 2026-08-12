@@ -78,9 +78,9 @@ async def execute_seedance_create(
     Args:
         input_model: The validated input model (SeedanceCreateTaskInput or
             Seedance25CreateTaskInput). Must have prompt, images, videos,
-            audios, resolution, ratio, duration, generate_audio, watermark,
-            return_last_frame, execution_expires_after, priority,
-            safety_identifier fields.
+            audios, resolution, ratio, duration, omni_reference_task_type,
+            generate_audio, watermark, return_last_frame,
+            execution_expires_after, priority, safety_identifier fields.
         ctx: MCP Context.
         caps: Resolved VideoCapabilities for the target model.
 
@@ -120,6 +120,7 @@ async def execute_seedance_create(
         execution_expires_after=input_model.execution_expires_after,
         priority=input_model.priority,
         safety_identifier=input_model.safety_identifier,
+        omni_reference_task_type=input_model.omni_reference_task_type,
     )
 
     await ctx.report_progress(progress=50, total=100)
