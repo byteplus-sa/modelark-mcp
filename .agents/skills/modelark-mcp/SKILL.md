@@ -212,7 +212,7 @@ exclusive.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `text_prompt` | `str` | Yes | 1–3000 characters |
-| `audio_references` | `list[AudioReference]` | No | Up to 3 references (speaker ID, URL, or Base64) |
+| `audio_references` | `list[AudioReference]` | No | Up to 3 references (speaker ID, URL, or Base64). Base64 WAV is preflight-checked against the 30s limit. |
 | `image_reference` | `MediaSource` | No | Image for context-aware audio |
 | `output` | `AudioOutputOptions` | No | Format (wav/mp3/pcm/ogg), sample_rate, speech_rate, loudness_rate, pitch_rate, subtitle options |
 | `watermark` | `AudioWatermarkOptions` | No | Enable watermark and optional metadata |
