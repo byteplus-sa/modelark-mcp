@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.domain.artifacts import MediaType
 from modelark_mcp.security.media_policy import (
+    check_audio_duration_from_base64,
     check_base64_size,
     get_media_limits,
     validate_audio_mime,
@@ -138,6 +139,7 @@ class AudioReference(BaseModel):
         if self.kind == "base64" and self.data:
             limits = get_media_limits()
             check_base64_size(self.data, limits.audio_max_bytes, label="audio")
+            check_audio_duration_from_base64(self.data, limits.audio_max_seconds, label="audio")
 
         if self.mime_type:
             validate_audio_mime(self.mime_type)

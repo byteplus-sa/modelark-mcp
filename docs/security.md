@@ -223,6 +223,10 @@ Allowed MIME types:
 
 `check_base64_size` estimates decoded size as `(len(stripped) * 3) // 4`
 (without full decode); `decode_base64_safely` validates then decodes.
+`check_audio_duration_from_base64` decodes WAV (RIFF) headers and enforces
+`audio_max_seconds` for Base64 audio references; non-WAV formats (MP3, PCM,
+OGG) cannot be measured without a full decoder and are skipped — the
+provider enforces the limit server-side for those.
 
 > `MCP_INLINE_MEDIA_MAX_BYTES` (default 8 MiB) lives in `config/env.py`, not
 > here. It caps **inline MCP media returned to the client**; the per-type

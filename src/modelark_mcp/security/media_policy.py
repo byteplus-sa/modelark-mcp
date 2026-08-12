@@ -1,12 +1,14 @@
-"""Media policy — MIME and size preflight for Base64 media.
+"""Media policy — MIME, size, and duration preflight for Base64 media.
 
-Preflight Base64 decoded size and MIME type before calling the provider.
-This prevents oversized or malicious media from reaching the upstream API.
+Preflight Base64 decoded size, MIME type, and audio duration before calling
+the provider. This prevents oversized or malicious media from reaching the
+upstream API.
 """
 
 from __future__ import annotations
 
 import base64
+import struct
 from typing import ClassVar
 
 from pydantic import BaseModel
@@ -131,3 +133,66 @@ def decode_base64_safely(data: str, max_bytes: int, *, label: str = "media") -> 
         return base64.b64decode(data, validate=True)
     except Exception as exc:
         raise MediaValidationError(f"Invalid Base64 data for {label}: {exc}") from exc
+
+
+def _parse_wav_duration(raw: bytes) -> float | None:
+    """Parse a WAV file's RIFF header and return duration in seconds.
+
+    Walks the WAVE chunk list to find ``fmt `` (byte rate) and ``data``
+    (payload size). Returns ``None`` for non-WAV data or malformed headers.
+    """
+    if len(raw) < 12:
+        return None
+    if raw[:4] != b"RIFF" or raw[8:12] != b"WAVE":
+        return None
+
+    offset = 12
+    byte_rate: int | None = None
+    data_size: int | None = None
+
+    while offset + 8 <= len(raw):
+        chunk_id = raw[offset : offset + 4]
+        chunk_size = struct.unpack_from("<I", raw, offset + 4)[0]
+        offset += 8
+
+        if chunk_id == b"fmt " and offset + 16 <= len(raw):
+            byte_rate = struct.unpack_from("<I", raw, offset + 8)[0]
+        elif chunk_id == b"data":
+            data_size = chunk_size
+            break
+
+        offset += chunk_size
+        if chunk_size % 2 == 1:
+            offset += 1
+
+    if byte_rate and data_size is not None and byte_rate > 0:
+        return data_size / byte_rate
+    return None
+
+
+def check_audio_duration_from_base64(
+    data: str, max_seconds: int, *, label: str = "audio"
+) -> float | None:
+    """Check audio duration from Base64-encoded WAV data.
+
+    Decodes the Base64 data and parses the WAV RIFF header to determine
+    duration. For non-WAV formats (MP3, PCM, OGG), duration cannot be
+    determined without a full decoder and the check is skipped — the
+    provider enforces the limit server-side.
+
+    Returns the duration in seconds if it could be determined, ``None``
+    otherwise.
+    Raises :class:`MediaValidationError` if the duration exceeds
+    ``max_seconds``.
+    """
+    try:
+        raw = base64.b64decode(data, validate=True)
+    except Exception as exc:
+        raise MediaValidationError(f"Invalid Base64 data for {label}: {exc}") from exc
+
+    duration = _parse_wav_duration(raw)
+    if duration is not None and duration > max_seconds:
+        raise MediaValidationError(
+            f"{label} duration ({duration:.1f}s) exceeds limit ({max_seconds}s)."
+        )
+    return duration
