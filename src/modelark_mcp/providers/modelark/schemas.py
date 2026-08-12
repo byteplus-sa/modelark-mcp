@@ -89,6 +89,7 @@ class SeedanceCreateProviderRequest(BaseModel):
     resolution: str | None = None
     ratio: str | None = None
     duration: int | None = None
+    omni_reference_task_type: str | None = None
     camera_fixed: bool | None = None
     watermark: bool | None = None
     generate_audio: bool | None = None
@@ -126,6 +127,7 @@ class SeedanceGenerationConfig(BaseModel):
     resolution: str | None = None
     ratio: str | None = None
     duration: int | str | None = None
+    omni_reference_task_type: str | None = None
     seed: int | None = None
     camera_fixed: bool | None = None
     watermark: bool | None = None
@@ -160,6 +162,7 @@ class SeedanceTaskResponse(BaseModel):
     resolution: str | None = None
     ratio: str | None = None
     duration: int | str | None = None
+    omni_reference_task_type: str | None = None
     framespersecond: int | None = None
     service_tier: str | None = None
     execution_expires_after: int | None = None

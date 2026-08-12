@@ -156,8 +156,9 @@ Create an asynchronous Seedance video generation task.
 | `audios` | list[SeedanceAudioInput] | No | Reference audio (max 3) |
 | `model` | string | No | Override configured model ID |
 | `resolution` | "480p" \| "720p" \| "1080p" \| "4k" | No | Output resolution |
-| `ratio` | string | No | Aspect ratio |
-| `duration` | integer | No | Duration in seconds (-1 for auto, 4-15) |
+| `ratio` | string | No | Aspect ratio. Ignored for edit/extend (auto-derived from input video) |
+| `duration` | integer | No | Duration in seconds (-1 for auto, 4-15). Ignored for edit tasks (auto-derived) |
+| `omni_reference_task_type` | string | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
 | `generate_audio` | boolean | No | Generate audio for the video |
 | `watermark` | boolean | No | AIGC watermark |
 | `return_last_frame` | boolean | No | Return last frame as image |
@@ -168,6 +169,19 @@ Create an asynchronous Seedance video generation task.
 Text-only input (prompt with no media) is supported for pure text-to-video
 generation. Audio cannot be the sole media input — at least a prompt,
 image, or video is required.
+
+#### Auto-locked parameters by task type
+
+When the provider detects (or is hinted via `omni_reference_task_type`)
+that the task is video editing, extension, or first/last-frame generation,
+certain parameters are auto-derived from the input media:
+
+| Task type | Aspect ratio | Duration |
+|---|---|---|
+| Video editing | Locked to input video | Locked to input video (±0.3s) |
+| Video extension | Locked to input video | Set freely |
+| First/last-frame | Locked to first image | Set freely |
+| Text-to-video / reference | Set freely | Set freely (or `-1`) |
 
 ### Output
 

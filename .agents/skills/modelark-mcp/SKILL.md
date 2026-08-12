@@ -426,8 +426,9 @@ polling.
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 3 audios with role: `reference_audio` |
 | `model` | `str` | No | Model ID. Default: `dreamina-seedance-2-0-260128` (Standard). Fast and Mini IDs are configured via `SEEDANCE_MODEL_BINDINGS`. |
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` \| `"4k"` | No | |
-| `ratio` | `str` | No | Aspect ratio |
-| `duration` | `int` | No | -1 to 15 seconds |
+| `ratio` | `str` | No | Aspect ratio. Ignored for edit/extend tasks (auto-derived from input video) |
+| `duration` | `int` | No | -1 (auto) to 15 seconds. Ignored for edit tasks (auto-derived from input video) |
+| `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
 | `generate_audio` | `bool` | No | Generate audio track |
 | `watermark` | `bool` | No | Provider watermark |
 | `return_last_frame` | `bool` | No | Include last frame image in output |
@@ -462,6 +463,25 @@ Returns `SeedanceCreateTaskOutput` with `task_id`, `status="queued"`, and
   "duration": 5
 }
 ```
+
+#### Auto-locked parameters by task type
+
+When the provider detects (or is hinted via `omni_reference_task_type`)
+that the task is video editing, extension, or first/last-frame generation,
+certain parameters are auto-derived from the input media and cannot be
+overridden:
+
+| Task type | Aspect ratio | Duration |
+|---|---|---|
+| Video editing | Locked to input video's ratio | Locked to input video's duration (±0.3s) |
+| Video extension | Locked to input video's ratio | Set freely |
+| First/last-frame generation | Locked to first image's ratio | Set freely |
+| Text-to-video / standard reference | Set freely | Set freely (or `-1` for auto) |
+
+Use `omni_reference_task_type` to force a specific task type when
+auto-detection is ambiguous (e.g. set to `"edit_video"` or
+`"extend_video"`). When omitted, the provider defaults to `"auto"` which
+infers the task type from the prompt and media inputs.
 
 #### `seedance_create_task_variations`
 
@@ -571,8 +591,9 @@ Create an asynchronous Seedance 2.5 video generation task.
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). |
 | `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
 | `resolution` | `"480p"` \| `"720p"` | No | 2.5 supports only 480p and 720p. |
-| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). |
-| `duration` | `int` | No | -1 (auto) to 30 seconds. |
+| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). Ignored for edit/extend tasks (auto-derived from input video). |
+| `duration` | `int` | No | -1 (auto) to 30 seconds. Ignored for edit tasks (auto-derived from input video). |
+| `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto`. |
 | `generate_audio` | `bool` | No | Whether to generate an audio track. |
 | `watermark` | `bool` | No | Apply AIGC watermark. |
 | `return_last_frame` | `bool` | No | Return the last frame as a separate image. |

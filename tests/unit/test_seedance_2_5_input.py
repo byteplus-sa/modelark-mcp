@@ -109,6 +109,17 @@ class TestSeedance25CreateTaskInput:
         with pytest.raises(ValidationError, match="At least one"):
             Seedance25CreateTaskInput()
 
+    def test_omni_reference_task_type_accepted(self) -> None:
+        inp = Seedance25CreateTaskInput(
+            prompt="edit this video",
+            omni_reference_task_type="edit_video",
+        )
+        assert inp.omni_reference_task_type == "edit_video"
+
+    def test_omni_reference_task_type_none_default(self) -> None:
+        inp = Seedance25CreateTaskInput(prompt="test")
+        assert inp.omni_reference_task_type is None
+
 
 class TestSeedance25VariationsInput:
     """Tests for Seedance25VariationsInput validators."""
