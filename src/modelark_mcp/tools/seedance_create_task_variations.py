@@ -161,7 +161,7 @@ async def seedance_create_task_variations(
                 estimated_cost_usd=estimate_cost(product="video", variations=1),
             ):
                 task_id, request_id = await call_with_retry(lambda: service.create_task(request))
-            await get_runtime(ctx).ownership_store.record(task_id, get_principal(ctx))
+            await get_runtime(ctx).ownership_store.record("modelark", task_id, get_principal(ctx))
 
             return VariationResult(index=idx, task_id=task_id, request_id=request_id)
         except ProviderError as exc:

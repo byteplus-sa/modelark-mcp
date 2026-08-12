@@ -82,7 +82,7 @@ async def seedance_list_tasks(
     await ctx.info("Listing Seedance tasks")
     await ctx.report_progress(progress=20, total=100)
     owner = get_principal(ctx)
-    owned_task_ids = await get_runtime(ctx).ownership_store.list_task_ids(owner)
+    owned_task_ids = await get_runtime(ctx).ownership_store.list_task_ids("modelark", owner)
 
     requested_task_ids = input.task_ids
     if not owner.is_local:

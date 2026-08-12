@@ -86,7 +86,7 @@ async def seedance_get_task(
     await ctx.report_progress(progress=20, total=100)
     runtime = get_runtime(ctx)
     owner = get_principal(ctx)
-    await runtime.ownership_store.require_owner(input.task_id, owner)
+    await runtime.ownership_store.require_owner("modelark", input.task_id, owner)
 
     service = SeedanceService()
     try:
@@ -112,7 +112,7 @@ async def seedance_get_task(
     last_frame_ref: ArtifactRef | None = None
 
     if task.status == "succeeded" and input.persist_output:
-        cache = await runtime.task_artifact_cache.get(input.task_id)
+        cache = await runtime.task_artifact_cache.get("modelark", input.task_id)
         if cache:
             video_ref = cache.get("video")
             last_frame_ref = cache.get("last_frame")
@@ -164,6 +164,7 @@ async def seedance_get_task(
             # Don't cache failures — allow retry on next poll.
             if video_ref is not None or last_frame_ref is not None:
                 await runtime.task_artifact_cache.set(
+                    "modelark",
                     input.task_id,
                     {
                         "video": video_ref,

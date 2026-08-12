@@ -1,7 +1,7 @@
 # API Reference
 
-Complete tool schemas, inputs, outputs, and examples for all eleven MCP tools
-(nine core plus optional media upload and presign helpers).
+Complete schemas, inputs, outputs, and examples for the conditional MCP tool
+surface.
 
 ## Tool Inventory
 
@@ -18,6 +18,7 @@ Complete tool schemas, inputs, outputs, and examples for all eleven MCP tools
 | 9 | `seedance_cancel_or_delete_task` | Seedance | Destructive | ModelArk |
 | 10 | `media_upload` | Object storage (optional) | Synchronous | TOS / S3 |
 | 11 | `media_presign` | Object storage (optional) | Read-only | TOS / S3 |
+| 12 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
 
 ## Tool Annotations
 
@@ -34,6 +35,68 @@ Complete tool schemas, inputs, outputs, and examples for all eleven MCP tools
 | `seedance_cancel_or_delete_task` | false | true | false | true |
 | `media_upload` | false | false | false | true |
 | `media_presign` | true | false | true | false |
+| `vod_enhance_video` | false | false | false | true |
+
+---
+
+## vod_enhance_video
+
+Enhance a public HTTPS video through the Bearer-authenticated BytePlus VOD AI
+MediaKit convenience endpoint. The tool is registered only when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is configured and requires the `vod:enhance`
+scope in JWT mode.
+
+The verified contract returns an accepted asynchronous task and deliberately fixes the
+provider profile to `common` / `professional` / `4k` / `high` / 24 fps. It
+does not expose polling. The POST is non-idempotent and is never retried
+automatically because a timeout may occur after the provider began processing.
+
+### Input
+
+| Field | Type | Required | Default | Constraints |
+|---|---|---|---|---|
+| `video_url` | URL | Yes | — | Public HTTPS source; private, loopback, and link-local targets rejected |
+| `scene` | `"common"` | No | `"common"` | Exact initial profile |
+| `tool_version` | `"professional"` | No | `"professional"` | Exact initial profile |
+| `resolution` | `"4k"` | No | `"4k"` | Exact initial profile |
+| `bitrate_level` | `"high"` | No | `"high"` | Exact initial profile |
+| `fps` | `24` | No | `24` | Frames per second |
+| `project` | string | No | `"default"` | 1–128 characters; serialized upstream as `Project` |
+| `input_duration_seconds` | number \| null | No | `null` | Positive; reserved for future pricing support |
+| `persist` | boolean | No | `true` | Best-effort durable artifact copy |
+
+### Output
+
+Returns `VodEnhanceVideoOutput` with provider `byteplus-vod-mediakit` and
+`status="accepted"` plus task/request IDs. If the provider directly returns a
+completed result, status is `succeeded` and `source_url` is preserved whether
+persistence succeeds, is skipped, or fails.
+
+When `persist=true`, the server attempts an SSRF-safe copy into the artifact
+store. Video persistence is capped at 200 MiB. `persistence` is one of
+`not_applicable`, `persisted`, `failed`, or `not_requested`; `persistence_issue` safely explains
+a failure without exposing the URL or credential. `video` contains the durable
+`ArtifactRef` only when persistence succeeds. `estimated_cost_usd` is always
+`null` until the convenience endpoint's pricing and billing-unit mapping are
+confirmed.
+
+The asynchronous acceptance shape is verified by a sanitized live probe. The
+completed-output shape remains provisional; unknown shapes fail closed.
+
+### Example
+
+```json
+{
+  "video_url": "https://media.example.com/source.mp4",
+  "scene": "common",
+  "tool_version": "professional",
+  "resolution": "4k",
+  "bitrate_level": "high",
+  "fps": 24,
+  "project": "default",
+  "persist": true
+}
+```
 
 ---
 

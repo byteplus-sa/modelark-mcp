@@ -77,6 +77,7 @@ tool → scope mapping is wired in `server.py::register_tools`:
 | `seedance:read` | `seedance_get_task`, `seedance_list_tasks` |
 | `seedance:delete` | `seedance_cancel_or_delete_task` |
 | `seed:asr:transcribe` | `speech_to_text` |
+| `vod:enhance` | `vod_enhance_video` |
 | `media:upload` | `media_upload` |
 | `media:presign` | `media_presign` |
 | `artifacts:read` | MCP resource `seed-media://artifacts/{artifact_id}` |
@@ -85,7 +86,8 @@ The `seed-health://status` resource and the `/health`, `/ready`, `/metrics`
 routes are **not** scope-protected at the FastMCP layer. Seed Audio tools are
 registered only when `BYTEPLUS_SEED_AUDIO_API_KEY` is set; Seedream/Seedance
 tools only when `BYTEPLUS_MODELARK_API_KEY` is set; speech-to-text tools only
-when `SEED_SPEECH_ASR_API_KEY` is set. The `media_upload` and `media_presign`
+when `SEED_SPEECH_ASR_API_KEY` is set; `vod_enhance_video` only when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. The `media_upload` and `media_presign`
 tools are registered only when object storage credentials are set (TOS:
 `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `TOS_BUCKET`, or S3:
 `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` with
@@ -177,6 +179,14 @@ two-layer SSRF defense. Constructor defaults: `timeout=120.0s`,
 via suffix allowlist: `.bytepluses.com`, `.byteplus.com`, `.bytedance.com`,
 `.bytednsdoc.com`, `.volces.com`, `.tos-ap-southeast.bytepluses.com`.
 
+For VOD AI MediaKit, enhancement and artifact persistence are separate
+outcomes. The tool always preserves a successful provider output URL for the
+authorized caller, then best-effort downloads it through this SSRF-safe path.
+Outputs above the 200 MiB video limit or failing host/MIME/download/storage
+checks return `persistence="failed"` without changing provider success into a
+provider failure. Full source URLs and credentials are excluded from logs and
+safe error messages.
+
 ## URL policy (`security/url_policy.py`)
 
 Exception: `UrlValidationError(ValueError)`.
@@ -237,7 +247,8 @@ provider enforces the limit server-side for those.
 - `truststore.inject_into_ssl()` runs at module import in `server.py` and
   `__main__.py`, so Python uses the macOS Keychain for TLS verification.
 - Provider base URLs (`BYTEPLUS_MODELARK_BASE_URL`,
-  `BYTEPLUS_SEED_AUDIO_BASE_URL`) are validated at settings load: must be
+  `BYTEPLUS_SEED_AUDIO_BASE_URL`, `BYTEPLUS_VOD_MEDIAKIT_BASE_URL`) are
+  validated at settings load: must be
   `https://` with a hostname and no embedded credentials; trailing slash
   stripped.
 

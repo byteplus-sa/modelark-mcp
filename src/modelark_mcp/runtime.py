@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
     from modelark_mcp.artifacts.store import ArtifactStore
 
-ProviderKey = Literal["modelark", "seed-speech", "tos", "s3"]
+ProviderKey = Literal["modelark", "seed-speech", "vod-mediakit", "tos", "s3"]
 
 
 class ProviderLimiters:
@@ -52,6 +52,7 @@ class ProviderLimiters:
         self._provider = {
             "modelark": asyncio.Semaphore(provider_limit),
             "seed-speech": asyncio.Semaphore(provider_limit),
+            "vod-mediakit": asyncio.Semaphore(provider_limit),
             "tos": asyncio.Semaphore(provider_limit),
             "s3": asyncio.Semaphore(provider_limit),
         }
@@ -86,11 +87,11 @@ class ProviderLimiters:
 
 
 class TaskOwnershipStore(Protocol):
-    async def record(self, task_id: str, owner: AuthContext) -> None: ...
+    async def record(self, provider: str, task_id: str, owner: AuthContext) -> None: ...
 
-    async def require_owner(self, task_id: str, owner: AuthContext) -> None: ...
+    async def require_owner(self, provider: str, task_id: str, owner: AuthContext) -> None: ...
 
-    async def list_task_ids(self, owner: AuthContext) -> set[str]: ...
+    async def list_task_ids(self, provider: str, owner: AuthContext) -> set[str]: ...
 
     async def ping(self) -> None: ...
 
@@ -98,11 +99,16 @@ class TaskOwnershipStore(Protocol):
 
 
 class TaskArtifactCache(Protocol):
-    async def get(self, task_id: str) -> dict[str, ArtifactRef | None] | None: ...
+    async def get(self, provider: str, task_id: str) -> dict[str, ArtifactRef | None] | None: ...
 
-    async def set(self, task_id: str, artifacts: dict[str, ArtifactRef | None]) -> None: ...
+    async def set(
+        self,
+        provider: str,
+        task_id: str,
+        artifacts: dict[str, ArtifactRef | None],
+    ) -> None: ...
 
-    async def pop(self, task_id: str) -> dict[str, ArtifactRef | None] | None: ...
+    async def pop(self, provider: str, task_id: str) -> dict[str, ArtifactRef | None] | None: ...
 
     async def clear(self) -> None: ...
 
@@ -115,38 +121,97 @@ class SQLiteTaskOwnershipStore:
     def __init__(self, database_path: Path) -> None:
         database_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(database_path)
-        self._connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS task_ownership (
-                task_id TEXT PRIMARY KEY,
-                principal_id TEXT NOT NULL,
-                tenant_id TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
+        self._ensure_schema()
         self._connection.commit()
         self._lock = asyncio.Lock()
 
-    async def record(self, task_id: str, owner: AuthContext) -> None:
+    def _ensure_schema(self) -> None:
+        """Create or migrate the ownership table to provider-scoped keys."""
+        with self._connection:
+            columns = {
+                str(row[1])
+                for row in self._connection.execute("PRAGMA table_info(task_ownership)").fetchall()
+            }
+            legacy_exists = self._table_exists("task_ownership_legacy")
+            if columns and "provider" not in columns:
+                if legacy_exists:
+                    self._connection.execute(
+                        """
+                        INSERT OR REPLACE INTO task_ownership_legacy
+                        SELECT task_id, principal_id, tenant_id, created_at FROM task_ownership
+                        """
+                    )
+                    self._connection.execute("DROP TABLE task_ownership")
+                else:
+                    self._connection.execute(
+                        "ALTER TABLE task_ownership RENAME TO task_ownership_legacy"
+                    )
+                legacy_exists = True
+            self._create_table()
+            if legacy_exists:
+                self._connection.execute(
+                    """
+                    INSERT OR REPLACE INTO task_ownership(
+                        provider, task_id, principal_id, tenant_id, created_at
+                    )
+                    SELECT 'modelark', task_id, principal_id, tenant_id, created_at
+                    FROM task_ownership_legacy
+                    """
+                )
+                self._connection.execute("DROP TABLE task_ownership_legacy")
+
+    def _table_exists(self, table: str) -> bool:
+        return (
+            self._connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+            ).fetchone()
+            is not None
+        )
+
+    def _create_table(self) -> None:
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS task_ownership (
+                provider TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                principal_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(provider, task_id)
+            )
+            """
+        )
+
+    async def record(self, provider: str, task_id: str, owner: AuthContext) -> None:
         async with self._lock:
             self._connection.execute(
                 """
-                INSERT INTO task_ownership(task_id, principal_id, tenant_id, created_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(task_id) DO UPDATE SET
+                INSERT INTO task_ownership(
+                    provider, task_id, principal_id, tenant_id, created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(provider, task_id) DO UPDATE SET
                     principal_id = excluded.principal_id,
                     tenant_id = excluded.tenant_id
                 """,
-                (task_id, owner.principal_id, owner.tenant_id, datetime.now(UTC).isoformat()),
+                (
+                    provider,
+                    task_id,
+                    owner.principal_id,
+                    owner.tenant_id,
+                    datetime.now(UTC).isoformat(),
+                ),
             )
             self._connection.commit()
 
-    async def require_owner(self, task_id: str, owner: AuthContext) -> None:
+    async def require_owner(self, provider: str, task_id: str, owner: AuthContext) -> None:
         async with self._lock:
             row = self._connection.execute(
-                "SELECT principal_id, tenant_id FROM task_ownership WHERE task_id = ?",
-                (task_id,),
+                """
+                SELECT principal_id, tenant_id FROM task_ownership
+                WHERE provider = ? AND task_id = ?
+                """,
+                (provider, task_id),
             ).fetchone()
         if row is None:
             if owner.is_local:
@@ -155,14 +220,14 @@ class SQLiteTaskOwnershipStore:
         if row != (owner.principal_id, owner.tenant_id):
             raise PermissionError("Task is not owned by the current principal.")
 
-    async def list_task_ids(self, owner: AuthContext) -> set[str]:
+    async def list_task_ids(self, provider: str, owner: AuthContext) -> set[str]:
         async with self._lock:
             rows = self._connection.execute(
                 """
                 SELECT task_id FROM task_ownership
-                WHERE principal_id = ? AND tenant_id = ?
+                WHERE provider = ? AND principal_id = ? AND tenant_id = ?
                 """,
-                (owner.principal_id, owner.tenant_id),
+                (provider, owner.principal_id, owner.tenant_id),
             ).fetchall()
         return {str(row[0]) for row in rows}
 
@@ -187,25 +252,76 @@ class SQLiteTaskArtifactCache:
     ) -> None:
         database_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(database_path)
-        self._connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS task_artifacts (
-                task_id TEXT PRIMARY KEY,
-                artifacts_json TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
+        self._ensure_schema()
         self._connection.commit()
         self._lock = asyncio.Lock()
         self._ttl_seconds = ttl_seconds
         self._max_size = max_size
 
-    async def get(self, task_id: str) -> dict[str, ArtifactRef | None] | None:
+    def _ensure_schema(self) -> None:
+        """Create or migrate the artifact cache to provider-scoped keys."""
+        with self._connection:
+            columns = {
+                str(row[1])
+                for row in self._connection.execute("PRAGMA table_info(task_artifacts)").fetchall()
+            }
+            legacy_exists = self._table_exists("task_artifacts_legacy")
+            if columns and "provider" not in columns:
+                if legacy_exists:
+                    self._connection.execute(
+                        """
+                        INSERT OR REPLACE INTO task_artifacts_legacy
+                        SELECT task_id, artifacts_json, created_at FROM task_artifacts
+                        """
+                    )
+                    self._connection.execute("DROP TABLE task_artifacts")
+                else:
+                    self._connection.execute(
+                        "ALTER TABLE task_artifacts RENAME TO task_artifacts_legacy"
+                    )
+                legacy_exists = True
+            self._create_table()
+            if legacy_exists:
+                self._connection.execute(
+                    """
+                    INSERT OR REPLACE INTO task_artifacts(
+                        provider, task_id, artifacts_json, created_at
+                    )
+                    SELECT 'modelark', task_id, artifacts_json, created_at
+                    FROM task_artifacts_legacy
+                    """
+                )
+                self._connection.execute("DROP TABLE task_artifacts_legacy")
+
+    def _table_exists(self, table: str) -> bool:
+        return (
+            self._connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+            ).fetchone()
+            is not None
+        )
+
+    def _create_table(self) -> None:
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS task_artifacts (
+                provider TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                artifacts_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(provider, task_id)
+            )
+            """
+        )
+
+    async def get(self, provider: str, task_id: str) -> dict[str, ArtifactRef | None] | None:
         async with self._lock:
             row = self._connection.execute(
-                "SELECT artifacts_json, created_at FROM task_artifacts WHERE task_id = ?",
-                (task_id,),
+                """
+                SELECT artifacts_json, created_at FROM task_artifacts
+                WHERE provider = ? AND task_id = ?
+                """,
+                (provider, task_id),
             ).fetchone()
         if row is None:
             return None
@@ -215,27 +331,33 @@ class SQLiteTaskArtifactCache:
             return None
         return self._deserialize(artifacts_json)
 
-    async def set(self, task_id: str, artifacts: dict[str, ArtifactRef | None]) -> None:
+    async def set(
+        self,
+        provider: str,
+        task_id: str,
+        artifacts: dict[str, ArtifactRef | None],
+    ) -> None:
         artifacts_json = self._serialize(artifacts)
         now = datetime.now(UTC).isoformat()
         async with self._lock:
             self._connection.execute(
                 """
-                INSERT INTO task_artifacts(task_id, artifacts_json, created_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(task_id) DO UPDATE SET
+                INSERT INTO task_artifacts(provider, task_id, artifacts_json, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(provider, task_id) DO UPDATE SET
                     artifacts_json = excluded.artifacts_json,
                     created_at = excluded.created_at
                 """,
-                (task_id, artifacts_json, now),
+                (provider, task_id, artifacts_json, now),
             )
             self._connection.commit()
             count_row = self._connection.execute("SELECT COUNT(*) FROM task_artifacts").fetchone()
             if count_row is not None and count_row[0] > self._max_size:
                 self._connection.execute(
                     """
-                    DELETE FROM task_artifacts WHERE task_id NOT IN (
-                        SELECT task_id FROM task_artifacts
+                    DELETE FROM task_artifacts
+                    WHERE (provider, task_id) NOT IN (
+                        SELECT provider, task_id FROM task_artifacts
                         ORDER BY created_at DESC LIMIT ?
                     )
                     """,
@@ -243,16 +365,19 @@ class SQLiteTaskArtifactCache:
                 )
                 self._connection.commit()
 
-    async def pop(self, task_id: str) -> dict[str, ArtifactRef | None] | None:
+    async def pop(self, provider: str, task_id: str) -> dict[str, ArtifactRef | None] | None:
         async with self._lock:
             row = self._connection.execute(
-                "SELECT artifacts_json, created_at FROM task_artifacts WHERE task_id = ?",
-                (task_id,),
+                """
+                SELECT artifacts_json, created_at FROM task_artifacts
+                WHERE provider = ? AND task_id = ?
+                """,
+                (provider, task_id),
             ).fetchone()
             if row is not None:
                 self._connection.execute(
-                    "DELETE FROM task_artifacts WHERE task_id = ?",
-                    (task_id,),
+                    "DELETE FROM task_artifacts WHERE provider = ? AND task_id = ?",
+                    (provider, task_id),
                 )
                 self._connection.commit()
         if row is None:

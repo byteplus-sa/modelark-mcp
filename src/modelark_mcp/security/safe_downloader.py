@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 from collections.abc import Callable
+from typing import Literal
 from urllib.parse import urljoin, urlunsplit
 
 import httpx
@@ -17,6 +18,31 @@ from pydantic import BaseModel
 from modelark_mcp.security.url_policy import AddressResolver, ValidatedUrl, validate_url
 
 HostPolicy = Callable[[str], bool]
+SafeDownloadErrorCode = Literal[
+    "untrusted_host",
+    "too_large",
+    "invalid_url",
+    "redirect_rejected",
+    "source_expired",
+    "http_error",
+    "network_error",
+]
+
+
+class SafeDownloadError(ValueError):
+    """Classified download failure with a URL-safe client message."""
+
+    def __init__(
+        self,
+        code: SafeDownloadErrorCode,
+        safe_message: str,
+        *,
+        retryable: bool,
+    ) -> None:
+        self.code = code
+        self.safe_message = safe_message
+        self.retryable = retryable
+        super().__init__(safe_message)
 
 
 class DownloadedMedia(BaseModel):
@@ -62,15 +88,57 @@ class SafeDownloader:
 
         current_url = url
         for redirect_count in range(max_redirects + 1):
-            validated = validate_url(current_url, resolver=self._resolver)
-            if not trusted_hosts(validated.hostname):
-                raise ValueError(
-                    f"Refusing to download from untrusted host '{validated.hostname}'."
+            try:
+                validated = validate_url(current_url, resolver=self._resolver)
+            except Exception as exc:
+                code: SafeDownloadErrorCode = (
+                    "invalid_url" if redirect_count == 0 else "redirect_rejected"
                 )
+                message = (
+                    "Provider output URL failed safety validation."
+                    if redirect_count == 0
+                    else "Provider output redirect failed safety validation."
+                )
+                raise SafeDownloadError(code, message, retryable=False) from exc
+            if not trusted_hosts(validated.hostname):
+                code = "untrusted_host" if redirect_count == 0 else "redirect_rejected"
+                message = (
+                    "Provider output host is not trusted."
+                    if redirect_count == 0
+                    else "Provider output redirected to an untrusted host."
+                )
+                raise SafeDownloadError(code, message, retryable=False)
 
-            response = await self._request_pinned(validated, max_bytes=max_bytes)
+            try:
+                response = await self._request_pinned(validated, max_bytes=max_bytes)
+            except SafeDownloadError:
+                raise
+            except httpx.TimeoutException as exc:
+                raise SafeDownloadError(
+                    "network_error",
+                    "Provider output download timed out.",
+                    retryable=True,
+                ) from exc
+            except httpx.TransportError as exc:
+                raise SafeDownloadError(
+                    "network_error",
+                    "Provider output download failed due to a network error.",
+                    retryable=True,
+                ) from exc
             if not response.is_redirect:
-                response.raise_for_status()
+                if response.status_code in {404, 410}:
+                    raise SafeDownloadError(
+                        "source_expired",
+                        "Provider output is no longer available.",
+                        retryable=False,
+                    )
+                if response.is_error:
+                    retryable = response.status_code in {408, 429} or response.status_code >= 500
+                    raise SafeDownloadError(
+                        "http_error",
+                        f"Provider output download returned HTTP {response.status_code}.",
+                        retryable=retryable,
+                    )
                 return DownloadedMedia(
                     body=response.content,
                     content_type=_content_type(response),
@@ -79,11 +147,17 @@ class SafeDownloader:
 
             location = response.headers.get("location")
             if not location:
-                raise ValueError(
-                    f"Redirect response from '{current_url}' is missing a Location header."
+                raise SafeDownloadError(
+                    "redirect_rejected",
+                    "Provider output redirect is missing a destination.",
+                    retryable=False,
                 )
             if redirect_count == max_redirects:
-                raise ValueError(f"Too many redirects from '{url}'.")
+                raise SafeDownloadError(
+                    "redirect_rejected",
+                    "Provider output exceeded the redirect limit.",
+                    retryable=False,
+                )
             current_url = urljoin(current_url, location)
 
         raise AssertionError("redirect loop must return or raise")
@@ -107,8 +181,14 @@ class SafeDownloader:
             extensions=extensions,
         ) as response:
             if response.is_redirect:
-                await response.aread()
-                return response
+                # A redirect body is irrelevant and may itself be oversized. Return
+                # only the metadata needed by the hop-by-hop redirect policy.
+                return httpx.Response(
+                    status_code=response.status_code,
+                    headers=response.headers,
+                    request=response.request,
+                    extensions=response.extensions,
+                )
 
             content_length = response.headers.get("content-length")
             if content_length is not None:
@@ -117,16 +197,21 @@ class SafeDownloader:
                 except ValueError:
                     declared_bytes = 0
                 if declared_bytes > max_bytes:
-                    raise ValueError(
-                        f"Download Content-Length ({declared_bytes} bytes) exceeds "
-                        f"limit ({max_bytes} bytes)."
+                    raise SafeDownloadError(
+                        "too_large",
+                        f"Provider output exceeds the {max_bytes}-byte artifact limit.",
+                        retryable=False,
                     )
 
             body = bytearray()
             async for chunk in response.aiter_bytes():
                 body.extend(chunk)
                 if len(body) > max_bytes:
-                    raise ValueError(f"Downloaded media exceeds limit ({max_bytes} bytes).")
+                    raise SafeDownloadError(
+                        "too_large",
+                        f"Provider output exceeds the {max_bytes}-byte artifact limit.",
+                        retryable=False,
+                    )
             return httpx.Response(
                 status_code=response.status_code,
                 headers=response.headers,
