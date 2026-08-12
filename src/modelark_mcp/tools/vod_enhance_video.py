@@ -177,26 +177,30 @@ async def vod_enhance_video(
 
     await ctx.report_progress(progress=75, total=100)
     if submission.status == "accepted":
-        assert submission.task_id is not None
-        await runtime.ownership_store.record("vod-mediakit", submission.task_id, owner)
+        task_id = submission.task_id
+        if task_id is None:
+            raise RuntimeError("accepted MediaKit submission is missing task_id")
+        await runtime.ownership_store.record("vod-mediakit", task_id, owner)
         await ctx.report_progress(progress=100, total=100)
         return VodEnhanceVideoOutput(
             status="accepted",
             request_id=submission.request_id,
             provider_log_id=submission.provider_log_id,
-            task_id=submission.task_id,
+            task_id=task_id,
             provider_status=submission.provider_status,
             persistence="not_applicable",
         )
 
-    assert submission.output_url is not None
+    output_url = submission.output_url
+    if output_url is None:
+        raise RuntimeError("succeeded MediaKit submission is missing output_url")
     artifact: ArtifactRef | None = None
     issue: VodArtifactPersistenceIssue | None = None
     persistence: Literal["not_requested", "persisted", "failed"] = "not_requested"
     if input.persist:
         try:
             artifact = await runtime.artifact_store.copy_from_trusted_url(
-                url=str(submission.output_url),
+                url=str(output_url),
                 media_type=MediaType.VIDEO,
                 mime_type=submission.mime_type or "video/mp4",
                 source_expires_at=submission.expires_at,
@@ -232,7 +236,7 @@ async def vod_enhance_video(
         task_id=submission.task_id,
         provider_status=submission.provider_status,
         video=artifact,
-        source_url=submission.output_url,
+        source_url=output_url,
         source_expires_at=submission.expires_at,
         output_size_bytes=submission.output_size_bytes,
         persistence=persistence,
