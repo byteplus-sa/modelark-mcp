@@ -1,6 +1,5 @@
 """MCP tool for the BytePlus VOD AI MediaKit enhancement profile.
 
-Implements ``plans/PLAN_BYTEPLUS_VOD_AI_MEDIAKIT_VIDEO_ENHANCEMENT.md``.
 The upstream success schema remains provisional and is isolated in the
 provider adapter; this tool exposes a stable, bounded persistence outcome.
 """
@@ -101,7 +100,7 @@ class VodEnhanceVideoOutput(BaseModel):
     )
     task_id: str | None = Field(
         default=None,
-        description="Provider task identifier, when included in the synchronous result.",
+        description="Provider task identifier for an accepted asynchronous enhancement.",
     )
     provider_status: str | None = Field(
         default=None,
@@ -140,8 +139,9 @@ async def vod_enhance_video(
 
     Submits the exact common/professional/4K/high/24-fps profile. The mutation
     is never retried automatically because completion can be ambiguous after a
-    timeout. A successful provider URL is always returned; durable persistence
-    is best-effort and remains limited to the configured 200 MiB video policy.
+    timeout. An accepted response contains a task ID without an output URL. If
+    MediaKit directly returns a completed output, its provider URL is preserved
+    and durable persistence is best-effort under the 200 MiB video policy.
     """
     runtime = get_runtime(ctx)
     settings = runtime.settings

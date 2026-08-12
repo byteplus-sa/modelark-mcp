@@ -243,10 +243,16 @@ class TestInputSchemas:
     async def test_vod_enhance_schema_is_self_describing(self, configured_server: None) -> None:
         tools = await configured_server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "vod_enhance_video")
+        assert tool.description is not None
+        assert "accepted response contains a task ID without an output URL" in tool.description
+        assert "always returned" not in tool.description
         input_schema = tool.parameters["properties"]["input"]
         assert input_schema["required"] == ["video_url"]
         assert all("description" in field for field in input_schema["properties"].values())
         assert tool.output_schema is not None
+        task_description = tool.output_schema["properties"]["task_id"]["description"]
+        assert "accepted asynchronous enhancement" in task_description
+        assert "synchronous result" not in task_description
         assert all(
             "description" in field or "$ref" in field
             for field in tool.output_schema["properties"].values()

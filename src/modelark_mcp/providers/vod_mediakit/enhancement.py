@@ -1,4 +1,4 @@
-"""Synchronous enhancement adapter for BytePlus VOD AI MediaKit."""
+"""Enhancement-submission adapter for BytePlus VOD AI MediaKit."""
 
 from __future__ import annotations
 
