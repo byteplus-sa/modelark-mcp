@@ -71,6 +71,8 @@ claim. Tool scopes are enforced by FastMCP:
 - `seedance:create`, `seedance:read`, `seedance:delete`
 - `understanding:read`
 - `vod:enhance`
+- `vod:transcode`
+- `vod:read`
 - `media:upload`
 - `media:presign`
 - `artifacts:read`
@@ -102,6 +104,14 @@ set. The initial tool intentionally exposes only the exact
 label upstream as case-sensitive `Project`. Submission returns an asynchronous
 task ID; there is no verified polling tool or automatic POST retry. Convenience-endpoint
 pricing is not yet confirmed, so the tool does not emit a cost estimate.
+
+`vod_transcode_video` and `vod_get_transcode_task` are also registered when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. `vod_transcode_video` submits an async
+transcoding task (codec, container format, scaling, bitrate, frame rate, HDR);
+`vod_get_transcode_task` polls it and best-effort persists the completed output.
+The transcode request/status contract is verified from the official AI MediaKit
+API reference; the output URL hostname and `queue_id`/`Project` request params
+are unverified, so durable persistence is best-effort.
 
 ## Object storage (TOS or S3, optional)
 

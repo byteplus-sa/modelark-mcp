@@ -19,6 +19,8 @@ surface.
 | 10 | `media_upload` | Object storage (optional) | Synchronous | TOS / S3 |
 | 11 | `media_presign` | Object storage (optional) | Read-only | TOS / S3 |
 | 12 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 13 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
+| 14 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
 
 ## Tool Annotations
 
@@ -36,6 +38,8 @@ surface.
 | `media_upload` | false | false | false | true |
 | `media_presign` | true | false | true | false |
 | `vod_enhance_video` | false | false | false | true |
+| `vod_transcode_video` | false | false | false | true |
+| `vod_get_transcode_task` | true | false | true | false |
 
 ---
 
@@ -95,6 +99,132 @@ completed-output shape remains provisional; unknown shapes fail closed.
   "fps": 24,
   "project": "default",
   "persist": true
+}
+```
+
+---
+
+## vod_transcode_video
+
+Submit an asynchronous BytePlus VOD AI MediaKit video transcoding task through
+the Bearer-authenticated convenience endpoint. Registered only when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is configured; requires the `vod:transcode`
+scope in JWT mode.
+
+The request body and `video` object field names and enums are verified from the
+official AI MediaKit API reference. The default options reproduce the verified
+portrait-to-720x720 letterbox profile. Submission returns `status="accepted"`
+with a `task_id` for polling via `vod_get_transcode_task`. The non-idempotent
+POST is never retried automatically because a timeout may occur after the
+provider began processing.
+
+### Input
+
+| Field | Type | Required | Default | Constraints |
+|---|---|---|---|---|
+| `video_url` | URL | Yes | — | Public HTTPS source; private, loopback, and link-local targets rejected |
+| `container_format` | `"MP4"` \| `"FLV"` \| `"MPEGTS"` | No | `"MP4"` | Output container format |
+| `video` | VodTranscodeVideoOptions | No | default profile | See below |
+| `persist` | boolean | No | `true` | Best-effort durable artifact copy on later poll |
+
+**VodTranscodeVideoOptions:**
+
+| Field | Type | Default | Constraints |
+|---|---|---|---|
+| `codec` | `"h264"` \| `"h265"` | `"h264"` | Output video codec |
+| `scale_type` | `0` \| `1` \| `2` | `2` | `0` follow source, `1` long/short-side limit, `2` width/height limit |
+| `scale_mode` | `0` \| `1` \| `2` | `2` | `0` no upsampling, `1` stretch, `2` letterbox with black bars |
+| `scale_width` | integer \| null | `null` | px [0,4320]; only when `scale_type=2`; defaults to 720 |
+| `scale_height` | integer \| null | `null` | px [0,4320]; only when `scale_type=2`; defaults to 720 |
+| `scale_short` | integer \| null | `null` | px [0,4320]; only when `scale_type=1` |
+| `scale_long` | integer \| null | `null` | px [0,4320]; only when `scale_type=1` |
+| `bitrate_mode` | `"crf"` \| `"abr"` \| `"cbr"` | `"crf"` | Bitrate control mode |
+| `bitrate_crf` | integer | `25` | [0,51]; only used when `bitrate_mode=crf` |
+| `bitrate_kbps` | integer | `2000` | kbps [10,50000] |
+| `fps_mode` | `"vfr"` \| `"cfr"` | `"vfr"` | Only takes effect after `fps` is set |
+| `fps` | integer \| null | `null` | [1,240]; unset keeps source rate |
+| `is_hdr_to_sdr` | boolean | `true` | Convert HDR to SDR; false keeps HDR |
+
+### Output
+
+Returns `VodTranscodeVideoOutput` with `provider` `byteplus-vod-mediakit`,
+`status="accepted"`, task/request IDs, and a server-side heuristic
+`recommended_poll_after_ms`.
+
+### Example
+
+```json
+{
+  "video_url": "https://media.example.com/portrait.mp4",
+  "container_format": "MP4",
+  "video": {
+    "scale_type": 2,
+    "scale_width": 720,
+    "scale_height": 720,
+    "scale_mode": 2
+  },
+  "persist": true
+}
+```
+
+---
+
+## vod_get_transcode_task
+
+Poll the status and output of a BytePlus VOD AI MediaKit transcode task.
+Registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is configured; requires the
+`vod:read` scope in JWT mode.
+
+### Input
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `task_id` | string | Yes | — |
+| `persist_output` | boolean | No | `true` |
+
+### Output
+
+Returns `VodTranscodeTaskOutput` with `provider` `byteplus-vod-mediakit` and a
+normalized `status` of `processing`, `succeeded`, or `failed` (the provider
+documents only `running`/`completed`/`failed`). On success: `source_url`
+(24-hour lifetime), optional `duration_seconds`/`resolution`/`video_codec`, and
+normalized `created_at`/`finished_at`/`source_expires_at`. When
+`persist_output=true` the completed output is copied once into the durable
+artifact store (200 MiB cap) and cached by task ID; a persistence failure never
+erases provider success. On failure, `error` carries the safe provider detail.
+
+### Task Statuses
+
+| Status | Meaning |
+|---|---|
+| `processing` | Provider reported `running`; still transcoding |
+| `succeeded` | Provider reported `completed`; `source_url` available |
+| `failed` | Provider reported `failed`; `error` populated |
+
+### Example
+
+```json
+// Input
+{ "task_id": "amk-tool-transcode-video-112738623234" }
+
+// Output (succeeded)
+{
+  "provider": "byteplus-vod-mediakit",
+  "task_id": "amk-tool-transcode-video-112738623234",
+  "status": "succeeded",
+  "provider_status": "completed",
+  "duration_seconds": 15.07,
+  "resolution": "720p",
+  "video_codec": "h264",
+  "source_url": "https://example.com/transcoded_video.mp4",
+  "persistence": "persisted",
+  "video": {
+    "id": "71e9c2a8-...",
+    "uri": "seed-media://artifacts/71e9c2a8-...",
+    "media_type": "video",
+    "mime_type": "video/mp4",
+    "bytes": 1748096
+  }
 }
 ```
 

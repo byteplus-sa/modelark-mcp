@@ -21,6 +21,7 @@ from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.security.media_policy import get_media_limits
 from modelark_mcp.security.url_policy import validate_url
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._vod_shared import VodArtifactPersistenceIssue
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
 
@@ -62,24 +63,6 @@ class VodEnhanceVideoInput(BaseModel):
     persist: bool = Field(
         default=True,
         description="Best-effort copy of the completed output into the durable MCP artifact store.",
-    )
-
-
-class VodArtifactPersistenceIssue(BaseModel):
-    """Safe explanation for a provider success that was not persisted."""
-
-    code: Literal[
-        "untrusted_output_host",
-        "output_too_large",
-        "invalid_output_mime",
-        "source_expired",
-        "download_failed",
-        "storage_failed",
-    ] = Field(description="Stable persistence failure category.")
-    message: str = Field(description="Credential- and URL-safe persistence failure message.")
-    retryable: bool = Field(description="Whether persistence may succeed if attempted again later.")
-    artifact_limit_bytes: int = Field(
-        description="Maximum video size accepted by the durable artifact policy, in bytes."
     )
 
 

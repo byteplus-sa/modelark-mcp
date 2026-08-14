@@ -59,7 +59,7 @@ flowchart LR
     Domain --> Gateway["Provider gateways\n(providers/)"]
     Gateway -->|"Bearer auth"| ModelArk["ModelArk\nSeedream + Seedance"]
     Gateway -->|"X-Api-Key"| SeedSpeech["Seed Speech\nSeed Audio"]
-    Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nvideo enhancement"]
+    Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nvideo enhancement + transcoding"]
     Server -.durable.-> Store["Artifact store\n(filesystem)"]
     Server -.state.-> Runtime["Runtime services\n(runtime.py)"]
 ```
@@ -70,22 +70,26 @@ flowchart LR
 - **Seed Speech gateway** (`providers/seed_speech.py`) — serves Seed Audio.
   Uses `X-Api-Key` and base URL `https://voice.ap-southeast-1.bytepluses.com`.
 - **VOD AI MediaKit gateway** (`providers/vod_mediakit/`) — serves the
-  asynchronous `vod_enhance_video` submission endpoint. It uses Bearer auth
-  and defaults to
-  `https://mediakit.ap-southeast-1.bytepluses.com/api/v1`. Its success schema
-  is provisional and isolated in the adapter; the gateway accepts only known
-  result aliases and rejects unknown shapes.
+  asynchronous `vod_enhance_video` submission endpoint and the
+  `vod_transcode_video` / `vod_get_transcode_task` submit-then-poll pair. It
+  uses Bearer auth and defaults to
+  `https://mediakit.ap-southeast-1.bytepluses.com/api/v1`. Its success schemas
+  are isolated in the adapters; the gateway accepts only known result shapes
+  and rejects unknown shapes.
 - These gateways extend `BaseHttpGateway` (`providers/base.py`), which wraps every
   outbound request in an OpenTelemetry span, records Prometheus
   provider metrics, and normalizes transport/HTTP errors into a single
   `ProviderError` carrying a `NormalizedProviderError`.
 
-MediaKit enhancement is a non-idempotent mutation and bypasses the automatic
-retry helper: a timeout can be ambiguous after the provider has begun work.
-The current integration accepts asynchronous task submission and exposes no
-polling tool because none is verified for this Bearer surface. If a completed
-result is returned, the provider URL is preserved and persistence is
-attempted separately as a best-effort operation under the 200 MiB video limit.
+MediaKit enhancement and transcode submission are non-idempotent mutations and
+bypass the automatic retry helper: a timeout can be ambiguous after the provider
+has begun work. Enhancement accepts asynchronous task submission with no
+verified polling route for that surface. Transcoding, by contrast, has a
+verified task-status endpoint (`GET /tasks/{task_id}`), so `vod_get_transcode_task`
+polls it and reuses the shared ownership store and task-artifact cache under the
+`vod-mediakit` provider key. For both surfaces, a completed provider URL is
+preserved and persistence is attempted separately as a best-effort operation
+under the 200 MiB video limit.
 
 ## Server lifecycle and runtime services
 

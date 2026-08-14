@@ -88,6 +88,95 @@ The success-body mapping remains provisional and rejects unknown response
 shapes. `estimated_cost_usd` is always null until convenience-endpoint pricing
 is confirmed.
 
+## vod_transcode_video
+
+Submit an asynchronous BytePlus VOD AI MediaKit video transcoding task. This
+tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses the
+`vod:transcode` JWT scope.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `video_url` | URL | Yes | Public HTTPS source; private and link-local destinations are rejected |
+| `container_format` | `"MP4"` \| `"FLV"` \| `"MPEGTS"` | No | Output container format (default: `MP4`) |
+| `video` | VodTranscodeVideoOptions | No | Transcoding options (defaults reproduce the verified portrait-to-720x720 letterbox profile) |
+| `persist` | boolean | No | Best-effort artifact copy on later poll (default: true) |
+
+**VodTranscodeVideoOptions:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `codec` | `"h264"` \| `"h265"` | `"h264"` | Output video codec |
+| `scale_type` | `0` \| `1` \| `2` | `2` | `0` follow source, `1` long/short-side limit, `2` width/height limit |
+| `scale_mode` | `0` \| `1` \| `2` | `2` | `0` no upsampling, `1` stretch, `2` letterbox with black bars |
+| `scale_width` | integer \| null | `null` | Target width px [0,4320]; only when `scale_type=2` (defaults to 720) |
+| `scale_height` | integer \| null | `null` | Target height px [0,4320]; only when `scale_type=2` (defaults to 720) |
+| `scale_short` | integer \| null | `null` | Target short side px [0,4320]; only when `scale_type=1` |
+| `scale_long` | integer \| null | `null` | Target long side px [0,4320]; only when `scale_type=1` |
+| `bitrate_mode` | `"crf"` \| `"abr"` \| `"cbr"` | `"crf"` | Bitrate control mode |
+| `bitrate_crf` | integer | `25` | CRF quality [0,51]; only used when `bitrate_mode=crf` |
+| `bitrate_kbps` | integer | `2000` | Bitrate in kbps [10,50000] |
+| `fps_mode` | `"vfr"` \| `"cfr"` | `"vfr"` | Frame-rate mode; only takes effect after `fps` is set |
+| `fps` | integer \| null | `null` | Target frame rate [1,240]; unset keeps source rate |
+| `is_hdr_to_sdr` | boolean | `true` | Convert HDR to SDR; false keeps HDR |
+
+### Output
+
+Returns `VodTranscodeVideoOutput` with `status="accepted"` plus the `task_id`
+to poll via `vod_get_transcode_task` and a heuristic `recommended_poll_after_ms`.
+The non-idempotent POST is not retried automatically because a timeout can have
+ambiguous completion.
+
+### Example
+
+```json
+{
+  "video_url": "https://media.example.com/portrait.mp4",
+  "container_format": "MP4",
+  "video": {
+    "scale_type": 2,
+    "scale_width": 720,
+    "scale_height": 720,
+    "scale_mode": 2
+  },
+  "persist": true
+}
+```
+
+## vod_get_transcode_task
+
+Poll the status and output of a BytePlus VOD AI MediaKit transcode task. This
+tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses the
+`vod:read` JWT scope.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | string | Yes | Task ID returned by `vod_transcode_video` |
+| `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true) |
+
+### Output and execution limits
+
+Returns `VodTranscodeTaskOutput` with a normalized `status` of `processing`,
+`succeeded`, or `failed` (the provider documents only `running`/`completed`/
+`failed`). On success, `source_url` (24-hour lifetime) and optional metadata
+(`duration_seconds`, `resolution`, `video_codec`) are returned; when
+`persist_output=true` the output is copied once into the durable artifact store
+and cached by task ID so repeated polls do not re-download. Persistence is
+reported as `not_applicable`, `not_requested`, `persisted`, or `failed`, and a
+failed artifact copy does not erase provider success. Durable video copies
+remain subject to the 200 MiB limit. On failure, `error.code`/`error.message`
+carry the safe provider failure detail. GET polling is retried only on
+provider-marked retryable errors (e.g. 429).
+
 ## seed_audio_generate
 
 Generate full-scene audio through Seed Speech.
