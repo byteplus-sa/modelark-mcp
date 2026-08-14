@@ -259,7 +259,7 @@ exclusive.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `text_prompt` | `str` | Yes | 1–3000 characters |
-| `audio_references` | `list[AudioReference]` | No | Up to 3 references (speaker ID, URL, or Base64) |
+| `audio_references` | `list[AudioReference]` | No | Up to 3 references (speaker ID, URL, or Base64). Base64 WAV is preflight-checked against the 30s limit. |
 | `image_reference` | `MediaSource` | No | Image for context-aware audio |
 | `output` | `AudioOutputOptions` | No | Format (wav/mp3/pcm/ogg), sample_rate, speech_rate, loudness_rate, pitch_rate, subtitle options |
 | `watermark` | `AudioWatermarkOptions` | No | Enable watermark and optional metadata |
@@ -328,6 +328,29 @@ failed, per-variation results with partial failure capture).
   "persist": true
 }
 ```
+
+---
+
+### Reusing uploaded references across shots (presign pattern)
+
+Presigned URLs expire after 10 minutes (600s). When the same reference
+images or audio are used across multiple shots (e.g., character sheets
+reused across every scene), do **not** re-upload the same file each time.
+Instead:
+
+1. **Upload once** — call `media_upload` for each reference file and store
+   the returned `object_key` (e.g., in a project-level reference registry
+   like `task_ids.json` or a dedicated `ref_cache.json`).
+2. **Presign on demand** — before each new shot submission, call
+   `media_presign` with the stored `object_key` to get a fresh presigned
+   URL in seconds. No file re-upload, no duplicate storage cost.
+3. **Batch presign** — presign all needed references for a shot in one
+   parallel block, then immediately submit the Seedance task while the URLs
+   are still valid.
+
+This reduces upload time from minutes (re-uploading 9–10 files per shot)
+to seconds (presigning 9–10 keys per shot) and avoids filling object
+storage with duplicate copies of the same reference images.
 
 ---
 
@@ -1223,23 +1246,29 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 12. **Use `media_upload` for URL-only workflows.** Seedance video references
     are URL-only. When starting with a local or Base64 video, upload it first
-     and pass the presigned URL into `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5).
+    and pass the presigned URL into `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5).
 
-13. **`speech_to_text` is synchronous.** It blocks until transcription completes
+13. **Reuse references with `media_presign` — do not re-upload.** Presigned URLs
+    expire after 10 minutes, but the underlying object persists in TOS/S3.
+    Upload each reference file once, store the `object_key`, and call
+    `media_presign` to get a fresh URL for each new shot. This avoids
+    re-uploading the same character/location/prop sheets for every scene.
+
+14. **`speech_to_text` is synchronous.** It blocks until transcription completes
     or the poll cap is reached. Provide appropriately sized audio and plan for
     the blocking duration.
 
-14. **Use `seed_understand` for multimodal reasoning.** It can analyze images
+15. **Use `seed_understand` for multimodal reasoning.** It can analyze images
     (OCR, scene description), videos (content analysis, UI review), and
     reason across multiple media inputs. Enable `thinking=true` for complex
     analysis. Video Base64 is not supported — upload via `media_upload` first.
 
-15. **Choose the right Seedance model.** Use 2.0 (`seedance_create_task`)
+16. **Choose the right Seedance model.** Use 2.0 (`seedance_create_task`)
     for 4K/1080p or lower cost. Use 2.5 (`seedance_2_5_create_task`) for
     30-second generation, 50 references, timestamp editing, or multi-round
     extension. The get/list/cancel tools are shared.
 
-16. **Treat MediaKit persistence separately from the provider result.** Keep the
+17. **Treat MediaKit persistence separately from the provider result.** Keep the
     returned `source_url` whenever `vod_enhance_video` or
     `vod_get_transcode_task` reports success. Prefer `persist=true`, but inspect
     `persistence` and `persistence_issue`: the 200 MiB limit or a
@@ -1247,7 +1276,7 @@ Set to `0` (default) for record-only mode with no enforcement.
     invalidating the provider result. Do not resubmit after an ambiguous
     timeout, and do not present `estimated_cost_usd` as available.
 
-17. **Transcode is submit-then-poll.** Call `vod_transcode_video`, capture the
+18. **Transcode is submit-then-poll.** Call `vod_transcode_video`, capture the
     returned `task_id`, then poll with `vod_get_transcode_task` until the
     status is `succeeded` or `failed`. The default profile is portrait-to-720x720
     letterbox; set `video.codec`, `scale_*`, `bitrate_*`, `fps`, and
