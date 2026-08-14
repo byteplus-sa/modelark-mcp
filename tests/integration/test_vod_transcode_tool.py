@@ -300,6 +300,35 @@ async def test_poll_succeeded_persistence_failure_preserves_success(
     assert result.source_url is not None
 
 
+async def test_poll_succeeded_generic_storage_failure_preserves_success(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        VodMediaKitTranscodeService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitTranscodeService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    monkeypatch.setattr(
+        runtime.artifact_store,
+        "copy_from_trusted_url",
+        AsyncMock(side_effect=RuntimeError("backend detail")),
+    )
+
+    result = await vod_get_transcode_task(
+        VodGetTranscodeTaskInput(task_id="amk-tool-transcode-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodTranscodeTaskOutput)
+    assert result.status == "succeeded"
+    assert result.persistence == "failed"
+    assert result.persistence_issue is not None
+    assert result.persistence_issue.code == "storage_failed"
+    assert "backend detail" not in result.persistence_issue.message
+    assert result.source_url is not None
+
+
 async def test_poll_failed_returns_error(
     test_env: None,
     fake_ctx: FakeContext,

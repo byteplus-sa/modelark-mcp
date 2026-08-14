@@ -110,8 +110,9 @@ pricing is not yet confirmed, so the tool does not emit a cost estimate.
 transcoding task (codec, container format, scaling, bitrate, frame rate, HDR);
 `vod_get_transcode_task` polls it and best-effort persists the completed output.
 The transcode request/status contract is verified from the official AI MediaKit
-API reference; the output URL hostname and `queue_id`/`Project` request params
-are unverified, so durable persistence is best-effort.
+API reference; the output URL hostname (`*.byteplusvod.com`) is confirmed and
+trusted for durable persistence. `queue_id`/`Project` request params remain
+unverified and are not exposed.
 
 ## Object storage (TOS or S3, optional)
 

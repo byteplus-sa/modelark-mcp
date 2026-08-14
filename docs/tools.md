@@ -104,7 +104,6 @@ tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses the
 | `video_url` | URL | Yes | Public HTTPS source; private and link-local destinations are rejected |
 | `container_format` | `"MP4"` \| `"FLV"` \| `"MPEGTS"` | No | Output container format (default: `MP4`) |
 | `video` | VodTranscodeVideoOptions | No | Transcoding options (defaults reproduce the verified portrait-to-720x720 letterbox profile) |
-| `persist` | boolean | No | Best-effort artifact copy on later poll (default: true) |
 
 **VodTranscodeVideoOptions:**
 
@@ -142,8 +141,7 @@ ambiguous completion.
     "scale_width": 720,
     "scale_height": 720,
     "scale_mode": 2
-  },
-  "persist": true
+  }
 }
 ```
 

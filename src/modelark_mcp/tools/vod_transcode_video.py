@@ -114,10 +114,6 @@ class VodTranscodeVideoInput(BaseModel):
         default_factory=VodTranscodeVideoOptions,
         description="Transcoding options for the output video (codec, scaling, bitrate, frame rate, HDR). Defaults reproduce the verified portrait-to-720x720 letterbox profile.",
     )
-    persist: bool = Field(
-        default=True,
-        description="Whether a later completed poll should copy the output into the durable MCP artifact store.",
-    )
 
 
 class VodTranscodeVideoOutput(BaseModel):

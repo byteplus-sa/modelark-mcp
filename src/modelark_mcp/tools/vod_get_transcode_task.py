@@ -115,6 +115,8 @@ class VodTranscodeTaskOutput(BaseModel):
         elif self.status == "succeeded":
             if self.source_url is None:
                 raise ValueError("succeeded output requires source_url")
+            if self.persistence == "not_applicable":
+                raise ValueError("succeeded output must not use not_applicable persistence")
             if self.persistence == "persisted" and (
                 self.video is None or self.persistence_issue is not None
             ):

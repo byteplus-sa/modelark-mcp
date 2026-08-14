@@ -125,7 +125,6 @@ provider began processing.
 | `video_url` | URL | Yes | — | Public HTTPS source; private, loopback, and link-local targets rejected |
 | `container_format` | `"MP4"` \| `"FLV"` \| `"MPEGTS"` | No | `"MP4"` | Output container format |
 | `video` | VodTranscodeVideoOptions | No | default profile | See below |
-| `persist` | boolean | No | `true` | Best-effort durable artifact copy on later poll |
 
 **VodTranscodeVideoOptions:**
 
@@ -162,8 +161,7 @@ Returns `VodTranscodeVideoOutput` with `provider` `byteplus-vod-mediakit`,
     "scale_width": 720,
     "scale_height": 720,
     "scale_mode": 2
-  },
-  "persist": true
+  }
 }
 ```
 

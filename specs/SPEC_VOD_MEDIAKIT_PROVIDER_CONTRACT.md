@@ -341,8 +341,8 @@ messages are sanitized (URLs redacted) before being returned to clients.
   never retried blindly (idempotency makes re-submission safe for the user, but the
   adapter does not auto-replay).
 - GET polling errors: 429 is retryable (via `Retry-After`); other 4xx non-retryable;
-  5xx on GET is treated as non-ambiguous and safe to retry within the same poll call
-  via the shared retry policy (read-only, idempotent).
+  5xx on GET is treated as ambiguous by the gateway (consistent with POST) and is
+  not retried automatically within `call_with_retry` — the client must re-poll.
 - No cancellation or list endpoint is documented; no such tool is exposed.
 
 ### Transcode persistence contract
@@ -350,8 +350,9 @@ messages are sanitized (URLs redacted) before being returned to clients.
 Same durable-persistence rules as enhancement: best-effort, capped at 209,715,200
 bytes, per-redirect-hop validation, `source_url` always returned to the authorized
 caller, persistence failures never erase provider success, and `source_url`
-path/query never logged. The output hostname is unverified; until observed, a
-succeeded output may report `persistence="failed"` with `untrusted_output_host`.
+path/query never logged. The output hostname (`*.byteplusvod.com`) was confirmed
+by a live probe on 2026-08-14 and added to the artifact store's trusted-host
+policy; durable persistence works for confirmed outputs.
 
 ## Regional and Billing Boundaries
 
