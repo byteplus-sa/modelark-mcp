@@ -110,13 +110,18 @@ class TestToolDiscovery:
             "media_upload",
             "media_presign",
             "vod_enhance_video",
+            "vod_transcode_video",
+            "vod_get_transcode_task",
         }
 
     async def test_vod_mediakit_tool_not_registered_without_its_key(
         self, no_creds_server: None
     ) -> None:
         tools = await no_creds_server.mcp.list_tools()
-        assert "vod_enhance_video" not in {tool.name for tool in tools}
+        names = {tool.name for tool in tools}
+        assert "vod_enhance_video" not in names
+        assert "vod_transcode_video" not in names
+        assert "vod_get_transcode_task" not in names
 
     async def test_media_upload_registered_with_s3_only(self, s3_only_server: None) -> None:
         server = s3_only_server
@@ -188,6 +193,24 @@ class TestToolAnnotations:
         assert tool.annotations.idempotentHint is False
         assert tool.annotations.openWorldHint is True
 
+    async def test_vod_transcode_submit_annotations(self, configured_server: None) -> None:
+        tools = await configured_server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "vod_transcode_video")
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is False
+        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.idempotentHint is False
+        assert tool.annotations.openWorldHint is True
+
+    async def test_vod_get_transcode_annotations(self, configured_server: None) -> None:
+        tools = await configured_server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "vod_get_transcode_task")
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is True
+        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.idempotentHint is True
+        assert tool.annotations.openWorldHint is False
+
 
 class TestInputSchemas:
     """Verify inputSchema is auto-generated for each tool."""
@@ -253,6 +276,39 @@ class TestInputSchemas:
         task_description = tool.output_schema["properties"]["task_id"]["description"]
         assert "accepted asynchronous enhancement" in task_description
         assert "synchronous result" not in task_description
+        assert all(
+            "description" in field or "$ref" in field
+            for field in tool.output_schema["properties"].values()
+        )
+
+    async def test_vod_transcode_submit_schema_is_self_describing(
+        self, configured_server: None
+    ) -> None:
+        tools = await configured_server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "vod_transcode_video")
+        assert tool.description is not None
+        assert "vod_get_transcode_task" in tool.description
+        input_schema = tool.parameters["properties"]["input"]
+        assert input_schema["required"] == ["video_url"]
+        assert all("description" in field for field in input_schema["properties"].values())
+        assert tool.output_schema is not None
+        assert tool.output_schema["properties"]["task_id"]["description"]
+        assert all(
+            "description" in field or "$ref" in field
+            for field in tool.output_schema["properties"].values()
+        )
+
+    async def test_vod_get_transcode_schema_is_self_describing(
+        self, configured_server: None
+    ) -> None:
+        tools = await configured_server.mcp.list_tools()
+        tool = next(t for t in tools if t.name == "vod_get_transcode_task")
+        assert tool.description is not None
+        input_schema = tool.parameters["properties"]["input"]
+        assert input_schema["required"] == ["task_id"]
+        assert all("description" in field for field in input_schema["properties"].values())
+        assert tool.output_schema is not None
+        assert tool.output_schema["properties"]["status"]["description"]
         assert all(
             "description" in field or "$ref" in field
             for field in tool.output_schema["properties"].values()

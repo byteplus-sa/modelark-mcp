@@ -25,7 +25,7 @@ def sanitize_provider_message(message: str, fallback: str) -> str:
 
 
 class VodMediaKitGateway(BaseHttpGateway):
-    """Authenticated client exposing only the verified enhancement POST."""
+    """Authenticated client exposing the verified enhancement POST and task GET."""
 
     PROVIDER: ClassVar[ProviderName] = "byteplus-vod-mediakit"
 
@@ -54,6 +54,10 @@ class VodMediaKitGateway(BaseHttpGateway):
     async def post(self, path: str, json_body: dict[str, Any]) -> httpx.Response:
         """POST to the verified MediaKit endpoint and return the raw response."""
         return await self._request("POST", path, json=json_body)
+
+    async def get(self, path: str, *, params: dict[str, Any] | None = None) -> httpx.Response:
+        """GET a MediaKit endpoint (e.g. task polling) and return the raw response."""
+        return await self._request("GET", path, params=params)
 
     @staticmethod
     def extract_request_id(response: httpx.Response) -> str | None:

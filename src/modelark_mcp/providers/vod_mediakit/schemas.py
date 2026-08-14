@@ -153,3 +153,188 @@ class VodMediaKitProviderErrorResponse(BaseModel):
 
     success: bool | None = None
     error: VodMediaKitProviderErrorDetail | None = None
+
+
+class VodMediaKitTranscodeVideoOptions(BaseModel):
+    """Verified ``video`` object for ``POST /transcode-video``.
+
+    Field names, enum values, and ranges are confirmed from the official AI
+    MediaKit API reference (2026-08-14).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    codec: Literal["h264", "h265"] = Field(
+        default="h264",
+        description="Output video codec.",
+    )
+    scale_type: Literal[0, 1, 2] = Field(
+        default=2,
+        description="Scaling mode: 0 = follow source, 1 = long/short-side limit, 2 = width/height limit.",
+    )
+    scale_mode: Literal[0, 1, 2] = Field(
+        default=2,
+        description="Aspect handling when scaling: 0 = no upsampling, 1 = stretch, 2 = letterbox.",
+    )
+    scale_width: int | None = Field(
+        default=None,
+        ge=0,
+        le=4320,
+        description="Target width in pixels; only when scale_type=2.",
+    )
+    scale_height: int | None = Field(
+        default=None,
+        ge=0,
+        le=4320,
+        description="Target height in pixels; only when scale_type=2.",
+    )
+    scale_short: int | None = Field(
+        default=None,
+        ge=0,
+        le=4320,
+        description="Target short side in pixels; only when scale_type=1.",
+    )
+    scale_long: int | None = Field(
+        default=None,
+        ge=0,
+        le=4320,
+        description="Target long side in pixels; only when scale_type=1.",
+    )
+    bitrate_mode: Literal["crf", "abr", "cbr"] = Field(
+        default="crf",
+        description="Bitrate control mode: crf, abr, or cbr.",
+    )
+    bitrate_crf: int = Field(
+        default=25,
+        ge=0,
+        le=51,
+        description="CRF quality level; only used when bitrate_mode=crf.",
+    )
+    bitrate_kbps: int = Field(
+        default=2000,
+        ge=10,
+        le=50000,
+        description="Bitrate in kbps.",
+    )
+    fps_mode: Literal["vfr", "cfr"] = Field(
+        default="vfr",
+        description="Frame-rate mode; only takes effect after fps is set.",
+    )
+    fps: int | None = Field(
+        default=None,
+        ge=1,
+        le=240,
+        description="Target frame rate; unset keeps the source rate.",
+    )
+    is_hdr_to_sdr: bool = Field(
+        default=True,
+        description="Convert HDR input to SDR.",
+    )
+
+    @model_validator(mode="after")
+    def validate_scale_fields(self) -> VodMediaKitTranscodeVideoOptions:
+        if self.scale_type == 2 and self.scale_width is None and self.scale_height is None:
+            raise ValueError("scale_type=2 requires scale_width and/or scale_height")
+        if self.scale_type == 1 and self.scale_short is None and self.scale_long is None:
+            raise ValueError("scale_type=1 requires scale_short and/or scale_long")
+        if self.scale_type != 2 and (self.scale_width is not None or self.scale_height is not None):
+            raise ValueError("scale_width/scale_height require scale_type=2")
+        if self.scale_type != 1 and (self.scale_short is not None or self.scale_long is not None):
+            raise ValueError("scale_short/scale_long require scale_type=1")
+        return self
+
+
+class VodMediaKitTranscodeRequest(BaseModel):
+    """Verified request body for ``POST /tools/transcode-video``."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    video_url: HttpsUrl
+    container_format: Literal["MP4", "FLV", "MPEGTS"] = "MP4"
+    video: VodMediaKitTranscodeVideoOptions = Field(
+        default_factory=VodMediaKitTranscodeVideoOptions
+    )
+
+
+class VodMediaKitTranscodeTaskResult(BaseModel):
+    """Verified ``result`` object of a completed transcode task."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    video_url: HttpsUrl = Field(validation_alias=AliasChoices("video_url", "output_url", "url"))
+    duration: float | None = Field(default=None, ge=0)
+    resolution: str | None = None
+    video_codec: str | None = None
+
+
+class VodMediaKitTranscodeTaskResponse(BaseModel):
+    """Verified polling response from ``GET /tasks/{task_id}``."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    success: Literal[True]
+    task_id: str = Field(min_length=1)
+    task_type: str | None = None
+    status: str = Field(min_length=1)
+    result: VodMediaKitTranscodeTaskResult | None = None
+    error: VodMediaKitProviderErrorDetail | None = None
+    request_id: str | None = None
+    queue_id: str | None = None
+    expires_at: str | int | None = Field(
+        default=None,
+        description="Provider output URL expiry as Unix-seconds or ISO-8601.",
+    )
+    created_at: str | int | None = None
+    finished_at: str | int | None = None
+
+
+class TranscodeSubmission(BaseModel):
+    """Normalized accepted transcode submission for the tool layer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["accepted"]
+    request_id: str | None = None
+    provider_log_id: str | None = None
+    task_id: str = Field(min_length=1)
+
+
+class TranscodeTask(BaseModel):
+    """Normalized transcode task state for the tool layer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str = Field(min_length=1)
+    status: Literal["processing", "succeeded", "failed"]
+    provider_status: str | None = None
+    request_id: str | None = None
+    output_url: HttpsUrl | None = None
+    duration_seconds: float | None = Field(default=None, ge=0)
+    resolution: str | None = None
+    video_codec: str | None = None
+    created_at: str | None = None
+    finished_at: str | None = None
+    source_expires_at: str | None = None
+    failure_code: str | None = None
+    failure_message: str | None = None
+
+    @model_validator(mode="after")
+    def validate_state(self) -> TranscodeTask:
+        if self.status == "succeeded":
+            if self.output_url is None:
+                raise ValueError("succeeded transcode task requires output_url")
+            if self.failure_code is not None or self.failure_message is not None:
+                raise ValueError("succeeded transcode task must not carry a failure")
+        elif self.status == "processing":
+            if self.output_url is not None:
+                raise ValueError("processing transcode task must not carry output_url")
+        elif self.failure_code is None and self.failure_message is None:
+            raise ValueError("failed transcode task requires failure detail")
+        return self
+
+    @field_validator("failure_code", "failure_message")
+    @classmethod
+    def reject_blank_optional_strings(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            return None
+        return value

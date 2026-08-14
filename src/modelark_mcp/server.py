@@ -146,6 +146,20 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             VodEnhanceVideoOutput,
             vod_enhance_video,
         )
+        from modelark_mcp.tools.vod_get_transcode_task import (
+            TOOL_ANNOTATIONS as vod_get_transcode_annotations,
+        )
+        from modelark_mcp.tools.vod_get_transcode_task import (
+            VodTranscodeTaskOutput,
+            vod_get_transcode_task,
+        )
+        from modelark_mcp.tools.vod_transcode_video import (
+            TOOL_ANNOTATIONS as vod_transcode_annotations,
+        )
+        from modelark_mcp.tools.vod_transcode_video import (
+            VodTranscodeVideoOutput,
+            vod_transcode_video,
+        )
 
         server.tool(
             name="vod_enhance_video",
@@ -153,6 +167,18 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             output_schema=VodEnhanceVideoOutput.model_json_schema(),
             auth=component_auth(settings, "vod:enhance"),
         )(vod_enhance_video)
+        server.tool(
+            name="vod_transcode_video",
+            annotations={**vod_transcode_annotations},
+            output_schema=VodTranscodeVideoOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:transcode"),
+        )(vod_transcode_video)
+        server.tool(
+            name="vod_get_transcode_task",
+            annotations={**vod_get_transcode_annotations},
+            output_schema=VodTranscodeTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_transcode_task)
 
     if not settings.has_modelark:
         log_info("tools_skipped", reason="BYTEPLUS_MODELARK_API_KEY not configured")
@@ -329,7 +355,8 @@ def create_server(
         instructions=(
             "BytePlus multimodal generation server. Provides Seed Audio, Seedream, "
             "Seedance, Seed 2.1 multimodal understanding, and Speech-to-Text tools. "
-            "BytePlus VOD AI MediaKit enhancement is available when configured. "
+            "BytePlus VOD AI MediaKit enhancement and video transcoding are available "
+            "when configured. "
             "Generated media is persisted as durable MCP resources."
         ),
         auth=auth_provider or build_auth_provider(resolved_settings),
