@@ -250,7 +250,7 @@ An audio reference for voice cloning.
 | `kind` | `"speaker"` \| `"url"` \| `"base64"` | Yes | Reference mode |
 | `speaker_id` | string | If kind=speaker | Preset speaker ID |
 | `url` | string | If kind=url | Reference audio URL |
-| `data` | string | If kind=base64 | Base64 audio data |
+| `data` | string | If kind=base64 | Base64 audio data (WAV preflight-checked against 30s limit) |
 | `mime_type` | string | No | MIME type |
 
 ### ArtifactRef

@@ -180,6 +180,11 @@ def check_audio_duration_from_base64(
     determined without a full decoder and the check is skipped — the
     provider enforces the limit server-side.
 
+    This preflight is best-effort: it trusts the declared ``data`` chunk
+    size in the WAV header. A crafted header with an under-reported size
+    would bypass the check, but the provider enforces the limit
+    server-side regardless.
+
     Returns the duration in seconds if it could be determined, ``None``
     otherwise.
     Raises :class:`MediaValidationError` if the duration exceeds

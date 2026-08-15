@@ -162,3 +162,92 @@ class TestAudioDurationCheck:
         duration = check_audio_duration_from_base64(data, max_seconds=30)
         assert duration is not None
         assert 9.9 <= duration <= 10.1
+
+    def test_extra_chunk_between_fmt_and_data(self) -> None:
+        sample_rate = 8000
+        byte_rate = sample_rate * 2
+        block_align = 2
+        num_frames = int(5.0 * sample_rate)
+        data_size = num_frames * block_align
+
+        wav = b"RIFF"
+        wav += struct.pack("<I", 36 + data_size + 12)
+        wav += b"WAVE"
+        wav += b"fmt "
+        wav += struct.pack("<I", 16)
+        wav += struct.pack("<H", 1)
+        wav += struct.pack("<H", 1)
+        wav += struct.pack("<I", sample_rate)
+        wav += struct.pack("<I", byte_rate)
+        wav += struct.pack("<H", block_align)
+        wav += struct.pack("<H", 16)
+        wav += b"fact"
+        wav += struct.pack("<I", 4)
+        wav += struct.pack("<I", num_frames)
+        wav += b"data"
+        wav += struct.pack("<I", data_size)
+        wav += b"\x00" * data_size
+
+        data = base64.b64encode(wav).decode()
+        duration = check_audio_duration_from_base64(data, max_seconds=30)
+        assert duration is not None
+        assert 4.9 <= duration <= 5.1
+
+    def test_odd_size_chunk_with_padding(self) -> None:
+        sample_rate = 8000
+        byte_rate = sample_rate * 2
+        block_align = 2
+        num_frames = int(5.0 * sample_rate)
+        data_size = num_frames * block_align
+
+        wav = b"RIFF"
+        wav += struct.pack("<I", 36 + data_size + 10)
+        wav += b"WAVE"
+        wav += b"fmt "
+        wav += struct.pack("<I", 16)
+        wav += struct.pack("<H", 1)
+        wav += struct.pack("<H", 1)
+        wav += struct.pack("<I", sample_rate)
+        wav += struct.pack("<I", byte_rate)
+        wav += struct.pack("<H", block_align)
+        wav += struct.pack("<H", 16)
+        wav += b"LIST"
+        wav += struct.pack("<I", 5)
+        wav += b"INFO\x00"
+        wav += b"\x00"
+        wav += b"data"
+        wav += struct.pack("<I", data_size)
+        wav += b"\x00" * data_size
+
+        data = base64.b64encode(wav).decode()
+        duration = check_audio_duration_from_base64(data, max_seconds=30)
+        assert duration is not None
+        assert 4.9 <= duration <= 5.1
+
+    def test_wave_format_extensible_fmt_chunk(self) -> None:
+        sample_rate = 8000
+        byte_rate = sample_rate * 2
+        block_align = 2
+        num_frames = int(5.0 * sample_rate)
+        data_size = num_frames * block_align
+
+        wav = b"RIFF"
+        wav += struct.pack("<I", 36 + data_size + 24)
+        wav += b"WAVE"
+        wav += b"fmt "
+        wav += struct.pack("<I", 40)
+        wav += struct.pack("<H", 0xFFFE)
+        wav += struct.pack("<H", 1)
+        wav += struct.pack("<I", sample_rate)
+        wav += struct.pack("<I", byte_rate)
+        wav += struct.pack("<H", block_align)
+        wav += struct.pack("<H", 16)
+        wav += b"\x00" * 24
+        wav += b"data"
+        wav += struct.pack("<I", data_size)
+        wav += b"\x00" * data_size
+
+        data = base64.b64encode(wav).decode()
+        duration = check_audio_duration_from_base64(data, max_seconds=30)
+        assert duration is not None
+        assert 4.9 <= duration <= 5.1

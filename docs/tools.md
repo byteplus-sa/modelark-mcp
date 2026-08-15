@@ -187,7 +187,7 @@ Generate full-scene audio through Seed Speech.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `text_prompt` | string | Yes | Text to synthesize (1-3000 chars) |
-| `audio_references` | list[AudioReference] | No | Up to 3 audio references (speaker/url/base64) |
+| `audio_references` | list[AudioReference] | No | Up to 3 audio references (speaker/url/base64). Base64 WAV preflight-checked against 30s limit. |
 | `image_reference` | MediaSource | No | Image reference (mutually exclusive with audio) |
 | `output` | AudioOutputOptions | No | Format, sample rate, speech rate, pitch |
 | `watermark` | AudioWatermarkOptions | No | AIGC watermark controls |
@@ -429,7 +429,7 @@ Generate N independent audio variations in parallel.
 | `text_prompt` | string | No* | — | Base prompt (1-3000 chars) |
 | `variations` | integer | No | 1 | Number of variations (1-5) |
 | `variation_prompts` | list[string] | No | — | Explicit prompts per variation |
-| `audio_references` | list[AudioReference] | No | — | Up to 3 audio references |
+| `audio_references` | list[AudioReference] | No | — | Up to 3 audio references (Base64 WAV preflight-checked against 30s limit) |
 | `image_reference` | MediaSource | No | — | Image reference (mutually exclusive with audio) |
 | `output` | AudioOutputOptions | No | — | Format, sample rate, etc. |
 | `watermark` | AudioWatermarkOptions | No | — | AIGC watermark |
