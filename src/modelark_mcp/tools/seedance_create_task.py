@@ -27,6 +27,7 @@ from modelark_mcp.tools._seedance_shared import (
     SeedanceAudioInput,
     SeedanceImageInput,
     SeedanceVideoInput,
+    strip_ratio_for_video_extension,
 )
 
 
@@ -64,8 +65,10 @@ class SeedanceCreateTaskInput(BaseModel):
         None,
         description=(
             "Output aspect ratio (e.g. '16:9', '9:16'). Must be supported by the selected model. "
-            "Ignored for video editing and extension tasks — the ratio is auto-derived from the "
-            "input video. For first/last-frame tasks, the ratio locks to the first image."
+            "Video extension (extend_video): ratio must be omitted — it auto-locks to the source "
+            "video; any value is stripped to prevent InvalidParameter.TaskTypeConstraint. "
+            "Video editing (edit_video): ratio is auto-derived from the input video. "
+            "For first/last-frame tasks, the ratio locks to the first image."
         ),
     )
     duration: int | None = Field(
@@ -85,7 +88,8 @@ class SeedanceCreateTaskInput(BaseModel):
             "auto-detects from the prompt and media. Set explicitly to force a specific "
             "task type (e.g. 'edit_video', 'extend_video') when auto-detection is "
             "ambiguous. When set, ratio and duration may be auto-derived from input "
-            "media depending on the task type."
+            "media depending on the task type. For extend_video, ratio is stripped "
+            "(auto-locks to source) to prevent InvalidParameter.TaskTypeConstraint."
         ),
     )
     generate_audio: bool | None = Field(
@@ -142,6 +146,12 @@ class SeedanceCreateTaskInput(BaseModel):
             raise ValueError(f"Too many reference videos: {len(self.videos)}. Maximum is 3.")
         if self.audios and len(self.audios) > 3:
             raise ValueError(f"Too many reference audios: {len(self.audios)}. Maximum is 3.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_ratio_for_extension(self) -> SeedanceCreateTaskInput:
+        """Strip ratio for video extension tasks to prevent InvalidParameter.TaskTypeConstraint."""
+        self.ratio = strip_ratio_for_video_extension(self.omni_reference_task_type, self.ratio)
         return self
 
 

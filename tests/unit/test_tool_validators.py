@@ -162,6 +162,41 @@ class TestSeedanceCreateTaskInput:
                 videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             )
 
+    def test_ratio_stripped_for_extend_video(self) -> None:
+        """Ratio is stripped for extend_video to prevent InvalidParameter.TaskTypeConstraint."""
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceCreateTaskInput(
+            prompt="extend this video",
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            omni_reference_task_type="extend_video",
+            ratio="16:9",
+        )
+        assert inp.ratio is None
+
+    def test_ratio_preserved_for_edit_video(self) -> None:
+        """Ratio is not stripped for edit_video."""
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceCreateTaskInput(
+            prompt="edit this video",
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            omni_reference_task_type="edit_video",
+            ratio="16:9",
+        )
+        assert inp.ratio == "16:9"
+
+    def test_ratio_preserved_for_auto_task_type(self) -> None:
+        """Ratio is not stripped when omni_reference_task_type is omitted."""
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceCreateTaskInput(
+            prompt="generate a video",
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            ratio="16:9",
+        )
+        assert inp.ratio == "16:9"
+
 
 class TestSeedanceCancelOrDeleteInput:
     """Tests for Seedance cancel/delete input validation."""
@@ -211,3 +246,16 @@ class TestSeedanceVariationsInput:
                 variations=1,
                 videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             )
+
+    def test_inherits_ratio_stripping_for_extend_video(self) -> None:
+        """Variations input inherits ratio stripping from base model."""
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceVariationsInput(
+            variations=2,
+            variation_prompts=["extend clip a", "extend clip b"],
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            omni_reference_task_type="extend_video",
+            ratio="9:16",
+        )
+        assert inp.ratio is None

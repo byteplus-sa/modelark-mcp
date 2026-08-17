@@ -18,6 +18,7 @@ from modelark_mcp.domain.artifacts import MediaType
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.media import MediaSource
 from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.providers.modelark.seedance import SeedanceService
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
@@ -63,6 +64,31 @@ class SeedanceAudioInput(MediaSource):
         "reference_audio",
         description="Role of this input. Always 'reference_audio'.",
     )
+
+
+_EXTENSION_TASK_TYPE = "extend_video"
+
+
+def strip_ratio_for_video_extension(
+    omni_reference_task_type: str | None, ratio: str | None
+) -> str | None:
+    """Strip ``ratio`` for video extension tasks.
+
+    Video extension tasks auto-lock ratio to the source video. The provider
+    rejects any explicit ratio with ``InvalidParameter.TaskTypeConstraint``,
+    so we strip it to prevent the failure.
+    """
+    if omni_reference_task_type == _EXTENSION_TASK_TYPE and ratio is not None:
+        log_warning(
+            "seedance_ratio_stripped_for_extension",
+            task_type=_EXTENSION_TASK_TYPE,
+            reason=(
+                "ratio auto-locks to source for extend_video; "
+                "setting it fails with InvalidParameter.TaskTypeConstraint"
+            ),
+        )
+        return None
+    return ratio
 
 
 async def execute_seedance_create(
