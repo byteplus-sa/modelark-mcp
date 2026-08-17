@@ -15,8 +15,8 @@ behind one server:
   and watermarking.
 - **Seedance** — asynchronous video generation with task-based lifecycle
   (create, poll, list, cancel/delete). Supports two model generations: 2.5
-  (default, 30s, 30/10/10 refs, 480p/720p) and 2.0 (legacy, 15s, 9/3/3 refs,
-  480p–4K, Fast/Mini variants).
+  (default, 30s, 30/10/10 refs, 480p/720p/1080p) and 2.0 (legacy, 15s, 9/3/3
+  refs, 480p–4K, Fast/Mini variants).
 - **Seed 2.1 Understanding** — multimodal video/image understanding and
   reasoning through ModelArk Chat Completions; supports deep-thinking mode.
   Use for OCR, scene analysis, content review, and as a visual reasoning
@@ -684,15 +684,15 @@ Seedance 2.5 (`dreamina-seedance-2-5-260628`) is the newer, higher-capability mo
 | Max images | 9 | 30 |
 | Max videos | 3 | 10 |
 | Max audios | 3 | 10 |
-| Resolution | 480p, 720p, 1080p, 4K | 480p, 720p only |
+| Resolution | 480p, 720p, 1080p, 4K | 480p, 720p, 1080p |
 | Fast/Mini variants | Yes | No |
 | Structured editing | No | Subject replacement, background replacement, audio editing |
 | Forward/backward extension | No (manual `return_last_frame` chaining) | Yes (native) |
 | Keyframe sequences | No | Yes |
 
-**When to choose 2.5:** longer single-pass videos (up to 30s), richer multimodal references (30/10/10), structured editing, native extension.
+**When to choose 2.5:** longer single-pass videos (up to 30s), richer multimodal references (30/10/10), structured editing, native extension, 1080p output.
 
-**When to choose 2.0:** 1080p or 4K output resolution, Fast/Mini speed variants, lower cost per generation.
+**When to choose 2.0:** 4K output resolution, Fast/Mini speed variants, lower cost per generation.
 
 #### `seedance_2_5_create_task`
 
@@ -705,7 +705,7 @@ Create an asynchronous Seedance 2.5 video generation task.
 | `videos` | `list[SeedanceVideoInput]` | No | Up to 10 videos with role: `reference_video` |
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). |
 | `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
-| `resolution` | `"480p"` \| `"720p"` | No | 2.5 supports only 480p and 720p. |
+| `resolution` | `"480p"` \| `"720p"` \| `"1080p"` | No | 2.5 supports 480p, 720p, and 1080p. 4k is not supported. |
 | `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
 | `duration` | `int` | No | -1 (auto) to 30 seconds. Ignored for edit tasks (auto-derived from input video). |
 | `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto`. |
@@ -1028,7 +1028,7 @@ quota. Nine model families, with these default model IDs:
 | **Seedream Pro** | `dola-seedream-5-0-pro-260628` | 10 refs, no batch, PNG/JPEG |
 | **Seedream Lite** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, PNG/JPEG |
 | **Seedream 4.x** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, JPEG only |
-| **Seedance 2.5** | `dreamina-seedance-2-5-260628` | 30 imgs / 10 vids / 10 audios, 480p / 720p, up to 30s, structured editing + extension |
+| **Seedance 2.5** | `dreamina-seedance-2-5-260628` | 30 imgs / 10 vids / 10 audios, 480p / 720p / 1080p, up to 30s, structured editing + extension |
 | **Seedance 2 Standard** | `dreamina-seedance-2-0-260128` | 9 imgs / 3 vids / 3 audios, 480p–4K, 0–15s |
 | **Seedance 2 Fast** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
 | **Seedance 2 Mini** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
@@ -1069,7 +1069,7 @@ default model for that product is used.
 
 > **Choosing 2.0 vs 2.5:** Use `seedance_2_5_create_task` when you need
 > 30-second generation, 50 multimodal references, structured editing, or
-> native extension. Use `seedance_create_task` for 4K, 1080p, or lower
+> native extension. Use `seedance_create_task` for 4K or lower
 > cost per task. The get/list/cancel tools are shared — `seedance_get_task`,
 > `seedance_list_tasks`, and `seedance_cancel_or_delete_task` work with
 > task IDs from either version.
@@ -1268,9 +1268,9 @@ Set to `0` (default) for record-only mode with no enforcement.
     analysis. Video Base64 is not supported — upload via `media_upload` first.
 
 16. **Choose the right Seedance model.** Use 2.0 (`seedance_create_task`)
-    for 4K/1080p or lower cost. Use 2.5 (`seedance_2_5_create_task`) for
-    30-second generation, 50 references, timestamp editing, or multi-round
-    extension. The get/list/cancel tools are shared.
+    for 4K or lower cost. Use 2.5 (`seedance_2_5_create_task`) for
+    30-second generation, 50 references, timestamp editing, 1080p output, or
+    multi-round extension. The get/list/cancel tools are shared.
 
 17. **Treat MediaKit persistence separately from the provider result.** Keep the
     returned `source_url` whenever `vod_enhance_video` or

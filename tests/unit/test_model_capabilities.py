@@ -118,7 +118,7 @@ class TestSeedance25Capabilities:
             assert caps.max_reference_images == 30
             assert caps.max_reference_videos == 10
             assert caps.max_reference_audios == 10
-            assert caps.supported_resolutions == ("480p", "720p")
+            assert caps.supported_resolutions == ("480p", "720p", "1080p")
         finally:
             os.environ["SEEDANCE_MODEL_BINDINGS"] = old_bindings
             os.environ["SEEDANCE_DEFAULT_MODEL"] = old_default
@@ -150,7 +150,7 @@ class TestSeedance25Capabilities:
             refresh_capability_registry()
 
     def test_seedance_2_5_resolution_validation(self) -> None:
-        """2.5 model accepts 480p/720p but not 1080p or 4k."""
+        """2.5 model accepts 480p/720p/1080p but not 4k."""
         import os
 
         from modelark_mcp.config.env import refresh_settings
@@ -166,8 +166,7 @@ class TestSeedance25Capabilities:
 
             assert registry.validate_resolution("dreamina-seedance-2-5-260628", "480p") == "480p"
             assert registry.validate_resolution("dreamina-seedance-2-5-260628", "720p") == "720p"
-            with pytest.raises(ValueError, match="not supported"):
-                registry.validate_resolution("dreamina-seedance-2-5-260628", "1080p")
+            assert registry.validate_resolution("dreamina-seedance-2-5-260628", "1080p") == "1080p"
             with pytest.raises(ValueError, match="not supported"):
                 registry.validate_resolution("dreamina-seedance-2-5-260628", "4k")
         finally:

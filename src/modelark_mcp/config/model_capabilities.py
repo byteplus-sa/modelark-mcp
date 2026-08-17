@@ -135,7 +135,7 @@ def _seedance_capabilities() -> dict[str, VideoCapabilities]:
         resolutions: tuple[str, ...]
         if binding.family is SeedanceFamily.SEEDANCE_2_5:
             family = ModelFamily.SEEDANCE_2_5
-            resolutions = ("480p", "720p")
+            resolutions = ("480p", "720p", "1080p")
         elif binding.family is SeedanceFamily.MINI:
             family = ModelFamily.SEEDANCE_2_MINI
             resolutions = ("480p", "720p")
