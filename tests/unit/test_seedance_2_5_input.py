@@ -120,6 +120,37 @@ class TestSeedance25CreateTaskInput:
         inp = Seedance25CreateTaskInput(prompt="test")
         assert inp.omni_reference_task_type is None
 
+    def test_ratio_stripped_for_extend_video(self) -> None:
+        """Ratio is stripped for extend_video to prevent InvalidParameter.TaskTypeConstraint."""
+        inp = Seedance25CreateTaskInput(
+            prompt="extend this video",
+            omni_reference_task_type="extend_video",
+            ratio="16:9",
+        )
+        assert inp.ratio is None
+
+    def test_ratio_preserved_for_edit_video(self) -> None:
+        """Ratio is not stripped for edit_video (only extension auto-locks ratio)."""
+        inp = Seedance25CreateTaskInput(
+            prompt="edit this video",
+            omni_reference_task_type="edit_video",
+            ratio="16:9",
+        )
+        assert inp.ratio == "16:9"
+
+    def test_ratio_preserved_for_auto_task_type(self) -> None:
+        """Ratio is not stripped when omni_reference_task_type is omitted (auto)."""
+        inp = Seedance25CreateTaskInput(prompt="generate a video", ratio="16:9")
+        assert inp.ratio == "16:9"
+
+    def test_ratio_none_for_extend_video_stays_none(self) -> None:
+        """No stripping when ratio is already None."""
+        inp = Seedance25CreateTaskInput(
+            prompt="extend this video",
+            omni_reference_task_type="extend_video",
+        )
+        assert inp.ratio is None
+
 
 class TestSeedance25VariationsInput:
     """Tests for Seedance25VariationsInput validators."""
@@ -156,3 +187,13 @@ class TestSeedance25VariationsInput:
     def test_inherits_2_5_duration_rejection(self) -> None:
         with pytest.raises(ValidationError):
             Seedance25VariationsInput(prompt="test", variations=1, duration=31)
+
+    def test_inherits_ratio_stripping_for_extend_video(self) -> None:
+        """Variations input inherits ratio stripping from base model."""
+        inp = Seedance25VariationsInput(
+            variations=2,
+            variation_prompts=["extend clip a", "extend clip b"],
+            omni_reference_task_type="extend_video",
+            ratio="9:16",
+        )
+        assert inp.ratio is None

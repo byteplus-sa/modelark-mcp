@@ -280,7 +280,7 @@ Create an asynchronous Seedance video generation task.
 | `audios` | list[SeedanceAudioInput] | No | Reference audio (max 3) |
 | `model` | string | No | Override configured model ID |
 | `resolution` | "480p" \| "720p" \| "1080p" \| "4k" | No | Output resolution |
-| `ratio` | string | No | Aspect ratio. Ignored for edit/extend (auto-derived from input video) |
+| `ratio` | string | No | Aspect ratio. For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
 | `duration` | integer | No | Duration in seconds (-1 for auto, 4-15). Ignored for edit tasks (auto-derived) |
 | `omni_reference_task_type` | string | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
 | `generate_audio` | boolean | No | Generate audio for the video |
