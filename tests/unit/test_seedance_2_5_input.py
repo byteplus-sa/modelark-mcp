@@ -43,9 +43,9 @@ class TestSeedance25CreateTaskInput:
         inp = Seedance25CreateTaskInput(prompt="test", resolution="720p")
         assert inp.resolution == "720p"
 
-    def test_resolution_1080p_rejected(self) -> None:
-        with pytest.raises(ValidationError):
-            Seedance25CreateTaskInput(prompt="test", resolution="1080p")
+    def test_resolution_1080p_accepted(self) -> None:
+        inp = Seedance25CreateTaskInput(prompt="test", resolution="1080p")
+        assert inp.resolution == "1080p"
 
     def test_resolution_4k_rejected(self) -> None:
         with pytest.raises(ValidationError):

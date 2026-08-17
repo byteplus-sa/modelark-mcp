@@ -41,7 +41,7 @@ The binding enums (`config/env.py`):
 
 ## Video capabilities (`VideoCapabilities`)
 
-All three Seedance families share: `max_reference_images=9`,
+The three Seedance 2.0 families share: `max_reference_images=9`,
 `max_reference_videos=3`, `max_reference_audios=3`, `supports_seed=False`,
 `supports_camera_fixed=False`, `supports_frames=False`,
 `supports_service_tier_flex=False`, `duration_range=(-1, 15)`,
@@ -51,9 +51,15 @@ Only `supported_resolutions` differs:
 
 | Family | `supported_resolutions` |
 |---|---|
+| `seedance_2_5` | `("480p", "720p", "1080p")` |
 | `MINI` | `("480p", "720p")` |
 | `FAST` | `("480p", "720p")` |
 | `STANDARD` | `("480p", "720p", "1080p", "4k")` |
+
+> Seedance 2.5 differs from the 2.0 families in duration
+> (`duration_range=(-1, 30)`) and reference counts
+> (`max_reference_images=30`, `max_reference_videos=10`,
+> `max_reference_audios=10`); `4k` is not supported on 2.5.
 
 > There is also **no aspect-ratio field** on video capabilities — the
 > `ratio` field exists only on `SeedanceTaskSettings` and the tool input

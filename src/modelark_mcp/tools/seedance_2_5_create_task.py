@@ -1,7 +1,7 @@
 """``seedance_2_5_create_task`` tool — create an asynchronous Seedance 2.5 video task.
 
 Seedance 2.5 supports up to 30-second video generation, 50 multimodal
-references (30 images, 10 videos, 10 audio), 480p/720p resolution, and
+references (30 images, 10 videos, 10 audio), 480p/720p/1080p resolution, and
 timestamp-level prompt control for editing.
 """
 
@@ -52,9 +52,9 @@ class Seedance25CreateTaskInput(BaseModel):
         None,
         description="Model ID. Defaults to 'dreamina-seedance-2-5-260628'. Omit to use the default.",
     )
-    resolution: Literal["480p", "720p"] | None = Field(
+    resolution: Literal["480p", "720p", "1080p"] | None = Field(
         None,
-        description="Output video resolution. Seedance 2.5 supports 480p and 720p.",
+        description="Output video resolution. Seedance 2.5 supports 480p, 720p, and 1080p. 4k is not supported.",
     )
     ratio: str | None = Field(
         None,
@@ -171,7 +171,7 @@ async def seedance_2_5_create_task(
 
     Accepts text, image, video, and audio references as content input.
     Supports up to 30-second video generation, 50 multimodal references
-    (30 images, 10 videos, 10 audio), and 480p/720p resolution.
+    (30 images, 10 videos, 10 audio), and 480p/720p/1080p resolution.
     The task runs asynchronously on the provider — use
     ``seedance_get_task`` to poll for completion. Returns the task ID
     and a recommended polling interval.

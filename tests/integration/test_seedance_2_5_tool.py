@@ -97,6 +97,31 @@ class TestSeedance25CreateTaskTool:
         assert result.task_id == "task-2-5-abc"
         assert result.status == "queued"
 
+    async def test_create_task_1080p_passthrough(
+        self,
+        seedance_2_5_ctx: FakeContext,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        async def mock_create(self: SeedanceService, request: Any) -> tuple[str, str | None]:
+            assert request.model == "dreamina-seedance-2-5-260628"
+            assert request.resolution == "1080p"
+            return "task-1080p", "req-1080p"
+
+        monkeypatch.setattr(SeedanceService, "create_task", mock_create)
+        monkeypatch.setattr(SeedanceService, "close", _mock_close)
+
+        result = await seedance_2_5_create_task(
+            Seedance25CreateTaskInput(
+                prompt="a cinematic 30-second film",
+                resolution="1080p",
+            ),
+            seedance_2_5_ctx,
+        )
+
+        assert isinstance(result, Seedance25CreateTaskOutput)
+        assert result.task_id == "task-1080p"
+        assert result.status == "queued"
+
     async def test_create_task_with_max_references(
         self,
         seedance_2_5_ctx: FakeContext,
