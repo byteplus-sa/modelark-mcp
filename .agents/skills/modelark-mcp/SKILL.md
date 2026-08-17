@@ -537,7 +537,7 @@ polling.
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 3 audios with role: `reference_audio` |
 | `model` | `str` | No | Model ID. Default: `dreamina-seedance-2-0-260128` (Standard). Fast and Mini IDs are configured via `SEEDANCE_MODEL_BINDINGS`. |
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` \| `"4k"` | No | |
-| `ratio` | `str` | No | Aspect ratio. Ignored for edit/extend tasks (auto-derived from input video) |
+| `ratio` | `str` | No | Aspect ratio. For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
 | `duration` | `int` | No | -1 (auto) to 15 seconds. Ignored for edit tasks (auto-derived from input video) |
 | `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
 | `generate_audio` | `bool` | No | Generate audio track |
@@ -588,6 +588,10 @@ overridden:
 | Video extension | Locked to input video's ratio | Set freely |
 | First/last-frame generation | Locked to first image's ratio | Set freely |
 | Text-to-video / standard reference | Set freely | Set freely (or `-1` for auto) |
+
+For `extend_video`, any explicit `ratio` is client-stripped (logged as
+`seedance_ratio_stripped_for_extension`) to prevent the provider from
+rejecting the task with `InvalidParameter.TaskTypeConstraint`.
 
 Use `omni_reference_task_type` to force a specific task type when
 auto-detection is ambiguous (e.g. set to `"edit_video"` or
@@ -702,7 +706,7 @@ Create an asynchronous Seedance 2.5 video generation task.
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). |
 | `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
 | `resolution` | `"480p"` \| `"720p"` | No | 2.5 supports only 480p and 720p. |
-| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). Ignored for edit/extend tasks (auto-derived from input video). |
+| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
 | `duration` | `int` | No | -1 (auto) to 30 seconds. Ignored for edit tasks (auto-derived from input video). |
 | `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto`. |
 | `generate_audio` | `bool` | No | Whether to generate an audio track. |
