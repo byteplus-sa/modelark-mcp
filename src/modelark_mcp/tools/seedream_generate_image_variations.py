@@ -35,12 +35,12 @@ class SeedreamVariationsInput(BaseModel):
         None,
         min_length=1,
         max_length=4000,
-        description="Base prompt for all variations. Required if variation_prompts is None.",
+        description="Base prompt for all variations (1-4,000 characters). Required if variation_prompts is None.",
     )
     variations: int = Field(1, ge=1, le=10, description="Number of variations.")
     variation_prompts: list[Annotated[str, Field(min_length=1, max_length=4000)]] | None = Field(
         None,
-        description="Explicit prompts per variation. If provided, overrides prompt and must have `variations` entries.",
+        description="Explicit prompts per variation (each 1-4,000 characters). If provided, overrides prompt and must have `variations` entries.",
     )
     base_seed: int | None = Field(
         None,
