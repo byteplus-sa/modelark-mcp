@@ -316,9 +316,9 @@ reference.
     "persistence": "persisted"
   },
   "background": {
-    "artifact": null,
+    "artifact": { "id": "...", "uri": "seed-media://artifacts/...", "media_type": "audio", "mime_type": "audio/aac", "bytes": 1787924 },
     "source_url": "https://vod.ap-southeast-1.byteplusvod.com/background.aac?sign=...",
-    "persistence": "not_requested"
+    "persistence": "persisted"
   }
 }
 ```

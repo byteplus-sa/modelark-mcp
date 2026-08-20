@@ -8,6 +8,7 @@ polls do not download twice.
 from __future__ import annotations
 
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
@@ -28,7 +29,20 @@ from modelark_mcp.tools._vod_shared import VodArtifactPersistenceIssue
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
 
-_TRACK_MIME_TYPE = "audio/aac"
+_MIME_BY_SUFFIX = {
+    ".aac": "audio/aac",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".flac": "audio/flac",
+}
+
+
+def _track_mime_type(url: HttpsUrl) -> str:
+    """Infer the track MIME type from the provider URL suffix; default to AAC."""
+    path = urlsplit(str(url)).path
+    suffix = path[path.rfind(".") :].lower() if "." in path else ""
+    return _MIME_BY_SUFFIX.get(suffix, "audio/aac")
 
 
 class VodGetAudioSeparationInput(BaseModel):
@@ -65,7 +79,7 @@ class VodAudioTrack(BaseModel):
         default=None,
         description="ISO-8601 expiry for source_url, normalized from the provider's expires_at.",
     )
-    persistence: Literal["not_applicable", "not_requested", "persisted", "failed"] = Field(
+    persistence: Literal["not_requested", "persisted", "failed"] = Field(
         description="Outcome of durable artifact persistence, independent of provider success."
     )
     persistence_issue: VodArtifactPersistenceIssue | None = Field(
@@ -188,7 +202,7 @@ async def _persist_track(
         ref = await runtime.artifact_store.copy_from_trusted_url(
             url=str(url),
             media_type=MediaType.AUDIO,
-            mime_type=_TRACK_MIME_TYPE,
+            mime_type=_track_mime_type(url),
             source_expires_at=source_expires_at,
             auth=owner,
         )

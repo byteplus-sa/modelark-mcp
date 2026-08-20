@@ -367,8 +367,8 @@ top-level `task_id` for polling.
 
 | Field | Type | Required | Allowed values / notes |
 | --- | --- | --- | --- |
-| `audio_url` | String | Exactly one of `audio_url`/`video_url` | Public HTTP/HTTPS URL. Audio formats: mp3, m4a, wav. |
-| `video_url` | String | Exactly one of `audio_url`/`video_url` | Public HTTP/HTTPS URL. Video formats: mp4, flv, ts, avi, mov, wmv, mkv. |
+| `audio_url` | String | Exactly one of `audio_url`/`video_url` | Public HTTPS URL. Audio formats: mp3, m4a, wav. |
+| `video_url` | String | Exactly one of `audio_url`/`video_url` | Public HTTPS URL. Video formats: mp4, flv, ts, avi, mov, wmv, mkv. |
 | `scene` | String | No (default `Audio`) | `Audio` (2-track voice + background), `Music` (2-track), `Drama` (3-track), `Narrate` (3-track). |
 | `output_format` | String | No (default `aac`) | `aac`, `mp3`, `wav`, `m4a`, `flac`. |
 

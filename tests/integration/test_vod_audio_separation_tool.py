@@ -268,6 +268,33 @@ async def test_poll_succeeded_persists_tracks_once(
     assert copy.await_count == 2
 
 
+async def test_poll_infers_track_mime_from_url_suffix(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = SeparateVoiceTask(
+        task_id="amk-tool-separate-voice-1",
+        status="succeeded",
+        provider_status="completed",
+        voice_url="https://vod.ap-southeast-1.byteplusvod.com/voice.mp3?sign=1",
+        background_url="https://vod.ap-southeast-1.byteplusvod.com/background.flac?sign=2",
+    )
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "get", AsyncMock(return_value=task))
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    copy = AsyncMock(return_value=_audio_ref())
+    monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy)
+
+    await vod_get_audio_separation(
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1"), fake_ctx
+    )
+
+    assert copy.await_count == 2
+    assert copy.await_args_list[0].kwargs["mime_type"] == "audio/mpeg"
+    assert copy.await_args_list[1].kwargs["mime_type"] == "audio/flac"
+
+
 async def test_poll_succeeded_three_way_tracks(
     test_env: None,
     fake_ctx: FakeContext,
