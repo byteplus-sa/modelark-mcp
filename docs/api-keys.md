@@ -1,8 +1,8 @@
 # API Keys Guide
 
-This server calls four BytePlus services. Each uses a distinct credential and
-auth scheme — they are **not interchangeable**. You only need the keys for the
-products you want to use; absent credentials simply skip registering that
+This server calls several BytePlus services. Each uses a distinct credential
+and auth scheme — they are **not interchangeable**. You only need the keys for
+the products you want to use; absent credentials simply skip registering that
 tool set.
 
 | Service | Env var | Auth header | Tools it enables |
@@ -10,6 +10,8 @@ tool set.
 | ModelArk | `BYTEPLUS_MODELARK_API_KEY` | `Authorization: Bearer <key>` | Seedream (image), Seedance (video) |
 | Seed Speech (TTS) | `BYTEPLUS_SEED_AUDIO_API_KEY` | `X-Api-Key: <key>` | Seed Audio (speech generation) |
 | Seed Speech (STT) | `SEED_SPEECH_ASR_API_KEY` | `X-Api-Key: <key>` | Speech-to-Text (ASR) |
+| VOD AI MediaKit | `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | `Authorization: Bearer <key>` | `vod_enhance_video`, `vod_transcode_video`, `vod_get_transcode_task` |
+| VOD OpenAPI | `BYTEPLUS_VOD_ACCESS_KEY_ID` + `BYTEPLUS_VOD_SECRET_ACCESS_KEY` | HMAC-SHA256 request signing | `vod_separate_audio`, `vod_get_audio_separation` |
 | TOS | `TOS_ACCESS_KEY` + `TOS_SECRET_KEY` + `TOS_BUCKET` | AK/SK signing | `media_upload`, `media_presign` |
 | S3 | `S3_ACCESS_KEY` + `S3_SECRET_KEY` + `S3_BUCKET` | AK/SK signing | `media_upload`, `media_presign` |
 
@@ -99,6 +101,39 @@ call.
 The ASR key is obtained from the same BytePlus Voice / Seed Speech console as
 the TTS key, but is a separate credential. Set `SEED_SPEECH_ASR_API_KEY` in
 `.env` to enable the `speech_to_text` tool.
+
+## BytePlus VOD (AI MediaKit and OpenAPI)
+
+BytePlus VOD uses **two distinct credentials** for two different surfaces:
+
+- **VOD AI MediaKit** — a Bearer-authenticated convenience endpoint for video
+  enhancement and transcoding.
+- **VOD OpenAPI** — the signature-authenticated OpenAPI
+  (`vod.byteplusapi.com`) used for voice and background audio separation.
+
+**Env vars:**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | VOD AI MediaKit Bearer key |
+| `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | MediaKit base URL |
+| `BYTEPLUS_VOD_ACCESS_KEY_ID` | empty | VOD OpenAPI Access Key (AK) |
+| `BYTEPLUS_VOD_SECRET_ACCESS_KEY` | empty | VOD OpenAPI Secret Access Key (SK) |
+| `BYTEPLUS_VOD_BASE_URL` | `https://vod.byteplusapi.com` | VOD OpenAPI endpoint |
+| `BYTEPLUS_VOD_REGION` | `ap-southeast-1` | VOD OpenAPI signing region |
+| `BYTEPLUS_VOD_PLAYBACK_DOMAIN` | empty | Optional playback domain for output audio URLs |
+
+**How to get the keys:**
+
+1. Sign in to **<https://console.byteplus.com>** and enable BytePlus VOD.
+2. For the MediaKit key, obtain the convenience-endpoint API key from the VOD
+   AI MediaKit console area.
+3. For the OpenAPI keys, open **IAM** > **Key Management** and create an Access
+   Key pair (AK + SK). Copy both immediately — the SK is shown once.
+
+The VOD OpenAPI requests are signed with HMAC-SHA256 using the AK/SK pair. The
+secret key is startup configuration only and is never logged, returned, or
+accepted as a tool argument.
 
 ## Object storage (TOS or S3)
 
@@ -209,6 +244,17 @@ SEED_SPEECH_ASR_API_KEY=
 SEED_SPEECH_ASR_BASE_URL=https://voice.ap-southeast-1.bytepluses.com
 SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS=3.0
 SEED_SPEECH_ASR_POLL_MAX_SECONDS=600.0
+
+# BytePlus VOD — AI MediaKit (Bearer)
+BYTEPLUS_VOD_MEDIAKIT_API_KEY=
+BYTEPLUS_VOD_MEDIAKIT_BASE_URL=https://mediakit.ap-southeast-1.bytepluses.com/api/v1
+
+# BytePlus VOD — OpenAPI (AK/SK signature)
+BYTEPLUS_VOD_ACCESS_KEY_ID=
+BYTEPLUS_VOD_SECRET_ACCESS_KEY=
+BYTEPLUS_VOD_BASE_URL=https://vod.byteplusapi.com
+BYTEPLUS_VOD_REGION=ap-southeast-1
+BYTEPLUS_VOD_PLAYBACK_DOMAIN=
 
 # Object storage — TOS (optional, default backend)
 TOS_ACCESS_KEY=

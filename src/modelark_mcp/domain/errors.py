@@ -17,6 +17,7 @@ ProviderName = Literal[
     "modelark",
     "seed-speech",
     "byteplus-vod-mediakit",
+    "byteplus-vod",
     "tos",
     "s3",
 ]

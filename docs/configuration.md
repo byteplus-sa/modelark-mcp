@@ -10,9 +10,14 @@ Settings. Copy `.env.example` to `.env`. Empty values are ignored.
 | `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream, Seedance, and Seed 2.1 understanding; sent as Bearer auth |
 | `BYTEPLUS_SEED_AUDIO_API_KEY` | empty | Enables Seed Audio; sent as `X-Api-Key` |
 | `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | Enables `vod_enhance_video`; sent as Bearer auth |
+| `BYTEPLUS_VOD_ACCESS_KEY_ID` | empty | Enables the VOD OpenAPI audio separation tools (with the secret key) |
+| `BYTEPLUS_VOD_SECRET_ACCESS_KEY` | empty | VOD OpenAPI signature secret; never logged or exposed |
 | `BYTEPLUS_MODELARK_BASE_URL` | AP Southeast ModelArk URL | HTTPS data-plane base URL |
 | `BYTEPLUS_SEED_AUDIO_BASE_URL` | AP Southeast Seed Speech URL | HTTPS service base URL |
 | `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | HTTPS VOD AI MediaKit convenience-endpoint base URL |
+| `BYTEPLUS_VOD_BASE_URL` | `https://vod.byteplusapi.com` | HTTPS VOD OpenAPI endpoint |
+| `BYTEPLUS_VOD_REGION` | `ap-southeast-1` | VOD OpenAPI signing region |
+| `BYTEPLUS_VOD_PLAYBACK_DOMAIN` | empty | Optional bare playback domain for output audio URLs |
 | `SEEDREAM_DEFAULT_MODEL` | `dola-seedream-5-0-pro-260628` | Default image model/endpoint ID |
 | `SEEDANCE_DEFAULT_MODEL` | `dreamina-seedance-2-0-260128` | Default video model/endpoint ID |
 | `SEED_UNDERSTANDING_DEFAULT_MODEL` | `dola-seed-2-1-turbo-260628` | Default understanding model/endpoint ID |
@@ -73,6 +78,7 @@ claim. Tool scopes are enforced by FastMCP:
 - `vod:enhance`
 - `vod:transcode`
 - `vod:read`
+- `vod:extract`
 - `media:upload`
 - `media:presign`
 - `artifacts:read`
@@ -113,6 +119,24 @@ The transcode request/status contract is verified from the official AI MediaKit
 API reference; the output URL hostname (`*.byteplusvod.com`) is confirmed and
 trusted for durable persistence. `queue_id`/`Project` request params remain
 unverified and are not exposed.
+
+## VOD OpenAPI audio separation
+
+`vod_separate_audio` and `vod_get_audio_separation` are registered when both
+`BYTEPLUS_VOD_ACCESS_KEY_ID` and `BYTEPLUS_VOD_SECRET_ACCESS_KEY` are set. This
+is a separate signature-authenticated surface (`vod.byteplusapi.com`) from the
+Bearer-authenticated AI MediaKit convenience endpoints, using the BytePlus
+OpenAPI HMAC-SHA256 request signing scheme (signed headers `content-type`,
+`host`, `x-content-sha256`, `x-date`; credential scope
+`{date}/{region}/vod/request`).
+
+`vod_separate_audio` submits a `StartExecution` task with
+`Task.Type = AudioExtract` for a DirectUrl storage-path input (`FileName`,
+optional `SpaceName`/`BucketName`). `vod_get_audio_separation` polls
+`GetExecution` and returns the separated vocal and background AAC tracks'
+`FileName`/`Size`, building `https://{domain}/{FileName}` URLs when a playback
+domain is supplied per call or via `BYTEPLUS_VOD_PLAYBACK_DOMAIN`. Outputs
+remain in the VOD space and are not copied into local artifact storage.
 
 ## Object storage (TOS or S3, optional)
 
