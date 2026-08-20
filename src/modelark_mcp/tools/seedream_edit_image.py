@@ -122,8 +122,7 @@ class SeedreamEditInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_prompt_with_markup(self) -> SeedreamEditInput:
-        markup = _coordinate_markup(self.point, self.bbox)
-        combined_length = len(self.prompt) + (len(markup) + 1 if markup else 0)
+        combined_length = len(_build_edit_prompt(self.prompt, self.point, self.bbox))
         if combined_length > 4000:
             raise ValueError(
                 f"Prompt with coordinate markup is {combined_length} characters; must not exceed 4,000."

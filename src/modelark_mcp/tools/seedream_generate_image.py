@@ -40,7 +40,7 @@ class SeedreamGenerateInput(BaseModel):
         ...,
         min_length=1,
         max_length=4000,
-        description="Text prompt describing the image to generate (up to 4,000 characters).",
+        description="Text prompt describing the image to generate (1-4,000 characters).",
     )
     images: list[MediaSource] | None = Field(
         None,
