@@ -9,8 +9,7 @@ tool set.
 |---|---|---|---|
 | ModelArk | `BYTEPLUS_MODELARK_API_KEY` | `Authorization: Bearer <key>` | Seedream (image), Seedance (video) |
 | Seed Speech | `BYTEPLUS_SEED_SPEECH_API_KEY` | `X-Api-Key: <key>` | Seed Audio (speech generation), Speech-to-Text (ASR) |
-| VOD AI MediaKit | `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | `Authorization: Bearer <key>` | `vod_enhance_video`, `vod_transcode_video`, `vod_get_transcode_task` |
-| VOD OpenAPI | `BYTEPLUS_VOD_ACCESS_KEY_ID` + `BYTEPLUS_VOD_SECRET_ACCESS_KEY` | HMAC-SHA256 request signing | `vod_separate_audio`, `vod_get_audio_separation` |
+| VOD AI MediaKit | `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | `Authorization: Bearer <key>` | `vod_enhance_video`, `vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, `vod_get_audio_separation` |
 | TOS | `TOS_ACCESS_KEY` + `TOS_SECRET_KEY` + `TOS_BUCKET` | AK/SK signing | `media_upload`, `media_presign` |
 | S3 | `S3_ACCESS_KEY` + `S3_SECRET_KEY` + `S3_BUCKET` | AK/SK signing | `media_upload`, `media_presign` |
 
@@ -107,14 +106,11 @@ not the credential.
 | `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` | `3.0` | Seconds between ASR query polls |
 | `SEED_SPEECH_ASR_POLL_MAX_SECONDS` | `600.0` | Maximum total seconds to wait for ASR result |
 
-## BytePlus VOD (AI MediaKit and OpenAPI)
+## BytePlus VOD (AI MediaKit)
 
-BytePlus VOD uses **two distinct credentials** for two different surfaces:
-
-- **VOD AI MediaKit** — a Bearer-authenticated convenience endpoint for video
-  enhancement and transcoding.
-- **VOD OpenAPI** — the signature-authenticated OpenAPI
-  (`vod.byteplusapi.com`) used for voice and background audio separation.
+BytePlus VOD AI MediaKit is a single Bearer-authenticated convenience surface
+that powers video enhancement, video transcoding, and voice + background audio
+separation. All five tools share the same API key.
 
 **Env vars:**
 
@@ -122,23 +118,21 @@ BytePlus VOD uses **two distinct credentials** for two different surfaces:
 |---|---|---|
 | `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | VOD AI MediaKit Bearer key |
 | `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | MediaKit base URL |
-| `BYTEPLUS_VOD_ACCESS_KEY_ID` | empty | VOD OpenAPI Access Key (AK) |
-| `BYTEPLUS_VOD_SECRET_ACCESS_KEY` | empty | VOD OpenAPI Secret Access Key (SK) |
-| `BYTEPLUS_VOD_BASE_URL` | `https://vod.byteplusapi.com` | VOD OpenAPI endpoint |
-| `BYTEPLUS_VOD_REGION` | `ap-southeast-1` | VOD OpenAPI signing region |
-| `BYTEPLUS_VOD_PLAYBACK_DOMAIN` | empty | Optional playback domain for output audio URLs |
 
-**How to get the keys:**
+**How to get the key:**
 
 1. Sign in to **<https://console.byteplus.com>** and enable BytePlus VOD.
-2. For the MediaKit key, obtain the convenience-endpoint API key from the VOD
-   AI MediaKit console area.
-3. For the OpenAPI keys, open **IAM** > **Key Management** and create an Access
-   Key pair (AK + SK). Copy both immediately — the SK is shown once.
+2. Open the **AI MediaKit** console and navigate to **API key** management.
+3. Create an API key and copy it immediately — it is shown once.
 
-The VOD OpenAPI requests are signed with HMAC-SHA256 using the AK/SK pair. The
-secret key is startup configuration only and is never logged, returned, or
-accepted as a tool argument.
+```dotenv
+BYTEPLUS_VOD_MEDIAKIT_API_KEY=your-mediakit-key-here
+```
+
+The key is sent as `Authorization: Bearer <key>` against
+`https://mediakit.ap-southeast-1.bytepluses.com/api/v1`. It is startup
+configuration only and is never logged, returned, or accepted as a tool
+argument.
 
 ## Object storage (TOS or S3)
 
@@ -252,13 +246,6 @@ SEED_SPEECH_ASR_POLL_MAX_SECONDS=600.0
 # BytePlus VOD — AI MediaKit (Bearer)
 BYTEPLUS_VOD_MEDIAKIT_API_KEY=
 BYTEPLUS_VOD_MEDIAKIT_BASE_URL=https://mediakit.ap-southeast-1.bytepluses.com/api/v1
-
-# BytePlus VOD — OpenAPI (AK/SK signature)
-BYTEPLUS_VOD_ACCESS_KEY_ID=
-BYTEPLUS_VOD_SECRET_ACCESS_KEY=
-BYTEPLUS_VOD_BASE_URL=https://vod.byteplusapi.com
-BYTEPLUS_VOD_REGION=ap-southeast-1
-BYTEPLUS_VOD_PLAYBACK_DOMAIN=
 
 # Object storage — TOS (optional, default backend)
 TOS_ACCESS_KEY=

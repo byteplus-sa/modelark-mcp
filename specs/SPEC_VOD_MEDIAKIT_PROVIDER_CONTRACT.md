@@ -30,11 +30,14 @@ for MCP integration on the AI MediaKit data plane:
 
 - `POST /api/v1/tools/enhance-video` (video enhancement, `vod_enhance_video`);
 - `POST /api/v1/tools/transcode-video` + `GET /api/v1/tasks/{task_id}` (video
-  transcoding, `vod_transcode_video` / `vod_get_transcode_task`).
+  transcoding, `vod_transcode_video` / `vod_get_transcode_task`);
+- `POST /api/v1/tools/separate-voice` + `GET /api/v1/tasks/{task_id}` (voice
+  and background audio separation, `vod_separate_audio` /
+  `vod_get_audio_separation`).
 
-It does not describe the separately documented, AK/SK-signed BytePlus VOD
-`StartExecution` and `GetExecution` APIs. The two surfaces must not share adapters
-or credentials.
+The AK/SK-signed BytePlus VOD `StartExecution`/`GetExecution` surface is no
+longer used by this server; its former contract is retained in the deprecated
+`specs/SPEC_VOD_OPENAPI_PROVIDER_CONTRACT.md`.
 
 ### Video enhancement surface
 
@@ -353,6 +356,61 @@ caller, persistence failures never erase provider success, and `source_url`
 path/query never logged. The output hostname (`*.byteplusvod.com`) was confirmed
 by a live probe on 2026-08-14 and added to the artifact store's trusted-host
 policy; durable persistence works for confirmed outputs.
+
+## Voice Separation Request Contract
+
+`POST /api/v1/tools/separate-voice` with Bearer auth and `Content-Type:
+application/json`. Submission is asynchronous; a successful submission returns a
+top-level `task_id` for polling.
+
+### Top-level request fields
+
+| Field | Type | Required | Allowed values / notes |
+| --- | --- | --- | --- |
+| `audio_url` | String | Exactly one of `audio_url`/`video_url` | Public HTTPS URL. Audio formats: mp3, m4a, wav. |
+| `video_url` | String | Exactly one of `audio_url`/`video_url` | Public HTTPS URL. Video formats: mp4, flv, ts, avi, mov, wmv, mkv. |
+| `scene` | String | No (default `Audio`) | `Audio` (2-track voice + background), `Music` (2-track), `Drama` (3-track), `Narrate` (3-track). |
+| `output_format` | String | No (default `aac`) | `aac`, `mp3`, `wav`, `m4a`, `flac`. |
+
+### Submission response
+
+```json
+{
+  "success": true,
+  "task_id": "amk-tool-separate-voice-...",
+  "request_id": "..."
+}
+```
+
+### Task response
+
+`GET /api/v1/tasks/{task_id}` reuses the transcode task lifecycle (`running` →
+`processing`, `completed` → `succeeded`, `failed` → `failed`; anything else
+fails closed as `INVALID_RESPONSE`).
+
+Completed `result` tracks:
+
+| Field | Presence | Notes |
+| --- | --- | --- |
+| `voice_audio_url` | 2-way and 3-way | Vocal track URL |
+| `background_audio_url` | 2-way only | Background accompaniment URL |
+| `music_audio_url` | 3-way only (`Drama`/`Narrate`) | Music track URL |
+| `sfx_audio_url` | 3-way only (`Drama`/`Narrate`) | Sound-effects track URL |
+| `duration` | optional | Float seconds |
+
+A completed task with no track URLs fails closed as `INVALID_RESPONSE`.
+
+### Separation execution, retry, and persistence
+
+- POST timeout / connection loss / HTTP 5xx → ambiguous completion, never
+  retried blindly.
+- GET 429 → retryable (via `Retry-After`); other 4xx non-retryable; 5xx treated
+  as ambiguous by the gateway.
+- Output URLs are valid for 24 hours. The MCP tool preserves `source_url` and
+  best-effort persists each track as a durable audio artifact under the
+  `vod-mediakit` provider key, capped at the 10 MiB audio artifact limit.
+- Track output hostnames follow the same trusted-host policy as transcode; the
+  `*.byteplusvod.com` suffix is already allowlisted.
 
 ## Regional and Billing Boundaries
 

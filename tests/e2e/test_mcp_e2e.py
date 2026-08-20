@@ -118,6 +118,8 @@ class TestToolDiscovery:
                 "vod_enhance_video",
                 "vod_transcode_video",
                 "vod_get_transcode_task",
+                "vod_separate_audio",
+                "vod_get_audio_separation",
             }
 
     async def test_tool_has_input_schema(self, e2e_server: object) -> None:

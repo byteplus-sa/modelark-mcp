@@ -1,4 +1,4 @@
-"""Integration tests for the BytePlus VOD OpenAPI audio separation MCP tools."""
+"""Integration tests for the VOD AI MediaKit audio separation MCP tools."""
 
 from __future__ import annotations
 
@@ -6,10 +6,18 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastmcp.tools import ToolResult
+from pydantic import ValidationError
 
+from modelark_mcp.artifacts.store import ArtifactPersistenceError
+from modelark_mcp.domain.artifacts import ArtifactRef
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.vod.audio_separation import VodAudioSeparationService
-from modelark_mcp.providers.vod.schemas import AudioSeparationSubmission, AudioSeparationTask
+from modelark_mcp.providers.vod_mediakit.schemas import (
+    SeparateVoiceSubmission,
+    SeparateVoiceTask,
+)
+from modelark_mcp.providers.vod_mediakit.separate_voice import (
+    VodMediaKitSeparateVoiceService,
+)
 from modelark_mcp.security.auth_context import AuthContext
 from modelark_mcp.tools.vod_get_audio_separation import (
     VodAudioSeparationTaskOutput,
@@ -24,25 +32,59 @@ from modelark_mcp.tools.vod_separate_audio import (
 from tests.fixtures.fake_context import FakeContext
 
 
-async def _close(_self: VodAudioSeparationService) -> None:
+async def _close(_self: VodMediaKitSeparateVoiceService) -> None:
     return None
 
 
-def _submission() -> AudioSeparationSubmission:
-    return AudioSeparationSubmission(status="accepted", request_id="req-1", run_id="run-1")
+def _submission() -> SeparateVoiceSubmission:
+    return SeparateVoiceSubmission(
+        status="accepted",
+        request_id="body-1",
+        provider_log_id="log-1",
+        task_id="amk-tool-separate-voice-1",
+    )
 
 
-def _succeeded_task() -> AudioSeparationTask:
-    return AudioSeparationTask(
-        run_id="run-1",
+def _succeeded_task() -> SeparateVoiceTask:
+    return SeparateVoiceTask(
+        task_id="amk-tool-separate-voice-1",
         status="succeeded",
-        provider_status="Success",
+        provider_status="completed",
         request_id="req-get",
-        duration_seconds=107.9,
-        voice_file_name="hash_audiospeech.aac",
-        voice_size_bytes=1787924,
-        background_file_name="hash_background.aac",
-        background_size_bytes=1787924,
+        voice_url="https://vod.ap-southeast-1.byteplusvod.com/voice.aac",
+        background_url="https://vod.ap-southeast-1.byteplusvod.com/background.aac",
+        duration_seconds=120.5,
+        created_at="2026-06-02T07:36:15+00:00",
+        finished_at="2026-06-02T07:36:37+00:00",
+        source_expires_at="2026-06-03T07:36:36+00:00",
+    )
+
+
+def _succeeded_three_way_task() -> SeparateVoiceTask:
+    return SeparateVoiceTask(
+        task_id="amk-tool-separate-voice-1",
+        status="succeeded",
+        provider_status="completed",
+        request_id="req-get",
+        voice_url="https://vod.ap-southeast-1.byteplusvod.com/voice.aac",
+        music_url="https://vod.ap-southeast-1.byteplusvod.com/music.aac",
+        sfx_url="https://vod.ap-southeast-1.byteplusvod.com/sfx.aac",
+        duration_seconds=120.5,
+        created_at="2026-06-02T07:36:15+00:00",
+        finished_at="2026-06-02T07:36:37+00:00",
+        source_expires_at="2026-06-03T07:36:36+00:00",
+    )
+
+
+def _audio_ref() -> ArtifactRef:
+    return ArtifactRef(
+        id="artifact-1",
+        uri="seed-media://artifacts/artifact-1",
+        media_type="audio",
+        mime_type="audio/aac",
+        bytes=123,
+        sha256="abc",
+        created_at="2026-08-12T00:00:00Z",
     )
 
 
@@ -54,30 +96,33 @@ async def test_submit_accepts_and_records_ownership(
     captured: list[object] = []
 
     async def submit(
-        _self: VodAudioSeparationService, request: object
-    ) -> AudioSeparationSubmission:
+        _self: VodMediaKitSeparateVoiceService, request: object
+    ) -> SeparateVoiceSubmission:
         captured.append(request)
         return _submission()
 
-    monkeypatch.setattr(VodAudioSeparationService, "submit", submit)
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "submit", submit)
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
     runtime = fake_ctx.lifespan_context["runtime"]
 
     result = await vod_separate_audio(
-        VodSeparateAudioInput(file_name="path/source.mp4", space_name="space", bucket_name="bkt"),
+        VodSeparateAudioInput(video_url="https://example.com/clip.mp4", scene="Drama"),
         fake_ctx,
     )
 
     assert isinstance(result, VodSeparateAudioOutput)
     assert result.status == "accepted"
-    assert result.run_id == "run-1"
-    assert result.request_id == "req-1"
+    assert result.task_id == "amk-tool-separate-voice-1"
+    assert result.request_id == "body-1"
+    assert result.provider_log_id == "log-1"
     assert result.recommended_poll_after_ms == 3000
     assert captured
-    assert await runtime.ownership_store.list_task_ids("vod", AuthContext()) == {"run-1"}
+    assert await runtime.ownership_store.list_task_ids("vod-mediakit", AuthContext()) == {
+        "amk-tool-separate-voice-1"
+    }
 
 
-async def test_submit_serializes_direct_url_request(
+async def test_submit_serializes_documented_request(
     test_env: None,
     fake_ctx: FakeContext,
     monkeypatch: pytest.MonkeyPatch,
@@ -85,24 +130,34 @@ async def test_submit_serializes_direct_url_request(
     captured: list[dict[str, object]] = []
 
     async def submit(
-        _self: VodAudioSeparationService, request: object
-    ) -> AudioSeparationSubmission:
-        captured.append(request.model_dump(mode="json", by_alias=True, exclude_none=True))  # type: ignore[attr-defined]
+        _self: VodMediaKitSeparateVoiceService, request: object
+    ) -> SeparateVoiceSubmission:
+        captured.append(request.model_dump(mode="json", exclude_none=True))  # type: ignore[attr-defined]
         return _submission()
 
-    monkeypatch.setattr(VodAudioSeparationService, "submit", submit)
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "submit", submit)
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
 
     await vod_separate_audio(
-        VodSeparateAudioInput(file_name="path/source.mp4", space_name="space"), fake_ctx
+        VodSeparateAudioInput(audio_url="https://example.com/song.mp3", output_format="mp3"),
+        fake_ctx,
     )
 
-    body = captured[0]
-    assert body["Input"] == {
-        "Type": "DirectUrl",
-        "DirectUrl": {"FileName": "path/source.mp4", "SpaceName": "space"},
-    }
-    assert body["Operation"]["Task"]["AudioExtract"]["Voice"] is True
+    request = captured[0]
+    assert request["audio_url"] == "https://example.com/song.mp3"
+    assert request["scene"] == "Audio"
+    assert request["output_format"] == "mp3"
+    assert "video_url" not in request
+
+
+def test_submit_requires_exactly_one_source() -> None:
+    with pytest.raises(ValidationError):
+        VodSeparateAudioInput()
+    with pytest.raises(ValidationError):
+        VodSeparateAudioInput(
+            audio_url="https://example.com/a.mp3",
+            video_url="https://example.com/b.mp4",
+        )
 
 
 async def test_submit_provider_error_returns_mcp_error(
@@ -112,18 +167,20 @@ async def test_submit_provider_error_returns_mcp_error(
 ) -> None:
     error = ProviderError(
         NormalizedProviderError(
-            provider="byteplus-vod",
-            operation="start_audio_separation",
-            http_status=400,
-            code="InvalidParameter",
-            message="Bad input.",
-            retryable=False,
+            provider="byteplus-vod-mediakit",
+            operation="separate_voice",
+            http_status=429,
+            code="RATE_LIMITED",
+            message="Try later.",
+            retryable=True,
         )
     )
-    monkeypatch.setattr(VodAudioSeparationService, "submit", AsyncMock(side_effect=error))
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "submit", AsyncMock(side_effect=error))
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
 
-    result = await vod_separate_audio(VodSeparateAudioInput(file_name="path/source.mp4"), fake_ctx)
+    result = await vod_separate_audio(
+        VodSeparateAudioInput(video_url="https://example.com/clip.mp4"), fake_ctx
+    )
 
     assert isinstance(result, ToolResult)
     assert result.is_error is True
@@ -135,24 +192,15 @@ async def test_submit_missing_credential_raises(
 ) -> None:
     from modelark_mcp.config.env import Settings
 
-    settings = Settings(
-        _env_file=None,
-        BYTEPLUS_VOD_ACCESS_KEY_ID="",
-        BYTEPLUS_VOD_SECRET_ACCESS_KEY="",
-    )
-    assert settings.has_vod is False
+    settings = Settings(_env_file=None, BYTEPLUS_VOD_MEDIAKIT_API_KEY="")
+    assert settings.has_vod_mediakit is False
 
     runtime = fake_ctx.lifespan_context["runtime"]
     monkeypatch.setattr(runtime, "settings", settings)
     with pytest.raises(ValueError):
-        await vod_separate_audio(VodSeparateAudioInput(file_name="path/source.mp4"), fake_ctx)
-
-
-def test_separate_audio_input_validation() -> None:
-    with pytest.raises(ValueError):
-        VodSeparateAudioInput(file_name="")
-    with pytest.raises(ValueError):
-        VodSeparateAudioInput(file_name="a.mp4", space_name="")
+        await vod_separate_audio(
+            VodSeparateAudioInput(video_url="https://example.com/clip.mp4"), fake_ctx
+        )
 
 
 async def test_poll_processing_returns_processing(
@@ -160,133 +208,177 @@ async def test_poll_processing_returns_processing(
     fake_ctx: FakeContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    task = AudioSeparationTask(
-        run_id="run-1",
+    task = SeparateVoiceTask(
+        task_id="amk-tool-separate-voice-1",
         status="processing",
-        provider_status="Running",
+        provider_status="running",
         request_id="req-1",
+        created_at="2026-06-02T07:36:15+00:00",
     )
-    monkeypatch.setattr(VodAudioSeparationService, "get", AsyncMock(return_value=task))
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "get", AsyncMock(return_value=task))
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
 
-    result = await vod_get_audio_separation(VodGetAudioSeparationInput(run_id="run-1"), fake_ctx)
+    result = await vod_get_audio_separation(
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1"), fake_ctx
+    )
 
     assert isinstance(result, VodAudioSeparationTaskOutput)
     assert result.status == "processing"
-    assert result.provider_status == "Running"
+    assert result.provider_status == "running"
     assert result.voice is None
     assert result.background is None
 
 
-async def test_poll_succeeded_returns_tracks_without_urls(
+async def test_poll_succeeded_persists_tracks_once(
     test_env: None,
     fake_ctx: FakeContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(VodAudioSeparationService, "get", AsyncMock(return_value=_succeeded_task()))
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
+    monkeypatch.setattr(
+        VodMediaKitSeparateVoiceService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    copy = AsyncMock(return_value=_audio_ref())
+    monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy)
 
-    result = await vod_get_audio_separation(VodGetAudioSeparationInput(run_id="run-1"), fake_ctx)
+    result = await vod_get_audio_separation(
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1"), fake_ctx
+    )
 
     assert isinstance(result, VodAudioSeparationTaskOutput)
     assert result.status == "succeeded"
-    assert result.duration_seconds == 107.9
+    assert result.duration_seconds == 120.5
     assert result.voice is not None
-    assert result.voice.file_name == "hash_audiospeech.aac"
-    assert result.voice.size_bytes == 1787924
-    assert result.voice.url is None
+    assert result.voice.persistence == "persisted"
+    assert result.voice.artifact == _audio_ref()
+    assert str(result.voice.source_url) == "https://vod.ap-southeast-1.byteplusvod.com/voice.aac"
     assert result.background is not None
-    assert result.background.file_name == "hash_background.aac"
-    assert result.background.url is None
+    assert result.background.persistence == "persisted"
+    assert result.music is None
+    assert result.sfx is None
+    assert copy.await_count == 2
+
+    result2 = await vod_get_audio_separation(
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1"), fake_ctx
+    )
+    assert isinstance(result2, VodAudioSeparationTaskOutput)
+    assert result2.voice is not None
+    assert result2.voice.persistence == "persisted"
+    assert copy.await_count == 2
 
 
-async def test_poll_succeeded_builds_playback_urls_from_input_domain(
+async def test_poll_infers_track_mime_from_url_suffix(
     test_env: None,
     fake_ctx: FakeContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(VodAudioSeparationService, "get", AsyncMock(return_value=_succeeded_task()))
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
+    task = SeparateVoiceTask(
+        task_id="amk-tool-separate-voice-1",
+        status="succeeded",
+        provider_status="completed",
+        voice_url="https://vod.ap-southeast-1.byteplusvod.com/voice.mp3?sign=1",
+        background_url="https://vod.ap-southeast-1.byteplusvod.com/background.flac?sign=2",
+    )
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "get", AsyncMock(return_value=task))
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    copy = AsyncMock(return_value=_audio_ref())
+    monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy)
+
+    await vod_get_audio_separation(
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1"), fake_ctx
+    )
+
+    assert copy.await_count == 2
+    assert copy.await_args_list[0].kwargs["mime_type"] == "audio/mpeg"
+    assert copy.await_args_list[1].kwargs["mime_type"] == "audio/flac"
+
+
+async def test_poll_succeeded_three_way_tracks(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        VodMediaKitSeparateVoiceService, "get", AsyncMock(return_value=_succeeded_three_way_task())
+    )
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    copy = AsyncMock(return_value=_audio_ref())
+    monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy)
 
     result = await vod_get_audio_separation(
-        VodGetAudioSeparationInput(run_id="run-1", playback_domain="play.example.com"),
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodAudioSeparationTaskOutput)
+    assert result.voice is not None
+    assert result.background is None
+    assert result.music is not None
+    assert result.sfx is not None
+    assert copy.await_count == 3
+
+
+async def test_poll_succeeded_persist_false(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        VodMediaKitSeparateVoiceService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    copy = AsyncMock()
+    monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy)
+
+    result = await vod_get_audio_separation(
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1", persist_output=False),
         fake_ctx,
     )
 
     assert isinstance(result, VodAudioSeparationTaskOutput)
+    assert result.status == "succeeded"
     assert result.voice is not None
-    assert str(result.voice.url) == "https://play.example.com/hash_audiospeech.aac"
-    assert result.background is not None
-    assert str(result.background.url) == "https://play.example.com/hash_background.aac"
+    assert result.voice.persistence == "not_requested"
+    assert result.voice.artifact is None
+    assert result.voice.source_url is not None
+    copy.assert_not_awaited()
 
 
-async def test_poll_succeeded_builds_playback_urls_from_settings_domain(
+async def test_poll_succeeded_persistence_failure_preserves_success(
     test_env: None,
     fake_ctx: FakeContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(VodAudioSeparationService, "get", AsyncMock(return_value=_succeeded_task()))
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
+    monkeypatch.setattr(
+        VodMediaKitSeparateVoiceService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
     runtime = fake_ctx.lifespan_context["runtime"]
-    runtime.settings.vod_playback_domain = "play.example.com"
+    monkeypatch.setattr(
+        runtime.artifact_store,
+        "copy_from_trusted_url",
+        AsyncMock(
+            side_effect=ArtifactPersistenceError(
+                "output_too_large", "Output exceeds the artifact limit.", retryable=False
+            )
+        ),
+    )
 
-    result = await vod_get_audio_separation(VodGetAudioSeparationInput(run_id="run-1"), fake_ctx)
+    result = await vod_get_audio_separation(
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1"), fake_ctx
+    )
 
     assert isinstance(result, VodAudioSeparationTaskOutput)
+    assert result.status == "succeeded"
     assert result.voice is not None
-    assert str(result.voice.url) == "https://play.example.com/hash_audiospeech.aac"
-
-
-async def test_poll_rejects_invalid_playback_domain(
-    test_env: None,
-    fake_ctx: FakeContext,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(VodAudioSeparationService, "get", AsyncMock(return_value=_succeeded_task()))
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
-
-    with pytest.raises(ValueError):
-        await vod_get_audio_separation(
-            VodGetAudioSeparationInput(
-                run_id="run-1", playback_domain="https://play.example.com/path"
-            ),
-            fake_ctx,
-        )
-
-
-async def test_poll_input_rejects_invalid_playback_domain_at_validation() -> None:
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError):
-        VodGetAudioSeparationInput(run_id="run-1", playback_domain="https://play.example.com/path")
-    with pytest.raises(ValidationError):
-        VodGetAudioSeparationInput(run_id="run-1", playback_domain="play.example.com:8443")
-    assert (
-        VodGetAudioSeparationInput(
-            run_id="run-1", playback_domain="play.example.com"
-        ).playback_domain
-        == "play.example.com"
-    )
-
-
-def test_build_track_url_percent_encodes_reserved_file_name_chars() -> None:
-    from modelark_mcp.tools.vod_get_audio_separation import _build_track_url
-
-    assert str(_build_track_url("play.example.com", "a?b.aac")) == (
-        "https://play.example.com/a%3Fb.aac"
-    )
-    assert str(_build_track_url("play.example.com", "a#b.aac")) == (
-        "https://play.example.com/a%23b.aac"
-    )
-    assert str(_build_track_url("play.example.com", "a b.aac")) == (
-        "https://play.example.com/a%20b.aac"
-    )
-    assert str(_build_track_url("play.example.com", "a&b.aac")) == (
-        "https://play.example.com/a%26b.aac"
-    )
-    assert str(_build_track_url("play.example.com", "dir/a b.aac")) == (
-        "https://play.example.com/dir/a%20b.aac"
-    )
+    assert result.voice.persistence == "failed"
+    assert result.voice.persistence_issue is not None
+    assert result.voice.persistence_issue.code == "output_too_large"
+    assert result.voice.persistence_issue.artifact_limit_bytes == 10_485_760
+    assert result.voice.source_url is not None
 
 
 async def test_poll_failed_returns_error(
@@ -294,23 +386,27 @@ async def test_poll_failed_returns_error(
     fake_ctx: FakeContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    task = AudioSeparationTask(
-        run_id="run-1",
+    task = SeparateVoiceTask(
+        task_id="amk-tool-separate-voice-1",
         status="failed",
-        provider_status="Fail",
-        failure_code="ExtractFailed",
-        failure_message="VOD OpenAPI reported the separation task failed with status 'Fail'.",
+        provider_status="failed",
+        failure_code="DownloadFailed",
+        failure_message="Failed to download the source file.",
+        finished_at="2026-06-02T07:36:37+00:00",
     )
-    monkeypatch.setattr(VodAudioSeparationService, "get", AsyncMock(return_value=task))
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "get", AsyncMock(return_value=task))
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
 
-    result = await vod_get_audio_separation(VodGetAudioSeparationInput(run_id="run-1"), fake_ctx)
+    result = await vod_get_audio_separation(
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1"), fake_ctx
+    )
 
     assert isinstance(result, VodAudioSeparationTaskOutput)
     assert result.status == "failed"
     assert result.error is not None
-    assert result.error.code == "ExtractFailed"
+    assert result.error.code == "DownloadFailed"
     assert result.voice is None
+    assert result.background is None
 
 
 async def test_poll_provider_error_returns_mcp_error(
@@ -320,7 +416,7 @@ async def test_poll_provider_error_returns_mcp_error(
 ) -> None:
     error = ProviderError(
         NormalizedProviderError(
-            provider="byteplus-vod",
+            provider="byteplus-vod-mediakit",
             operation="get_audio_separation",
             http_status=429,
             code="RATE_LIMITED",
@@ -328,10 +424,12 @@ async def test_poll_provider_error_returns_mcp_error(
             retryable=True,
         )
     )
-    monkeypatch.setattr(VodAudioSeparationService, "get", AsyncMock(side_effect=error))
-    monkeypatch.setattr(VodAudioSeparationService, "close", _close)
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "get", AsyncMock(side_effect=error))
+    monkeypatch.setattr(VodMediaKitSeparateVoiceService, "close", _close)
 
-    result = await vod_get_audio_separation(VodGetAudioSeparationInput(run_id="run-1"), fake_ctx)
+    result = await vod_get_audio_separation(
+        VodGetAudioSeparationInput(task_id="amk-tool-separate-voice-1"), fake_ctx
+    )
 
     assert isinstance(result, ToolResult)
     assert result.is_error is True

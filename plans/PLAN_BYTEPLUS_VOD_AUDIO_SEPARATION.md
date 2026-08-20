@@ -1,9 +1,9 @@
 ---
 title: BytePlus VOD Voice and Background Audio Separation
 type: plan
-status: implemented
+status: superseded
 created: 2026-08-19
-updated: 2026-08-19
+updated: 2026-08-20
 tags:
   - byteplus-vod
   - openapi
