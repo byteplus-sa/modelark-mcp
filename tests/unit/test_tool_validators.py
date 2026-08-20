@@ -7,6 +7,8 @@ from pydantic import ValidationError
 
 from modelark_mcp.domain.media import AudioReference, MediaSource, MediaSourceKind
 from modelark_mcp.tools.seed_audio_generate import SeedAudioGenerateInput
+from modelark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
+from modelark_mcp.tools.seedance_2_5_create_task_variations import Seedance25VariationsInput
 from modelark_mcp.tools.seedance_cancel_or_delete_task import (
     SeedanceCancelOrDeleteInput,
 )
@@ -254,6 +256,14 @@ class TestSeedanceVariationsInput:
                 videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             )
 
+    def test_prompt_at_max_length_valid(self) -> None:
+        inp = SeedanceVariationsInput(prompt="x" * 32000, variations=1)
+        assert len(inp.prompt or "") == 32000
+
+    def test_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            SeedanceVariationsInput(prompt="x" * 32001, variations=1)
+
     def test_inherits_ratio_stripping_for_extend_video(self) -> None:
         """Variations input inherits ratio stripping from base model."""
         from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
@@ -266,6 +276,38 @@ class TestSeedanceVariationsInput:
             ratio="9:16",
         )
         assert inp.ratio is None
+
+
+class TestSeedance25CreateTaskInput:
+    """Tests for Seedance 2.5 create task prompt-length validation."""
+
+    def test_prompt_at_max_length_valid(self) -> None:
+        inp = Seedance25CreateTaskInput(prompt="x" * 32000)
+        assert len(inp.prompt or "") == 32000
+
+    def test_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            Seedance25CreateTaskInput(prompt="x" * 32001)
+
+
+class TestSeedance25VariationsInput:
+    """Tests for Seedance 2.5 variations prompt-length validation."""
+
+    def test_prompt_at_max_length_valid(self) -> None:
+        inp = Seedance25VariationsInput(prompt="x" * 32000, variations=1)
+        assert len(inp.prompt or "") == 32000
+
+    def test_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            Seedance25VariationsInput(prompt="x" * 32001, variations=1)
+
+    def test_variation_prompt_at_max_length_valid(self) -> None:
+        inp = Seedance25VariationsInput(variation_prompts=["x" * 32000], variations=1)
+        assert len(inp.variation_prompts[0]) == 32000
+
+    def test_variation_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            Seedance25VariationsInput(variation_prompts=["x" * 32001], variations=1)
 
 
 class TestSeedreamPromptLength:
