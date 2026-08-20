@@ -62,6 +62,16 @@ class MediaUploadInput(BaseModel):
             "Optional object key prefix (default 'references'). Alphanumeric, '-', '_', '/' only."
         ),
     )
+    expires_in_seconds: int | None = Field(
+        None,
+        ge=60,
+        le=604800,
+        description=(
+            "Presigned URL validity in seconds (60-604800). Defaults to the configured presign "
+            "TTL. VOD tools fetch source URLs asynchronously, so use a long TTL (e.g. 3600) for "
+            "uploads destined for vod_separate_audio, vod_transcode_video, or vod_enhance_video."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_input(self) -> MediaUploadInput:
@@ -183,14 +193,18 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
                         key=key, data=data_bytes, mime_type=input.mime_type
                     )
                 )
-            url = await gateway.presign_get(key=key)
+            if input.expires_in_seconds is not None:
+                url = await gateway.presign_get(key=key, expires=input.expires_in_seconds)
+            else:
+                url = await gateway.presign_get(key=key)
     except ProviderError as exc:
         await ctx.error(f"Media upload failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await gateway.close()
 
-    expires_at = (datetime.now(UTC) + timedelta(seconds=settings.presign_ttl_seconds)).isoformat()
+    ttl = input.expires_in_seconds or settings.presign_ttl_seconds
+    expires_at = (datetime.now(UTC) + timedelta(seconds=ttl)).isoformat()
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

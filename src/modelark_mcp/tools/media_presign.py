@@ -35,6 +35,16 @@ class MediaPresignInput(BaseModel):
             "Object key returned by a prior media_upload call (e.g. 'references/video/<uuid>')."
         ),
     )
+    expires_in_seconds: int | None = Field(
+        None,
+        ge=60,
+        le=604800,
+        description=(
+            "Presigned URL validity in seconds (60-604800). Defaults to the configured presign "
+            "TTL. VOD tools fetch source URLs asynchronously, so use a long TTL (e.g. 3600) when "
+            "renewing a URL for vod_separate_audio, vod_transcode_video, or vod_enhance_video."
+        ),
+    )
 
     @field_validator("object_key")
     @classmethod
@@ -84,14 +94,22 @@ async def media_presign(input: MediaPresignInput, ctx: Context) -> MediaPresignO
             product="presign",
             estimated_cost_usd=0.0,
         ):
-            url = await call_with_retry(lambda: gateway.presign_get(key=input.object_key))
+            if input.expires_in_seconds is not None:
+                url = await call_with_retry(
+                    lambda: gateway.presign_get(
+                        key=input.object_key, expires=input.expires_in_seconds
+                    )
+                )
+            else:
+                url = await call_with_retry(lambda: gateway.presign_get(key=input.object_key))
     except ProviderError as exc:
         await ctx.error(f"Presign failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await gateway.close()
 
-    expires_at = (datetime.now(UTC) + timedelta(seconds=settings.presign_ttl_seconds)).isoformat()
+    ttl = input.expires_in_seconds or settings.presign_ttl_seconds
+    expires_at = (datetime.now(UTC) + timedelta(seconds=ttl)).isoformat()
 
     await ctx.report_progress(progress=100, total=100)
     log_info("media_presign_complete", object_key=input.object_key)

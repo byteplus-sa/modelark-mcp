@@ -662,6 +662,7 @@ a presigned HTTPS URL.
 | `data` | string | No* | Base64-encoded media bytes |
 | `file_path` | string | No* | Absolute local path; intended for stdio transport |
 | `key_prefix` | string | No | Optional object key prefix |
+| `expires_in_seconds` | integer | No | Presigned URL validity (60–604800). Defaults to the configured TTL; use a long value (e.g. 3600) for VOD inputs that are fetched asynchronously |
 
 \* Provide exactly one of `data` or `file_path`.
 
@@ -684,6 +685,7 @@ presigned URL has expired or is about to expire.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `object_key` | string | Yes | Object key returned by a prior `media_upload` call |
+| `expires_in_seconds` | integer | No | Presigned URL validity (60–604800). Defaults to the configured TTL; use a long value (e.g. 3600) for VOD inputs that are fetched asynchronously |
 
 ### Output
 

@@ -267,6 +267,13 @@ The source is a public HTTPS URL (audio or video), exactly one of the two.
 Returns `status="accepted"` plus `task_id`, `request_id`, and
 `provider_log_id`. Poll with `vod_get_audio_separation`.
 
+**Source URL liveness.** The provider downloads `audio_url`/`video_url`
+asynchronously after submission, so the URL must stay fetchable until the
+provider has downloaded it. A short-lived presigned URL (the object-storage
+default can be as low as 600s) may expire before the provider fetches it,
+causing the task to fail. For VOD inputs, upload via `media_upload` with
+`expires_in_seconds` (e.g. 3600) or use a stable public URL.
+
 #### `vod_get_audio_separation`
 
 Read-only poll of a separation task (`vod:read`). Requires the `task_id`
@@ -281,6 +288,13 @@ provider success. On failure, `error` carries the safe provider detail.
 |---|---|---|---|
 | `task_id` | string | Yes | Task ID returned by `vod_separate_audio` |
 | `persist_output` | boolean | No | Best-effort durable copy on first successful poll; default `true` |
+
+**Latency and transient failures.** A completed separation typically takes
+tens of seconds but can take minutes; keep polling until a terminal state
+rather than giving up after the first `processing` response. A provider
+`failed` result with `error.code` `AbilityProcessingError` /
+`InternalError` is usually transient — re-submit the same source rather than
+treating the input as invalid.
 
 ---
 
@@ -957,6 +971,7 @@ which cannot be inlined as Base64.
 | `data` | `str` | No* | Base64-encoded media bytes. Mutually exclusive with `file_path`. |
 | `file_path` | `str` | No* | Absolute path to a local file. stdio transport only. Mutually exclusive with `data`. |
 | `key_prefix` | `str` | No | Object key prefix (default `references`). Alphanumeric, `-`, `_`, `/` only. |
+| `expires_in_seconds` | `int` | No | Presigned URL validity in seconds (60–604800). Defaults to the configured presign TTL. Use a long value (e.g. 3600) for uploads destined for VOD tools, which fetch the source asynchronously. |
 
 Returns `MediaUploadOutput` with `url`, `expires_at`, `object_key`, `bytes`.
 
@@ -989,6 +1004,7 @@ reference's presigned URL has expired or is about to expire.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `object_key` | `str` | Yes | Object key returned by a prior `media_upload` call |
+| `expires_in_seconds` | `int` | No | Presigned URL validity in seconds (60–604800). Defaults to the configured presign TTL. Use a long value (e.g. 3600) when renewing for VOD tools, which fetch the source asynchronously. |
 
 Returns `MediaPresignOutput` with `url`, `expires_at`, `object_key`.
 

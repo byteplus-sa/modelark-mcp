@@ -77,6 +77,28 @@ class TestMediaUploadBase64:
 
         assert "uploads/2026/image/" in result.object_key
 
+    async def test_base64_upload_with_custom_expiry(
+        self, test_env: None, fake_ctx: FakeContext
+    ) -> None:
+        data = base64.b64encode(b"img").decode()
+        mock_gw = _mock_gateway()
+
+        with patch(
+            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
+        ):
+            result = await media_upload(
+                MediaUploadInput(
+                    media_type="image",
+                    mime_type="image/png",
+                    data=data,
+                    expires_in_seconds=3600,
+                ),
+                fake_ctx,
+            )
+
+        assert isinstance(result, MediaUploadOutput)
+        mock_gw.presign_get.assert_called_once_with(key=result.object_key, expires=3600)
+
 
 class TestMediaUploadFilePath:
     async def test_file_path_upload_success(

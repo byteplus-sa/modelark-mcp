@@ -51,6 +51,21 @@ class TestMediaPresignSuccess:
         mock_gw.presign_get.assert_called_once_with(key=_VALID_KEY)
         mock_gw.close.assert_called_once()
 
+    async def test_presign_with_custom_expiry(self, test_env: None, fake_ctx: FakeContext) -> None:
+        mock_gw = _mock_gateway()
+
+        with patch(
+            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            return_value=mock_gw,
+        ):
+            result = await media_presign(
+                MediaPresignInput(object_key=_VALID_KEY, expires_in_seconds=3600),
+                fake_ctx,
+            )
+
+        assert isinstance(result, MediaPresignOutput)
+        mock_gw.presign_get.assert_called_once_with(key=_VALID_KEY, expires=3600)
+
     async def test_presign_with_custom_prefix_key(
         self, test_env: None, fake_ctx: FakeContext
     ) -> None:
@@ -228,6 +243,14 @@ class TestMediaPresignValidation:
     async def test_space_in_key_rejected(self, test_env: None) -> None:
         with pytest.raises(ValueError, match="object_key must contain only"):
             MediaPresignInput(object_key="references/video/my file")
+
+    async def test_expiry_below_minimum_rejected(self, test_env: None) -> None:
+        with pytest.raises(ValueError):
+            MediaPresignInput(object_key=_VALID_KEY, expires_in_seconds=59)
+
+    async def test_expiry_above_maximum_rejected(self, test_env: None) -> None:
+        with pytest.raises(ValueError):
+            MediaPresignInput(object_key=_VALID_KEY, expires_in_seconds=604801)
 
 
 class TestMediaPresignErrors:

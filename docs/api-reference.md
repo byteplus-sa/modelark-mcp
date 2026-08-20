@@ -972,6 +972,7 @@ URL. Registered when the selected object-storage backend credentials are set
 | `data` | string | one of | — | Base64-encoded bytes. Mutually exclusive with `file_path` |
 | `file_path` | string | one of | — | Local file path (stdio only). Mutually exclusive with `data` |
 | `key_prefix` | string | no | `"references"` | Alphanumeric, `-`, `_`, `/` only |
+| `expires_in_seconds` | integer | no | configured TTL | Presigned URL validity, 60–604800. Use a long value (e.g. 3600) for VOD inputs that are fetched asynchronously |
 
 ### Output
 
@@ -1016,6 +1017,7 @@ transferred — only a new URL is minted.
 | Field | Type | Required | Constraints |
 |---|---|---|---|
 | `object_key` | string | yes | Object key from a prior `media_upload` call. Alphanumeric, `-`, `_`, `/`; first char must be alphanumeric |
+| `expires_in_seconds` | integer | no | Presigned URL validity, 60–604800. Use a long value (e.g. 3600) for VOD inputs that are fetched asynchronously |
 
 ### Output
 
