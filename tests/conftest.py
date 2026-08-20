@@ -31,17 +31,21 @@ _SETTINGS_ENV_PREFIXES = (
 
 @pytest.fixture(autouse=True)
 def isolate_settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Clear leaked Settings env vars so ``Settings(_env_file=None)`` sees clean defaults.
+    """Isolate Settings from the shell environment and the developer's ``.env``.
 
-    The developer's real ``.env`` may be present in the shell environment.
-    pydantic-settings reads ``os.environ`` even when ``_env_file=None``, so
-    without this isolation unit tests that assert default values would read
-    real credentials and fail non-deterministically. Tests that need a value
-    set it via ``monkeypatch.setenv`` after this fixture runs.
+    pydantic-settings reads ``os.environ`` and, for ``get_settings()``, the
+    project ``.env`` file. Clear the tracked prefixes from ``os.environ`` and
+    pin the model-binding variables to empty lists so a developer's ``.env``
+    cannot leak real model bindings (e.g. a Seedance 2.5 binding) into tests.
+    Tests that need a value set it via ``monkeypatch.setenv`` after this
+    fixture runs, which overrides these pins.
     """
     for key in list(os.environ):
         if key.startswith(_SETTINGS_ENV_PREFIXES):
             monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("SEEDREAM_MODEL_BINDINGS", "[]")
+    monkeypatch.setenv("SEEDANCE_MODEL_BINDINGS", "[]")
+    monkeypatch.setenv("SEED_UNDERSTANDING_MODEL_BINDINGS", "[]")
     from modelark_mcp.config.env import get_settings
 
     get_settings.cache_clear()
