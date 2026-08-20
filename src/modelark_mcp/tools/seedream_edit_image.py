@@ -53,6 +53,16 @@ class EditBbox(BaseModel):
         return self
 
 
+def _coordinate_markup(point: EditCoordinate | None, bbox: EditBbox | None) -> str:
+    """Build the coordinate markup prepended to edit instructions."""
+    parts: list[str] = []
+    if bbox is not None:
+        parts.append(f"Image 1<bbox>{bbox.x1} {bbox.y1} {bbox.x2} {bbox.y2}</bbox>")
+    if point is not None:
+        parts.append(f"Image 1<point>{point.x} {point.y}</point>")
+    return " ".join(parts)
+
+
 class SeedreamEditInput(BaseModel):
     """Input model for ``seedream_edit_image``."""
 
@@ -60,7 +70,10 @@ class SeedreamEditInput(BaseModel):
         ...,
         min_length=1,
         max_length=4000,
-        description="Natural-language edit instruction (e.g. 'Replace the object with a crown'). Coordinate markup is added automatically.",
+        description=(
+            "Natural-language edit instruction (1-4,000 characters, e.g. 'Replace the object with a crown'). "
+            "Coordinate markup is prepended automatically; instruction plus markup must not exceed 4,000 characters."
+        ),
     )
     images: list[MediaSource] = Field(
         ...,
@@ -107,6 +120,16 @@ class SeedreamEditInput(BaseModel):
             raise ValueError("At least one of 'point' or 'bbox' must be provided for editing.")
         return self
 
+    @model_validator(mode="after")
+    def validate_prompt_with_markup(self) -> SeedreamEditInput:
+        markup = _coordinate_markup(self.point, self.bbox)
+        combined_length = len(self.prompt) + (len(markup) + 1 if markup else 0)
+        if combined_length > 4000:
+            raise ValueError(
+                f"Prompt with coordinate markup is {combined_length} characters; must not exceed 4,000."
+            )
+        return self
+
 
 class SeedreamEditOutput(BaseModel):
     """Output model for ``seedream_edit_image``."""
@@ -134,16 +157,11 @@ TOOL_ANNOTATIONS = {
 
 
 def _build_edit_prompt(
-    instruction: str, images: list[MediaSource], point: EditCoordinate | None, bbox: EditBbox | None
+    instruction: str, point: EditCoordinate | None, bbox: EditBbox | None
 ) -> str:
     """Build the full prompt with coordinate markup prepended."""
-    parts: list[str] = []
-    if bbox is not None:
-        parts.append(f"Image 1<bbox>{bbox.x1} {bbox.y1} {bbox.x2} {bbox.y2}</bbox>")
-    if point is not None:
-        parts.append(f"Image 1<point>{point.x} {point.y}</point>")
-    parts.append(instruction)
-    return " ".join(parts)
+    markup = _coordinate_markup(point, bbox)
+    return f"{markup} {instruction}" if markup else instruction
 
 
 async def seedream_edit_image(
@@ -178,7 +196,7 @@ async def seedream_edit_image(
 
     await ctx.report_progress(progress=30, total=100)
 
-    full_prompt = _build_edit_prompt(input.prompt, input.images, input.point, input.bbox)
+    full_prompt = _build_edit_prompt(input.prompt, input.point, input.bbox)
 
     images_data = [src.model_dump() for src in input.images]
 
