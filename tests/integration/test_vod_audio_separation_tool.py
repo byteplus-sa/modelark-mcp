@@ -254,6 +254,41 @@ async def test_poll_rejects_invalid_playback_domain(
         )
 
 
+async def test_poll_input_rejects_invalid_playback_domain_at_validation() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        VodGetAudioSeparationInput(run_id="run-1", playback_domain="https://play.example.com/path")
+    with pytest.raises(ValidationError):
+        VodGetAudioSeparationInput(run_id="run-1", playback_domain="play.example.com:8443")
+    assert (
+        VodGetAudioSeparationInput(
+            run_id="run-1", playback_domain="play.example.com"
+        ).playback_domain
+        == "play.example.com"
+    )
+
+
+def test_build_track_url_percent_encodes_reserved_file_name_chars() -> None:
+    from modelark_mcp.tools.vod_get_audio_separation import _build_track_url
+
+    assert str(_build_track_url("play.example.com", "a?b.aac")) == (
+        "https://play.example.com/a%3Fb.aac"
+    )
+    assert str(_build_track_url("play.example.com", "a#b.aac")) == (
+        "https://play.example.com/a%23b.aac"
+    )
+    assert str(_build_track_url("play.example.com", "a b.aac")) == (
+        "https://play.example.com/a%20b.aac"
+    )
+    assert str(_build_track_url("play.example.com", "a&b.aac")) == (
+        "https://play.example.com/a%26b.aac"
+    )
+    assert str(_build_track_url("play.example.com", "dir/a b.aac")) == (
+        "https://play.example.com/dir/a%20b.aac"
+    )
+
+
 async def test_poll_failed_returns_error(
     test_env: None,
     fake_ctx: FakeContext,

@@ -22,6 +22,7 @@ from typing import Any, ClassVar
 from urllib.parse import quote
 
 import httpx
+from pydantic import ValidationError
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError, ProviderName
@@ -105,7 +106,10 @@ class VodOpenApiGateway(BaseHttpGateway):
         short_date = now.strftime("%Y%m%d")
 
         content_sha256 = _sha256_hex(payload)
-        host = httpx.URL(self._base_url).host or "vod.byteplusapi.com"
+        base_url = httpx.URL(self._base_url)
+        host = base_url.host or "vod.byteplusapi.com"
+        if base_url.port and base_url.port != 443:
+            host = f"{host}:{base_url.port}"
 
         header_values = {
             "content-type": "application/json; charset=utf-8",
@@ -197,7 +201,12 @@ class VodOpenApiGateway(BaseHttpGateway):
             parsed = None
         else:
             if isinstance(parsed, dict):
-                metadata = VodResponseMetadata.model_validate(parsed.get("ResponseMetadata") or {})
+                try:
+                    metadata = VodResponseMetadata.model_validate(
+                        parsed.get("ResponseMetadata") or {}
+                    )
+                except ValidationError:
+                    metadata = VodResponseMetadata()
                 request_id = request_id or metadata.request_id
                 if metadata.error:
                     code = metadata.error.effective_code

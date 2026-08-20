@@ -8,11 +8,18 @@ stored in the VOD space and are not copied into the local artifact store.
 from __future__ import annotations
 
 from typing import Annotated, Literal
-from urllib.parse import urlsplit
+from urllib.parse import quote
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
-from pydantic import AnyUrl, BaseModel, Field, UrlConstraints, model_validator
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    Field,
+    UrlConstraints,
+    field_validator,
+    model_validator,
+)
 
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.providers.retry import call_with_retry
@@ -21,6 +28,23 @@ from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.tools._errors import provider_error_result
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
+
+
+def _validate_playback_domain(value: str) -> str:
+    """Return a validated bare-hostname playback domain or raise ``ValueError``."""
+    value = value.strip()
+    if value.startswith(("/", "http://", "https://")) or "@" in value:
+        raise ValueError(
+            "playback_domain must be a bare hostname without a scheme, path, or credentials."
+        )
+    if any(ch in value for ch in ("/", "?", "#", ":", " ")):
+        raise ValueError(
+            "playback_domain must be a bare hostname without a scheme, port, path, query, or fragment."
+        )
+    labels = value.split(".")
+    if any(not label or label.strip() != label for label in labels):
+        raise ValueError("playback_domain must be a valid hostname.")
+    return value
 
 
 class VodGetAudioSeparationInput(BaseModel):
@@ -34,6 +58,13 @@ class VodGetAudioSeparationInput(BaseModel):
             "output audio URLs. Overrides BYTEPLUS_VOD_PLAYBACK_DOMAIN when set."
         ),
     )
+
+    @field_validator("playback_domain")
+    @classmethod
+    def _validate_playback_domain_field(cls, value: str | None) -> str | None:
+        if not value:
+            return value
+        return _validate_playback_domain(value)
 
 
 class VodAudioTrack(BaseModel):
@@ -110,22 +141,9 @@ def _build_track_url(domain: str | None, file_name: str) -> HttpsUrl | None:
     """Build ``https://{domain}/{file_name}`` when the domain is a safe bare hostname."""
     if not domain:
         return None
-    domain = domain.strip()
-    if not domain:
-        return None
-    if domain.startswith(("/", "http://", "https://")) or "@" in domain:
-        raise ValueError(
-            "playback_domain must be a bare hostname without a scheme, path, or credentials."
-        )
-    if any(ch in domain for ch in ("/", "?", "#", ":", " ")):
-        raise ValueError(
-            "playback_domain must be a bare hostname without a scheme, port, path, query, or fragment."
-        )
-    labels = domain.split(".")
-    if any(not label or label.strip() != label for label in labels):
-        raise ValueError("playback_domain must be a valid hostname.")
-    parsed = urlsplit(f"https://{domain}/{file_name}")
-    return HttpsUrl(str(parsed.geturl()))
+    domain = _validate_playback_domain(domain)
+    path = quote(file_name, safe="/")
+    return HttpsUrl(f"https://{domain}/{path}")
 
 
 async def vod_get_audio_separation(

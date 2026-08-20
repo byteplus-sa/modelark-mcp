@@ -152,3 +152,29 @@ def test_get_authorization_uses_empty_payload_hash(
 
     assert "content-type" not in headers
     assert headers["authorization"] == _expected_authorization(canonical_request, signed_headers)
+
+
+def test_non_default_port_included_in_signed_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(client_module, "datetime", _FixedDatetime)
+    gateway = VodOpenApiGateway(
+        access_key_id=AK,  # pragma: allowlist secret
+        secret_access_key=SK,  # pragma: allowlist secret
+        region=REGION,
+        base_url="https://vod.byteplusapi.com:8443",
+        timeout=10.0,
+        connect_timeout=5.0,
+    )
+    payload = b""
+    query_string = "Action=GetExecution&RunId=r1&Version=2025-07-01"
+
+    headers = gateway._authorization_headers(
+        "GET",
+        query_string,
+        payload,
+        signed_header_names=("host", "x-content-sha256", "x-date"),
+    )
+
+    assert headers["host"] == "vod.byteplusapi.com:8443"
+    assert "Credential=" in headers["authorization"]

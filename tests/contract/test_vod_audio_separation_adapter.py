@@ -306,3 +306,16 @@ class TestGetContract:
             await service.get("run-1")
         assert exc_info.value.retryable is True
         assert exc_info.value.ambiguous_completion is False
+
+    @respx.mock
+    async def test_malformed_error_metadata_normalizes_not_raises(
+        self, service: VodAudioSeparationService
+    ) -> None:
+        respx.get(f"{BASE_URL}/").mock(
+            return_value=httpx.Response(400, json={"ResponseMetadata": []})
+        )
+        with pytest.raises(ProviderError) as exc_info:
+            await service.get("run-1")
+        assert exc_info.value.provider == "byteplus-vod"
+        assert exc_info.value.code == "HTTP_400"
+        assert exc_info.value.retryable is False
