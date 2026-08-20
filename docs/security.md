@@ -86,10 +86,10 @@ tool → scope mapping is wired in `server.py::register_tools`:
 | `artifacts:read` | MCP resource `seed-media://artifacts/{artifact_id}` |
 
 The `seed-health://status` resource and the `/health`, `/ready`, `/metrics`
-routes are **not** scope-protected at the FastMCP layer. Seed Audio tools are
-registered only when `BYTEPLUS_SEED_AUDIO_API_KEY` is set; Seedream/Seedance
-tools only when `BYTEPLUS_MODELARK_API_KEY` is set; speech-to-text tools only
-when `SEED_SPEECH_ASR_API_KEY` is set; `vod_enhance_video`,
+routes are **not** scope-protected at the FastMCP layer. Seed Audio and
+speech-to-text tools are registered only when `BYTEPLUS_SEED_SPEECH_API_KEY`
+is set; Seedream/Seedance tools only when `BYTEPLUS_MODELARK_API_KEY` is set;
+`vod_enhance_video`,
 `vod_transcode_video`, and `vod_get_transcode_task` only when
 `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set; `vod_separate_audio` and
 `vod_get_audio_separation` only when both `BYTEPLUS_VOD_ACCESS_KEY_ID` and

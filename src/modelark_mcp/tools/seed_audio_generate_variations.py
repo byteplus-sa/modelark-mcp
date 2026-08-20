@@ -113,7 +113,7 @@ async def seed_audio_generate_variations(
 
     settings = get_settings()
     if not settings.has_seed_audio:
-        raise ValueError("BYTEPLUS_SEED_AUDIO_API_KEY is not configured.")
+        raise ValueError("BYTEPLUS_SEED_SPEECH_API_KEY is not configured.")
 
     prompts = resolve_prompts(input.text_prompt, input.variation_prompts, input.variations)
 

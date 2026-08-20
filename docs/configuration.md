@@ -8,7 +8,7 @@ Settings. Copy `.env.example` to `.env`. Empty values are ignored.
 | Variable | Default | Purpose |
 |---|---|---|
 | `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream, Seedance, and Seed 2.1 understanding; sent as Bearer auth |
-| `BYTEPLUS_SEED_AUDIO_API_KEY` | empty | Enables Seed Audio; sent as `X-Api-Key` |
+| `BYTEPLUS_SEED_SPEECH_API_KEY` | empty | Enables Seed Audio and speech-to-text; sent as `X-Api-Key` |
 | `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | Enables `vod_enhance_video`; sent as Bearer auth |
 | `BYTEPLUS_VOD_ACCESS_KEY_ID` | empty | Enables the VOD OpenAPI audio separation tools (with the secret key) |
 | `BYTEPLUS_VOD_SECRET_ACCESS_KEY` | empty | VOD OpenAPI signature secret; never logged or exposed |
@@ -85,15 +85,15 @@ claim. Tool scopes are enforced by FastMCP:
 
 ## Seed Speech ASR (STT)
 
-The `speech_to_text` tool is registered when `SEED_SPEECH_ASR_API_KEY` is
-set — STT uses a dedicated ASR key, distinct from the TTS key. It submits
-audio via HTTP, polls until transcription is complete, and returns the
-complete `TranscriptionResult` in a single synchronous call. Audio input
-accepts URL, Base64, or local file path (stdio only).
+The `speech_to_text` tool is registered when `BYTEPLUS_SEED_SPEECH_API_KEY` is
+set — the same key that enables Seed Audio (TTS). It submits audio via HTTP,
+polls until transcription is complete, and returns the complete
+`TranscriptionResult` in a single synchronous call. Audio input accepts URL,
+Base64, or local file path (stdio only).
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SEED_SPEECH_ASR_API_KEY` | empty | Enables speech-to-text; sent as `X-Api-Key` header |
+| `BYTEPLUS_SEED_SPEECH_API_KEY` | empty | Enables Seed Audio + speech-to-text; sent as `X-Api-Key` header |
 | `SEED_SPEECH_ASR_BASE_URL` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech ASR HTTP host |
 | `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` | `3.0` | Seconds between ASR query polls |
 | `SEED_SPEECH_ASR_POLL_MAX_SECONDS` | `600.0` | Maximum total seconds to wait for ASR result |

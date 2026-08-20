@@ -157,7 +157,7 @@ async def verify_seed_audio() -> bool:
     print(f"Base URL: {settings.seed_audio_base_url}")
 
     gateway = SeedSpeechGateway(
-        api_key=settings.seed_audio_api_key,
+        api_key=settings.seed_speech_api_key,
         base_url=settings.seed_audio_base_url,
     )
     service = SeedAudioService(gateway=gateway)
@@ -202,7 +202,7 @@ async def main() -> int:
     if not settings.has_modelark:
         print("\n✗ BYTEPLUS_MODELARK_API_KEY not set. Skipping ModelArk tests.")
     if not settings.has_seed_audio:
-        print("\n✗ BYTEPLUS_SEED_AUDIO_API_KEY not set. Skipping Seed Audio test.")
+        print("\n✗ BYTEPLUS_SEED_SPEECH_API_KEY not set. Skipping Seed Audio test.")
 
     results: list[tuple[str, bool]] = []
 

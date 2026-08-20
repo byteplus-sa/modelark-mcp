@@ -26,7 +26,7 @@ Edit `.env` and fill in your BytePlus credentials:
 
 ```dotenv
 BYTEPLUS_MODELARK_API_KEY=<your-modelark-key>
-BYTEPLUS_SEED_AUDIO_API_KEY=<your-seed-audio-key>
+BYTEPLUS_SEED_SPEECH_API_KEY=<your-seed-audio-key>
 ```
 
 ModelArk keys are region-scoped. Verify the base URL matches your region's
@@ -99,7 +99,7 @@ Add the server to your `claude_desktop_config.json`:
       "args": ["run", "--directory", "/path/to/modelark-mcp", "python", "-m", "modelark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "<your-key>",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "<your-key>"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "<your-key>"
       }
     }
   }

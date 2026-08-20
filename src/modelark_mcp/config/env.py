@@ -90,7 +90,11 @@ class Settings(BaseSettings):
     # --- Provider credentials ------------------------------------------------
 
     modelark_api_key: str = Field(default="", validation_alias="BYTEPLUS_MODELARK_API_KEY")
-    seed_audio_api_key: str = Field(default="", validation_alias="BYTEPLUS_SEED_AUDIO_API_KEY")
+    seed_speech_api_key: str = Field(
+        default="",
+        validation_alias="BYTEPLUS_SEED_SPEECH_API_KEY",
+        description="Seed Speech API key for both Seed Audio (TTS) and ASR (speech-to-text).",
+    )
     vod_mediakit_api_key: str = Field(
         default="",
         validation_alias="BYTEPLUS_VOD_MEDIAKIT_API_KEY",
@@ -143,11 +147,6 @@ class Settings(BaseSettings):
 
     # --- Seed Speech ASR (STT) configuration ---------------------------------
 
-    seed_speech_asr_api_key: str = Field(
-        default="",
-        validation_alias="SEED_SPEECH_ASR_API_KEY",
-        description="Seed Speech ASR API key (distinct from TTS key).",
-    )
     seed_speech_asr_base_url: str = Field(
         default="https://voice.ap-southeast-1.bytepluses.com",
         validation_alias="SEED_SPEECH_ASR_BASE_URL",
@@ -386,7 +385,7 @@ class Settings(BaseSettings):
     @property
     def has_seed_audio(self) -> bool:
         """Whether Seed Audio credentials are configured."""
-        return bool(self.seed_audio_api_key)
+        return bool(self.seed_speech_api_key)
 
     @property
     def has_vod_mediakit(self) -> bool:
@@ -424,8 +423,8 @@ class Settings(BaseSettings):
 
     @property
     def has_stt(self) -> bool:
-        """Whether Seed Speech ASR (STT) is configured. Requires a dedicated ASR API key."""
-        return bool(self.seed_speech_asr_api_key)
+        """Whether Seed Speech ASR (STT) is configured. Reuses the Seed Speech key."""
+        return bool(self.seed_speech_api_key)
 
     @property
     def allowed_origins(self) -> list[str]:

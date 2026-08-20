@@ -28,7 +28,7 @@ def asr_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set env vars so lazily-created gateways use the test base URL."""
     from modelark_mcp.config.env import get_settings
 
-    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+    monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test-asr")
     monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", ASR_BASE)
     get_settings.cache_clear()
     yield

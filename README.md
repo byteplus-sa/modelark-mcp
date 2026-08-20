@@ -179,7 +179,7 @@ Edit `.env` with your BytePlus credentials:
 
 ```dotenv
 BYTEPLUS_MODELARK_API_KEY=your_modelark_key
-BYTEPLUS_SEED_AUDIO_API_KEY=your_seed_audio_key  # pragma: allowlist secret
+BYTEPLUS_SEED_SPEECH_API_KEY=your_seed_speech_key  # pragma: allowlist secret
 BYTEPLUS_VOD_MEDIAKIT_API_KEY=your_vod_mediakit_key
 BYTEPLUS_VOD_ACCESS_KEY_ID=your_vod_access_key_id
 BYTEPLUS_VOD_SECRET_ACCESS_KEY=your_vod_secret_access_key  # pragma: allowlist secret
@@ -191,7 +191,7 @@ If a credential is absent, the server skips registering that product's
 tools. `seed_media_get_artifact` is always available, provider tools appear only
 when their credentials are configured, `media_upload` and `media_presign` appear
 only when object storage credentials (TOS or S3) are configured, and
-`speech_to_text` appears only when `SEED_SPEECH_ASR_API_KEY` is set.
+`speech_to_text` appears only when `BYTEPLUS_SEED_SPEECH_API_KEY` is set.
 `vod_enhance_video`, `vod_transcode_video`, and `vod_get_transcode_task` appear
 only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. `vod_separate_audio` and
 `vod_get_audio_separation` appear only when `BYTEPLUS_VOD_ACCESS_KEY_ID` and
@@ -214,7 +214,7 @@ The server runs as a `stdio` process. Configure it in your MCP client:
       "args": ["--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
       }
     }
   }
@@ -234,7 +234,7 @@ args = ["--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark
 
 [mcp_servers.modelark-seed.env]
 BYTEPLUS_MODELARK_API_KEY = "your_modelark_key"
-BYTEPLUS_SEED_AUDIO_API_KEY = "your_seed_audio_key"
+BYTEPLUS_SEED_SPEECH_API_KEY = "your_seed_speech_key"
 ```
 
 ### OpenCode
@@ -253,7 +253,7 @@ top-level `mcp` key with `type: "local"` and `command` as an array:
       "enabled": true,
       "environment": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
       }
     }
   }
@@ -275,7 +275,7 @@ TRAE uses the standard `mcpServers` JSON shape, added either via
       "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "modelark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
       }
     }
   }
@@ -304,7 +304,7 @@ then paste:
       "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "modelark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
       }
     }
   }

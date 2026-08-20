@@ -25,7 +25,7 @@ find the credential in the environment. Check:
 
 1. `.env` file exists at the project root
 2. The key name matches exactly (`BYTEPLUS_MODELARK_API_KEY` or
-   `BYTEPLUS_SEED_AUDIO_API_KEY`)
+   `BYTEPLUS_SEED_SPEECH_API_KEY`)
 3. No leading/trailing whitespace in the value
 4. Run `make check-env` to validate
 

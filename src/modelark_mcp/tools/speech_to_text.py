@@ -115,7 +115,7 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
     settings = get_settings()
     if not settings.has_stt:
         raise ValueError(
-            "SEED_SPEECH_ASR_API_KEY is not configured. Set it in .env to enable speech-to-text."
+            "BYTEPLUS_SEED_SPEECH_API_KEY is not configured. Set it in .env to enable speech-to-text."
         )
 
     try:

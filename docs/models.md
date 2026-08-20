@@ -67,9 +67,9 @@ Only `supported_resolutions` differs:
 
 ## Seed Speech ASR (Speech-to-Text)
 
-Speech-to-text uses the Seed Speech ASR HTTP API. It uses a dedicated
-`SEED_SPEECH_ASR_API_KEY` (distinct from the TTS key). Audio is submitted
-via HTTP and polled until transcription is complete; the full
+Speech-to-text uses the Seed Speech ASR HTTP API. It reuses
+`BYTEPLUS_SEED_SPEECH_API_KEY` — the same key that powers Seed Audio. Audio
+is submitted via HTTP and polled until transcription is complete; the full
 `TranscriptionResult` is returned synchronously.
 
 Supported audio formats: `wav`, `mp3`, `ogg`, `raw`, `flac`.

@@ -35,7 +35,7 @@ TLDR_PROMPT = (
 async def main() -> None:
     settings = get_settings()
     if not settings.has_seed_audio:
-        raise SystemExit("BYTEPLUS_SEED_AUDIO_API_KEY is not configured in .env")
+        raise SystemExit("BYTEPLUS_SEED_SPEECH_API_KEY is not configured in .env")
 
     refresh_capability_registry()
 
