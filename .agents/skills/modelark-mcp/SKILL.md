@@ -70,13 +70,10 @@ gracefully degrades to whatever is configured.
 - `seed_media_get_artifact`
 - `seed-health://status` resource
 
-### Requires `BYTEPLUS_SEED_AUDIO_API_KEY`
+### Requires `BYTEPLUS_SEED_SPEECH_API_KEY`
 
 - `seed_audio_generate`
 - `seed_audio_generate_variations`
-
-### Requires `SEED_SPEECH_ASR_API_KEY`
-
 - `speech_to_text`
 
 ### Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY`
@@ -125,9 +122,8 @@ Copy `.env.example` to `.env` and configure at minimum:
 
 ```bash
 BYTEPLUS_MODELARK_API_KEY=your-modelark-key   # required for Seedream + Seedance
-BYTEPLUS_SEED_AUDIO_API_KEY=your-audio-key    # required for Seed Audio
+BYTEPLUS_SEED_SPEECH_API_KEY=your-speech-key  # required for Seed Audio + Speech-to-Text
 BYTEPLUS_VOD_MEDIAKIT_API_KEY=your-mediakit-key # required for VOD enhancement
-SEED_SPEECH_ASR_API_KEY=your-asr-key          # required for Speech-to-Text
 BYTEPLUS_VOD_ACCESS_KEY_ID=your-vod-ak        # required for VOD audio separation
 BYTEPLUS_VOD_SECRET_ACCESS_KEY=your-vod-sk    # required for VOD audio separation
 ```
@@ -301,7 +297,7 @@ are not copied into durable local artifact storage.
 
 ### Seed Audio Tools
 
-Requires `BYTEPLUS_SEED_AUDIO_API_KEY`. Auth scope: `seed:audio:generate`.
+Requires `BYTEPLUS_SEED_SPEECH_API_KEY`. Auth scope: `seed:audio:generate`.
 
 #### `seed_audio_generate`
 
@@ -912,7 +908,7 @@ where speed matters more than reasoning depth.
 
 ### Speech-to-Text
 
-Requires `SEED_SPEECH_ASR_API_KEY`. Auth scope: `seed:asr:transcribe`.
+Requires `BYTEPLUS_SEED_SPEECH_API_KEY`. Auth scope: `seed:asr:transcribe`.
 
 #### `speech_to_text`
 
@@ -1052,14 +1048,13 @@ The server normalizes five distinct BytePlus API surfaces:
 | Provider | Auth | Base URL | Products |
 |---|---|---|---|
 | **ModelArk** | `Authorization: Bearer <key>` | `https://ark.ap-southeast.bytepluses.com/api/v3` | Seedream, Seedance |
-| **Seed Speech (TTS)** | `X-Api-Key: <key>` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Audio |
-| **Seed Speech (ASR)** | `X-Api-Key: <key>` (separate key) | `https://voice.ap-southeast-1.bytepluses.com` | Speech-to-Text |
+| **Seed Speech** | `X-Api-Key: <key>` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Audio, Speech-to-Text |
 | **VOD AI MediaKit** | `Authorization: Bearer <key>` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | Video enhancement, video transcoding |
 | **VOD OpenAPI** | HMAC-SHA256 signature (AK/SK) | `https://vod.byteplusapi.com` | Voice + background audio separation |
 
-ModelArk and Seed Speech ASR use separate API keys even though ASR shares the
-host with TTS. Tools for a product are only registered when its provider API
-key is set.
+One Seed Speech key covers both Seed Audio and ASR — the provider distinguishes
+them by `X-Api-Resource-Id`, not by the key. ModelArk uses a separate Bearer
+key. Tools for a product are only registered when its provider API key is set.
 
 ### Runtime Services
 
@@ -1249,7 +1244,7 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 | Symptom | Cause | Resolution |
 |---|---|---|
-| Tool not appearing | Missing API key | Set the corresponding `BYTEPLUS_*` or `SEED_SPEECH_ASR_*` env var |
+| Tool not appearing | Missing API key | Set the corresponding `BYTEPLUS_*` env var |
 | Model not found | Unbound custom model ID | Add to `*_MODEL_BINDINGS` JSON |
 | URL expired | Provider URL TTL elapsed | Use `persist=true` and reference `ArtifactRef.uri` |
 | Auth error (JWT mode) | Missing or invalid token | Check JWT configuration and scopes |
@@ -1352,8 +1347,7 @@ Set to `0` (default) for record-only mode with no enforcement.
 ### Provider Credentials
 
 - `BYTEPLUS_MODELARK_API_KEY` — enables Seedream and Seedance
-- `BYTEPLUS_SEED_AUDIO_API_KEY` — enables Seed Audio (TTS)
-- `SEED_SPEECH_ASR_API_KEY` — enables Speech-to-Text (ASR)
+- `BYTEPLUS_SEED_SPEECH_API_KEY` — enables Seed Audio (TTS) and Speech-to-Text (ASR)
 - `BYTEPLUS_VOD_MEDIAKIT_API_KEY` — enables VOD AI MediaKit enhancement and video transcoding
 - `BYTEPLUS_VOD_ACCESS_KEY_ID` — VOD OpenAPI Access Key (enables audio separation with the SK)
 - `BYTEPLUS_VOD_SECRET_ACCESS_KEY` — VOD OpenAPI Secret Access Key (never logged)

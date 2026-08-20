@@ -21,7 +21,7 @@ docker run --detach \
   --name modelark-mcp \
   --publish 127.0.0.1:3000:3000 \
   --env BYTEPLUS_MODELARK_API_KEY \
-  --env BYTEPLUS_SEED_AUDIO_API_KEY \
+  --env BYTEPLUS_SEED_SPEECH_API_KEY \
   --env MCP_JWT_JWKS_URI=https://id.example.com/.well-known/jwks.json \
   --env MCP_JWT_ISSUER=https://id.example.com/ \
   --env MCP_JWT_AUDIENCE=modelark-mcp \

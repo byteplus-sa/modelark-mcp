@@ -21,7 +21,7 @@ from tests.fixtures.fake_context import FakeContext
 def test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Set test environment variables with fake credentials."""
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test-modelark")
-    monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test-speech")
+    monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test-speech")
     monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_API_KEY", "test-mediakit-key")
     monkeypatch.setenv("BYTEPLUS_VOD_ACCESS_KEY_ID", "ak-test-vod")
     monkeypatch.setenv("BYTEPLUS_VOD_SECRET_ACCESS_KEY", "sk-test-vod")
@@ -30,7 +30,6 @@ def test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_BASE_URL", "https://mediakit.test.example.com/api/v1")
     monkeypatch.setenv("BYTEPLUS_VOD_BASE_URL", "https://vod.test.example.com")
     monkeypatch.setenv("BYTEPLUS_VOD_REGION", "ap-southeast-1")
-    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
     monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://voice.test.example.com")
     monkeypatch.setenv("SEEDREAM_DEFAULT_MODEL", "dola-seedream-5-0-pro-260628")
     monkeypatch.setenv("SEEDANCE_DEFAULT_MODEL", "dreamina-seedance-2-0-260128")

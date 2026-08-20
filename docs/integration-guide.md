@@ -58,7 +58,7 @@ Add the server to your `claude_desktop_config.json`:
       ],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_ark_api_key"  # pragma: allowlist secret,
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"  # pragma: allowlist secret
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"  # pragma: allowlist secret
       }
     }
   }
@@ -91,7 +91,7 @@ Create `.cursor/mcp.json` in your project root (or
       ],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_ark_api_key"  # pragma: allowlist secret,
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"  # pragma: allowlist secret
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"  # pragma: allowlist secret
       }
     }
   }
@@ -117,7 +117,7 @@ environment variables:
       ],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "${env:BYTEPLUS_MODELARK_API_KEY}",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "${env:BYTEPLUS_SEED_AUDIO_API_KEY}"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "${env:BYTEPLUS_SEED_SPEECH_API_KEY}"
       }
     }
   }
@@ -175,7 +175,7 @@ module injects `truststore` before provider clients are created.
 
 ```bash
 export BYTEPLUS_MODELARK_API_KEY=your_key  # pragma: allowlist secret
-export BYTEPLUS_SEED_AUDIO_API_KEY=your_key  # pragma: allowlist secret
+export BYTEPLUS_SEED_SPEECH_API_KEY=your_key  # pragma: allowlist secret
 
 npx @modelcontextprotocol/inspector \
   uv --directory /path/to/modelark-mcp run python -m modelark_mcp
@@ -206,7 +206,7 @@ The server skips registering tools for products without credentials. Check:
 
 1. `.env` file exists at the repository root with the correct key names
 2. Keys are spelled exactly: `BYTEPLUS_MODELARK_API_KEY`,
-   `BYTEPLUS_SEED_AUDIO_API_KEY`
+   `BYTEPLUS_SEED_SPEECH_API_KEY`
 3. No leading/trailing whitespace in values
 4. Run `make check-env` to validate
 
@@ -233,7 +233,7 @@ Both keys are required for all 9 tools to appear.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `BYTEPLUS_MODELARK_API_KEY` | For image/video | — | ModelArk Bearer auth key |
-| `BYTEPLUS_SEED_AUDIO_API_KEY` | For audio | — | Seed Speech X-Api-Key |
+| `BYTEPLUS_SEED_SPEECH_API_KEY` | For audio | — | Seed Speech X-Api-Key |
 | `BYTEPLUS_MODELARK_BASE_URL` | No | `https://ark.ap-southeast.bytepluses.com/api/v3` | ModelArk region endpoint |
 | `BYTEPLUS_SEED_AUDIO_BASE_URL` | No | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech endpoint |
 | `SEEDREAM_DEFAULT_MODEL` | No | `dola-seedream-5-0-pro-260628` | Seedream model ID |

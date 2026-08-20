@@ -37,7 +37,7 @@ class TestSettings:
         assert not settings.has_seed_audio
 
     def test_has_seed_audio_true_when_set(self) -> None:
-        settings = Settings(_env_file=None, BYTEPLUS_SEED_AUDIO_API_KEY="sk-test")
+        settings = Settings(_env_file=None, BYTEPLUS_SEED_SPEECH_API_KEY="sk-test")
         assert settings.has_seed_audio
 
     def test_has_vod_mediakit_reflects_key(self) -> None:

@@ -23,11 +23,10 @@ def configured_server(
 ) -> None:
     """Set test env vars and re-register tools with fake credentials."""
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test")
-    monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test")
+    monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test")
     monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_API_KEY", "test-mediakit-key")
     monkeypatch.setenv("BYTEPLUS_VOD_ACCESS_KEY_ID", "ak-test-vod")
     monkeypatch.setenv("BYTEPLUS_VOD_SECRET_ACCESS_KEY", "sk-test-vod")
-    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
     monkeypatch.setenv("TOS_ACCESS_KEY", "ak-test-tos")
     monkeypatch.setenv("TOS_SECRET_KEY", "sk-test-tos")
     monkeypatch.setenv("TOS_BUCKET", "test-bucket")
@@ -46,9 +45,9 @@ def no_creds_server(
 ) -> None:
     """Configure server with no API keys set."""
     monkeypatch.delenv("BYTEPLUS_MODELARK_API_KEY", raising=False)
-    monkeypatch.delenv("BYTEPLUS_SEED_AUDIO_API_KEY", raising=False)
+    monkeypatch.delenv("BYTEPLUS_SEED_SPEECH_API_KEY", raising=False)
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "")
-    monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "")
+    monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "")
 
     get_settings.cache_clear()
 
@@ -57,7 +56,7 @@ def no_creds_server(
             Settings(
                 _env_file=None,
                 BYTEPLUS_MODELARK_API_KEY="",
-                BYTEPLUS_SEED_AUDIO_API_KEY="",
+                BYTEPLUS_SEED_SPEECH_API_KEY="",
                 BYTEPLUS_VOD_MEDIAKIT_API_KEY="",
                 BYTEPLUS_VOD_ACCESS_KEY_ID="",
                 BYTEPLUS_VOD_SECRET_ACCESS_KEY="",
@@ -74,8 +73,7 @@ def s3_only_server(
 ) -> None:
     """Configure server with S3-only object storage creds."""
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test")
-    monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test")
-    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+    monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test")
     monkeypatch.setenv("S3_ACCESS_KEY", "ak-s3-test")
     monkeypatch.setenv("S3_SECRET_KEY", "sk-s3-test")
     monkeypatch.setenv("S3_BUCKET", "test-s3-bucket")

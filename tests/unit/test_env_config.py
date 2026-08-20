@@ -11,12 +11,11 @@ from modelark_mcp.config.env import Settings, get_settings, validate
 @pytest.fixture
 def clean_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test-modelark")
-    monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test-speech")
+    monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test-speech")
     monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_API_KEY", "test-mediakit-key")
     monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "https://ark.test.example.com/api/v3")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.test.example.com")
     monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_BASE_URL", "https://mediakit.test.example.com/api/v1")
-    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
     monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://voice.test.example.com")
     monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
     monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
@@ -170,10 +169,10 @@ class TestSettingsFromEnv:
         settings = Settings(_env_file=None)
         assert settings.modelark_api_key == "sk-from-env"  # pragma: allowlist secret
 
-    def test_seed_audio_api_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-audio-env")
+    def test_seed_speech_api_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-speech-env")
         settings = Settings(_env_file=None)
-        assert settings.seed_audio_api_key == "sk-audio-env"  # pragma: allowlist secret
+        assert settings.seed_speech_api_key == "sk-speech-env"  # pragma: allowlist secret
 
     def test_vod_mediakit_values_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_API_KEY", "test-mediakit-env")
@@ -252,12 +251,12 @@ class TestSttConfig:
     """Tests for Seed Speech ASR (STT) configuration."""
 
     def test_has_stt_true_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+        monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test-speech")
         settings = Settings(_env_file=None)
         assert settings.has_stt is True
 
     def test_has_stt_false_when_key_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "")
+        monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "")
         settings = Settings(_env_file=None)
         assert settings.has_stt is False
 

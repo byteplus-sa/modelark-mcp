@@ -8,8 +8,7 @@ tool set.
 | Service | Env var | Auth header | Tools it enables |
 |---|---|---|---|
 | ModelArk | `BYTEPLUS_MODELARK_API_KEY` | `Authorization: Bearer <key>` | Seedream (image), Seedance (video) |
-| Seed Speech (TTS) | `BYTEPLUS_SEED_AUDIO_API_KEY` | `X-Api-Key: <key>` | Seed Audio (speech generation) |
-| Seed Speech (STT) | `SEED_SPEECH_ASR_API_KEY` | `X-Api-Key: <key>` | Speech-to-Text (ASR) |
+| Seed Speech | `BYTEPLUS_SEED_SPEECH_API_KEY` | `X-Api-Key: <key>` | Seed Audio (speech generation), Speech-to-Text (ASR) |
 | VOD AI MediaKit | `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | `Authorization: Bearer <key>` | `vod_enhance_video`, `vod_transcode_video`, `vod_get_transcode_task` |
 | VOD OpenAPI | `BYTEPLUS_VOD_ACCESS_KEY_ID` + `BYTEPLUS_VOD_SECRET_ACCESS_KEY` | HMAC-SHA256 request signing | `vod_separate_audio`, `vod_get_audio_separation` |
 | TOS | `TOS_ACCESS_KEY` + `TOS_SECRET_KEY` + `TOS_BUCKET` | AK/SK signing | `media_upload`, `media_presign` |
@@ -58,15 +57,20 @@ The base URL is region-scoped. If your account is in a different region, update
 ## Seed Speech
 
 Seed Speech is the service for **Seed Audio** (full-scene audio generation /
-TTS). It is a **separate key** from ModelArk and uses a different auth
-header (`X-Api-Key`, not Bearer).
+TTS) and **speech-to-text (ASR)**. A **single Seed Speech API key covers
+both** capabilities — the provider distinguishes them by the
+`X-Api-Resource-Id` header, not by the key. It is a separate key from
+ModelArk and uses a different auth header (`X-Api-Key`, not Bearer).
 
 **Env vars:**
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_SEED_AUDIO_API_KEY` | empty | Seed Speech API key (TTS) |
+| `BYTEPLUS_SEED_SPEECH_API_KEY` | empty | Seed Speech API key (Seed Audio + ASR) |
 | `BYTEPLUS_SEED_AUDIO_BASE_URL` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech host |
+| `SEED_SPEECH_ASR_BASE_URL` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech ASR host |
+| `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` | `3.0` | Seconds between ASR query polls |
+| `SEED_SPEECH_ASR_POLL_MAX_SECONDS` | `600.0` | Maximum total seconds to wait for ASR result |
 
 **How to get the key:**
 
@@ -75,32 +79,33 @@ header (`X-Api-Key`, not Bearer).
 3. Navigate to API key or application management and create a key.
 4. Copy the key. It is distinct from your ModelArk key.
 
+The key must belong to an application with access to the capability you use:
+TTS for Seed Audio, and the ASR resource for `speech_to_text`. If a
+capability is not enabled on the application, provider calls for it are
+rejected with an auth/resource error even though the key itself is valid.
+
 ```dotenv
-BYTEPLUS_SEED_AUDIO_API_KEY=your-seed-audio-key-here
+BYTEPLUS_SEED_SPEECH_API_KEY=your-seed-speech-key-here
 ```
 
 ## Seed Speech ASR (Speech-to-Text)
 
-Speech-to-text (ASR) uses a **dedicated** `SEED_SPEECH_ASR_API_KEY`, distinct
-from the TTS key. If the key is set, the `speech_to_text` tool is registered
-automatically — it submits audio via HTTP, polls until transcription is
-complete, and returns the full `TranscriptionResult` in a single synchronous
-call.
+Speech-to-text (ASR) **reuses `BYTEPLUS_SEED_SPEECH_API_KEY`** — the same key
+that powers Seed Audio. When the key is set, the `speech_to_text` tool is
+registered automatically; it submits audio via HTTP, polls until
+transcription is complete, and returns the full `TranscriptionResult` in a
+single synchronous call.
+
+The ASR-specific settings below only control the host and polling behavior,
+not the credential.
 
 **Env vars:**
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SEED_SPEECH_ASR_API_KEY` | empty | Seed Speech ASR API key (distinct from TTS key) |
 | `SEED_SPEECH_ASR_BASE_URL` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech ASR HTTP host |
 | `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` | `3.0` | Seconds between ASR query polls |
 | `SEED_SPEECH_ASR_POLL_MAX_SECONDS` | `600.0` | Maximum total seconds to wait for ASR result |
-
-**How to get the key:**
-
-The ASR key is obtained from the same BytePlus Voice / Seed Speech console as
-the TTS key, but is a separate credential. Set `SEED_SPEECH_ASR_API_KEY` in
-`.env` to enable the `speech_to_text` tool.
 
 ## BytePlus VOD (AI MediaKit and OpenAPI)
 
@@ -235,12 +240,11 @@ Tools are registered conditionally based on which keys are present.
 BYTEPLUS_MODELARK_API_KEY=
 BYTEPLUS_MODELARK_BASE_URL=https://ark.ap-southeast.bytepluses.com/api/v3
 
-# Seed Speech — TTS
-BYTEPLUS_SEED_AUDIO_API_KEY=
+# Seed Speech — Seed Audio (TTS) + ASR (STT), one key
+BYTEPLUS_SEED_SPEECH_API_KEY=
 BYTEPLUS_SEED_AUDIO_BASE_URL=https://voice.ap-southeast-1.bytepluses.com
 
-# Seed Speech ASR — STT
-SEED_SPEECH_ASR_API_KEY=
+# Seed Speech ASR — host + polling only (reuses the key above)
 SEED_SPEECH_ASR_BASE_URL=https://voice.ap-southeast-1.bytepluses.com
 SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS=3.0
 SEED_SPEECH_ASR_POLL_MAX_SECONDS=600.0
