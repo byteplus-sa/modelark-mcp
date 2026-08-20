@@ -36,6 +36,7 @@ modelark-mcp/
 ├── plans/             # implementation plans for features
 ├── specs/             # future-looking specs and design docs
 ├── docs/              # project documentation
+├── scripts/           # live smoke tests and utility scripts
 ├── src/modelark_mcp/  # server source (Python package)
 └── tests/             # tests (pytest)
 ```
@@ -144,6 +145,33 @@ troubleshoot the server.
   dates. Prefer official BytePlus and Model Context Protocol sources.
 - **Secrets.** Never commit credentials, API keys, or provider response
   fixtures containing real media. Redact before saving examples.
+
+## Repository Hygiene
+
+The repository should contain only source code, tests, configuration,
+documentation, plans, specs, and skills — **not** generated media, scratch
+reports, or transient review artifacts. The following must never be committed:
+
+- **Generated media at the repository root.** This includes `*.mp4`, `*.wav`,
+  `*.mp3`, `*.jpeg`, `*.png`, `*.mov` files produced by the MCP tools, smoke
+  tests, or manual experiments (e.g. `ppop-*.wav`, `output_*.mp4`,
+  `seedance_*_test_*.mp4`). Move them to `.artifacts/` or `out/` (both
+  gitignored) or delete them.
+- **Generated output directories.** `output/`, `assets/`, and `sample/` are
+  scratch containers for demo or experiment output. Do not commit them.
+- **PR review scratch files.** `pr-reviews/` holds transient review reports
+  produced during PR cycles. Delete them after the PR is merged or closed.
+- **One-off reports and handovers.** Files like `CODE_REVIEW_REPORT.md` and
+  `HANDOVER.md` are session-scoped artifacts. If their content has lasting
+  value, distill it into `docs/` or `specs/`; otherwise delete them.
+- **Shipped, superseded, or deprecated plans.** Once a plan reaches
+  `status: shipped`, `status: superseded`, or `status: deprecated`, remove it
+  from `plans/`. Move durable decisions into `specs/` or `docs/` first.
+- **Build artifacts and runtime state.** `.artifacts/`, `out/`, and `dist/`
+  are gitignored. Never force-commit them.
+
+When in doubt about whether a file is scratch, treat it as scratch and delete
+it. Practice CLAYGO — clean as you go, not just at the end of a task.
 
 ## Tool Contract Rules
 
