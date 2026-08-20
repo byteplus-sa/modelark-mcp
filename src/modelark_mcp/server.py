@@ -180,6 +180,35 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             auth=component_auth(settings, "vod:read"),
         )(vod_get_transcode_task)
 
+    if settings.has_vod:
+        from modelark_mcp.tools.vod_get_audio_separation import (
+            TOOL_ANNOTATIONS as vod_get_audio_separation_annotations,
+        )
+        from modelark_mcp.tools.vod_get_audio_separation import (
+            VodAudioSeparationTaskOutput,
+            vod_get_audio_separation,
+        )
+        from modelark_mcp.tools.vod_separate_audio import (
+            TOOL_ANNOTATIONS as vod_separate_audio_annotations,
+        )
+        from modelark_mcp.tools.vod_separate_audio import (
+            VodSeparateAudioOutput,
+            vod_separate_audio,
+        )
+
+        server.tool(
+            name="vod_separate_audio",
+            annotations={**vod_separate_audio_annotations},
+            output_schema=VodSeparateAudioOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:extract"),
+        )(vod_separate_audio)
+        server.tool(
+            name="vod_get_audio_separation",
+            annotations={**vod_get_audio_separation_annotations},
+            output_schema=VodAudioSeparationTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_audio_separation)
+
     if not settings.has_modelark:
         log_info("tools_skipped", reason="BYTEPLUS_MODELARK_API_KEY not configured")
         return
@@ -356,7 +385,8 @@ def create_server(
             "BytePlus multimodal generation server. Provides Seed Audio, Seedream, "
             "Seedance, Seed 2.1 multimodal understanding, and Speech-to-Text tools. "
             "BytePlus VOD AI MediaKit enhancement and video transcoding are available "
-            "when configured. "
+            "when configured, and the BytePlus VOD OpenAPI voice and background audio "
+            "separation tools are available when VOD signature credentials are set. "
             "Generated media is persisted as durable MCP resources."
         ),
         auth=auth_provider or build_auth_provider(resolved_settings),
@@ -405,6 +435,7 @@ def create_server(
             f"ModelArk configured: {resolved_settings.has_modelark}\n"
             f"Seed Audio configured: {resolved_settings.has_seed_audio}\n"
             f"VOD AI MediaKit configured: {resolved_settings.has_vod_mediakit}\n"
+            f"VOD OpenAPI configured: {resolved_settings.has_vod}\n"
             f"TOS configured: {resolved_settings.has_tos}\n"
             f"S3 configured: {resolved_settings.has_s3}\n"
             f"Object storage backend: {resolved_settings.object_storage_backend}\n"
@@ -487,6 +518,19 @@ def create_server(
                 )
             finally:
                 await vod_gw.close()
+
+        if resolved_settings.has_vod:
+            from modelark_mcp.providers.vod.client import VodOpenApiGateway
+
+            vod_openapi_gw = VodOpenApiGateway()
+            try:
+                providers["vod"] = (
+                    "reachable"
+                    if await vod_openapi_gw.health_check(timeout_seconds=timeout)
+                    else "unreachable"
+                )
+            finally:
+                await vod_openapi_gw.close()
 
         all_reachable = all(v == "reachable" for v in providers.values())
         if all_reachable:

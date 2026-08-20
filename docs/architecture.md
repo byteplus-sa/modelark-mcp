@@ -11,7 +11,8 @@ Server as shipped today. For the original design rationale, see
 - **Dedicated provider gateways, one domain layer** — Seedance and Seedream
   share the ModelArk host and Bearer auth; Seed Audio uses a separate host and
   `X-Api-Key`; VOD AI MediaKit uses its own Bearer-authenticated convenience
-  endpoint. The differences are hidden behind normalized adapters.
+  endpoint; the VOD OpenAPI uses signature-authenticated (AK/SK HMAC-SHA256)
+  requests. The differences are hidden behind normalized adapters.
 - **Durable artifacts** — known provider media URLs expire (2h audio, 24h
   ModelArk image/video), so outputs are persisted to a local store and
   re-exposed as stable `seed-media://artifacts/{id}` MCP resources. MediaKit
@@ -40,7 +41,9 @@ src/modelark_mcp/
 │   ├── base.py            # BaseHttpGateway: spans, metrics, error normalization
 │   ├── retry.py
 │   ├── modelark.py        # Seedream + Seedance
-│   └── seed_speech.py     # Seed Audio
+│   ├── seed_speech.py     # Seed Audio
+│   ├── vod_mediakit.py    # VOD AI MediaKit (Bearer convenience surface)
+│   └── vod.py             # VOD OpenAPI (signature auth; audio separation)
 ├── runtime.py             # lifespan-owned services (limiter, budget, ownership)
 ├── artifacts/             # durable artifact store (filesystem backend)
 │   ├── store.py           # ArtifactStore protocol
@@ -60,6 +63,7 @@ flowchart LR
     Gateway -->|"Bearer auth"| ModelArk["ModelArk\nSeedream + Seedance"]
     Gateway -->|"X-Api-Key"| SeedSpeech["Seed Speech\nSeed Audio"]
     Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nvideo enhancement + transcoding"]
+    Gateway -->|"HMAC-SHA256 signature"| VodOpenApi["VOD OpenAPI\nvoice + background separation"]
     Server -.durable.-> Store["Artifact store\n(filesystem)"]
     Server -.state.-> Runtime["Runtime services\n(runtime.py)"]
 ```
@@ -76,6 +80,13 @@ flowchart LR
   `https://mediakit.ap-southeast-1.bytepluses.com/api/v1`. Its success schemas
   are isolated in the adapters; the gateway accepts only known result shapes
   and rejects unknown shapes.
+- **VOD OpenAPI gateway** (`providers/vod/`) — serves the
+  `vod_separate_audio` / `vod_get_audio_separation` submit-then-poll pair
+  against `https://vod.byteplusapi.com`. It signs each request with the
+  BytePlus OpenAPI HMAC-SHA256 scheme using `BYTEPLUS_VOD_ACCESS_KEY_ID` /
+  `BYTEPLUS_VOD_SECRET_ACCESS_KEY` and normalizes `StartExecution` /
+  `GetExecution` responses. Outputs are VOD storage `FileName` paths, not
+  provider URLs, so this surface does not persist artifacts.
 - These gateways extend `BaseHttpGateway` (`providers/base.py`), which wraps every
   outbound request in an OpenTelemetry span, records Prometheus
   provider metrics, and normalizes transport/HTTP errors into a single
@@ -90,6 +101,13 @@ polls it and reuses the shared ownership store and task-artifact cache under the
 `vod-mediakit` provider key. For both surfaces, a completed provider URL is
 preserved and persistence is attempted separately as a best-effort operation
 under the 200 MiB video limit.
+
+VOD OpenAPI audio separation submission is likewise a non-idempotent mutation
+and is never blindly retried. Polling (`GetExecution`) is retryable only on
+provider-marked retryable errors and reuses the shared ownership store under
+the `vod` provider key. Separated tracks are returned as `FileName`/`Size`
+metadata with optional playback URLs; they are not copied into local artifact
+storage.
 
 ## Server lifecycle and runtime services
 

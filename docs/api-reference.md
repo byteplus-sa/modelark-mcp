@@ -21,6 +21,8 @@ surface.
 | 12 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
 | 13 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
 | 14 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 15 | `vod_separate_audio` | VOD OpenAPI (optional) | Async submission | VOD OpenAPI signature |
+| 16 | `vod_get_audio_separation` | VOD OpenAPI (optional) | Poll | VOD OpenAPI signature |
 
 ## Tool Annotations
 
@@ -40,6 +42,8 @@ surface.
 | `vod_enhance_video` | false | false | false | true |
 | `vod_transcode_video` | false | false | false | true |
 | `vod_get_transcode_task` | true | false | true | false |
+| `vod_separate_audio` | false | false | false | true |
+| `vod_get_audio_separation` | true | false | true | false |
 
 ---
 
@@ -222,6 +226,99 @@ erases provider success. On failure, `error` carries the safe provider detail.
     "media_type": "video",
     "mime_type": "video/mp4",
     "bytes": 1748096
+  }
+}
+```
+
+---
+
+## vod_separate_audio
+
+Submit an asynchronous BytePlus VOD OpenAPI voice and background audio
+separation task via `StartExecution` with `Task.Type = AudioExtract`. The tool
+is registered only when `BYTEPLUS_VOD_ACCESS_KEY_ID` and
+`BYTEPLUS_VOD_SECRET_ACCESS_KEY` are configured and requires the `vod:extract`
+scope in JWT mode.
+
+Input uses DirectUrl storage-path mode — the media must already be stored in
+the VOD space's TOS bucket:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `file_name` | string | Yes | Storage path (`FileName`) of the media in the VOD space's TOS bucket |
+| `space_name` | string | No | VOD space name |
+| `bucket_name` | string | No | Bucket name bound to the space |
+
+Returns `VodSeparateAudioOutput` with `provider` `byteplus-vod`, `status`
+`accepted`, the provider `request_id`, and the `run_id` to pass to
+`vod_get_audio_separation`. The mutation is never retried automatically because
+completion is ambiguous after a timeout.
+
+### Example
+
+```json
+// Input
+{ "file_name": "path/to/source.mp4", "space_name": "my-space" }
+
+// Output
+{
+  "provider": "byteplus-vod",
+  "status": "accepted",
+  "request_id": "20260819...",
+  "run_id": "p0:e1a800c8...",
+  "recommended_poll_after_ms": 3000
+}
+```
+
+---
+
+## vod_get_audio_separation
+
+Poll a BytePlus VOD OpenAPI `AudioExtract` task via `GetExecution`. Registered
+only when VOD OpenAPI signature credentials are configured and requires the
+`vod:read` scope in JWT mode.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `run_id` | string | Yes | RunId returned by `vod_separate_audio` |
+| `playback_domain` | string | No | Optional bare playback domain; overrides `BYTEPLUS_VOD_PLAYBACK_DOMAIN` |
+
+Returns `VodAudioSeparationTaskOutput` with a normalized `status` of
+`processing`, `succeeded`, or `failed`. On success, `voice` and `background`
+carry each track's `file_name`, `size_bytes`, and an optional `url` built from
+the playback domain (`https://{domain}/{file_name}`). Outputs remain in the VOD
+space; this tool does not copy them into durable local artifact storage.
+
+### Task Statuses
+
+| Status | Meaning |
+|---|---|
+| `processing` | Provider has not reported `Success`; still separating |
+| `succeeded` | Provider reported `Success`; `voice` populated |
+| `failed` | Provider reported a failure status; `error` populated |
+
+### Example
+
+```json
+// Input
+{ "run_id": "p0:e1a800c8...", "playback_domain": "play.example.com" }
+
+// Output (succeeded)
+{
+  "provider": "byteplus-vod",
+  "run_id": "p0:e1a800c8...",
+  "status": "succeeded",
+  "provider_status": "Success",
+  "duration_seconds": 107.9,
+  "voice": {
+    "file_name": "hash_audiospeech.aac",
+    "size_bytes": 1787924,
+    "url": "https://play.example.com/hash_audiospeech.aac"
+  },
+  "background": {
+    "file_name": "hash_background.aac",
+    "size_bytes": 1787924,
+    "url": "https://play.example.com/hash_background.aac"
   }
 }
 ```

@@ -96,6 +96,16 @@ class Settings(BaseSettings):
         validation_alias="BYTEPLUS_VOD_MEDIAKIT_API_KEY",
         description="BytePlus VOD AI MediaKit Bearer API key.",
     )
+    vod_access_key_id: str = Field(
+        default="",
+        validation_alias="BYTEPLUS_VOD_ACCESS_KEY_ID",
+        description="BytePlus VOD OpenAPI Access Key ID for signature auth.",
+    )
+    vod_secret_access_key: str = Field(
+        default="",
+        validation_alias="BYTEPLUS_VOD_SECRET_ACCESS_KEY",
+        description="BytePlus VOD OpenAPI Secret Access Key for signature auth.",
+    )
 
     # --- Provider base URLs --------------------------------------------------
 
@@ -111,6 +121,24 @@ class Settings(BaseSettings):
         default="https://mediakit.ap-southeast-1.bytepluses.com/api/v1",
         validation_alias="BYTEPLUS_VOD_MEDIAKIT_BASE_URL",
         description="BytePlus VOD AI MediaKit HTTPS API base URL.",
+    )
+    vod_base_url: str = Field(
+        default="https://vod.byteplusapi.com",
+        validation_alias="BYTEPLUS_VOD_BASE_URL",
+        description="BytePlus VOD OpenAPI HTTPS endpoint.",
+    )
+    vod_region: str = Field(
+        default="ap-southeast-1",
+        min_length=1,
+        max_length=64,
+        validation_alias="BYTEPLUS_VOD_REGION",
+        description="BytePlus VOD OpenAPI signing region.",
+    )
+    vod_playback_domain: str = Field(
+        default="",
+        max_length=253,
+        validation_alias="BYTEPLUS_VOD_PLAYBACK_DOMAIN",
+        description="Optional playback domain used to build output audio URLs.",
     )
 
     # --- Seed Speech ASR (STT) configuration ---------------------------------
@@ -366,6 +394,11 @@ class Settings(BaseSettings):
         return bool(self.vod_mediakit_api_key)
 
     @property
+    def has_vod(self) -> bool:
+        """Whether BytePlus VOD OpenAPI signature credentials are configured."""
+        return bool(self.vod_access_key_id and self.vod_secret_access_key)
+
+    @property
     def has_tos(self) -> bool:
         """Whether TOS object storage credentials are configured."""
         return bool(self.tos_access_key and self.tos_secret_key and self.tos_bucket)
@@ -423,6 +456,7 @@ class Settings(BaseSettings):
         "seed_audio_base_url",
         "seed_speech_asr_base_url",
         "vod_mediakit_base_url",
+        "vod_base_url",
     )
     @classmethod
     def validate_provider_url(cls, value: str, info: ValidationInfo) -> str:
@@ -433,12 +467,34 @@ class Settings(BaseSettings):
                 "seed_audio_base_url": "BYTEPLUS_SEED_AUDIO_BASE_URL",
                 "seed_speech_asr_base_url": "SEED_SPEECH_ASR_BASE_URL",
                 "vod_mediakit_base_url": "BYTEPLUS_VOD_MEDIAKIT_BASE_URL",
+                "vod_base_url": "BYTEPLUS_VOD_BASE_URL",
             }
             variable = env_var_map.get(info.field_name or "", "BYTEPLUS_PROVIDER_BASE_URL")
             raise ValueError(f"{variable} must use HTTPS and include a host")
         if parsed.username or parsed.password:
             raise ValueError("Provider base URLs must not contain credentials")
         return value.rstrip("/")
+
+    @field_validator("vod_playback_domain")
+    @classmethod
+    def validate_playback_domain(cls, value: str) -> str:
+        """Accept only a bare hostname with no scheme, path, query, or credentials."""
+        if not value:
+            return value
+        if value.startswith(("/", "http://", "https://")) or "@" in value:
+            raise ValueError(
+                "BYTEPLUS_VOD_PLAYBACK_DOMAIN must be a bare hostname "
+                "(no scheme, path, or credentials)."
+            )
+        if "?" in value or "#" in value or "/" in value or ":" in value or " " in value:
+            raise ValueError(
+                "BYTEPLUS_VOD_PLAYBACK_DOMAIN must be a bare hostname "
+                "(no scheme, port, path, query, fragment, or whitespace)."
+            )
+        labels = value.split(".")
+        if any(not label or label.strip() != label for label in labels):
+            raise ValueError("BYTEPLUS_VOD_PLAYBACK_DOMAIN must be a valid hostname.")
+        return value
 
     @model_validator(mode="after")
     def validate_model_bindings(self) -> Settings:
@@ -590,6 +646,8 @@ def validate() -> None:
         raise ValueError("BYTEPLUS_SEED_AUDIO_BASE_URL must use HTTPS")
     if not settings.vod_mediakit_base_url.startswith("https://"):
         raise ValueError("BYTEPLUS_VOD_MEDIAKIT_BASE_URL must use HTTPS")
+    if not settings.vod_base_url.startswith("https://"):
+        raise ValueError("BYTEPLUS_VOD_BASE_URL must use HTTPS")
     if settings.artifact_ttl_seconds <= 0:
         raise ValueError("ARTIFACT_TTL_SECONDS must be positive")
     if settings.mcp_inline_media_max_bytes <= 0:

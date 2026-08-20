@@ -175,6 +175,62 @@ remain subject to the 200 MiB limit. On failure, `error.code`/`error.message`
 carry the safe provider failure detail. GET polling is retried only on
 provider-marked retryable errors (e.g. 429).
 
+## vod_separate_audio
+
+Submit an asynchronous BytePlus VOD OpenAPI voice and background audio
+separation task (`StartExecution` with `Task.Type = AudioExtract`). This tool
+is registered only when `BYTEPLUS_VOD_ACCESS_KEY_ID` and
+`BYTEPLUS_VOD_SECRET_ACCESS_KEY` are both set and uses the `vod:extract` JWT
+scope.
+
+Input uses DirectUrl storage-path mode — the media must already be stored in
+the VOD space's TOS bucket.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `file_name` | string | Yes | Storage path (`FileName`) of the media in the VOD space's TOS bucket |
+| `space_name` | string | No | VOD space name |
+| `bucket_name` | string | No | Bucket name bound to the space |
+
+### Output
+
+Returns `VodSeparateAudioOutput` with `provider` `byteplus-vod`, `status`
+`accepted`, the provider `request_id`, the `run_id` to poll with
+`vod_get_audio_separation`, and a heuristic `recommended_poll_after_ms`. The
+POST is non-idempotent and is never retried automatically (timeout/5xx means
+ambiguous completion).
+
+## vod_get_audio_separation
+
+Poll a BytePlus VOD OpenAPI `AudioExtract` task (`GetExecution`). This tool is
+registered only when VOD OpenAPI signature credentials are set and uses the
+`vod:read` JWT scope.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `run_id` | string | Yes | RunId returned by `vod_separate_audio` |
+| `playback_domain` | string | No | Bare playback domain; overrides `BYTEPLUS_VOD_PLAYBACK_DOMAIN` |
+
+### Output and execution limits
+
+Returns `VodAudioSeparationTaskOutput` with a normalized `status` of
+`processing`, `succeeded`, or `failed`. On success, `voice` and `background`
+carry each separated track's `file_name`, `size_bytes`, and an optional `url`
+built from the playback domain (`https://{domain}/{file_name}`). Outputs stay
+in the VOD space; this tool does not copy them into the durable local artifact
+store. On failure, `error.code`/`error.message` carry the safe provider detail.
+GET polling is retried only on provider-marked retryable errors (e.g. 429).
+
 ## seed_audio_generate
 
 Generate full-scene audio through Seed Speech.
