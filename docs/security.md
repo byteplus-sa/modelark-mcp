@@ -90,10 +90,9 @@ routes are **not** scope-protected at the FastMCP layer. Seed Audio and
 speech-to-text tools are registered only when `BYTEPLUS_SEED_SPEECH_API_KEY`
 is set; Seedream/Seedance tools only when `BYTEPLUS_MODELARK_API_KEY` is set;
 `vod_enhance_video`,
-`vod_transcode_video`, and `vod_get_transcode_task` only when
-`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set; `vod_separate_audio` and
-`vod_get_audio_separation` only when both `BYTEPLUS_VOD_ACCESS_KEY_ID` and
-`BYTEPLUS_VOD_SECRET_ACCESS_KEY` are set. The `media_upload` and `media_presign`
+`vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, and
+`vod_get_audio_separation` only when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. The `media_upload` and `media_presign`
 tools are registered only when object storage credentials are set (TOS:
 `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `TOS_BUCKET`, or S3:
 `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` with
@@ -256,17 +255,13 @@ with an under-reported size could bypass it. The provider enforces the
 - `truststore.inject_into_ssl()` runs at module import in `server.py` and
   `__main__.py`, so Python uses the macOS Keychain for TLS verification.
 - Provider base URLs (`BYTEPLUS_MODELARK_BASE_URL`,
-  `BYTEPLUS_SEED_AUDIO_BASE_URL`, `BYTEPLUS_VOD_MEDIAKIT_BASE_URL`,
-  `BYTEPLUS_VOD_BASE_URL`) are
+  `BYTEPLUS_SEED_AUDIO_BASE_URL`, `BYTEPLUS_VOD_MEDIAKIT_BASE_URL`) are
   validated at settings load: must be
   `https://` with a hostname and no embedded credentials; trailing slash
   stripped.
-- `BYTEPLUS_VOD_PLAYBACK_DOMAIN` accepts only a bare hostname (no scheme,
-  port, path, query, fragment, or credentials), preventing URL-injection when
-  building output audio URLs.
-- VOD OpenAPI requests are signed with the `BYTEPLUS_VOD_SECRET_ACCESS_KEY`
-  using HMAC-SHA256; the secret and the resulting `Authorization` header are
-  never logged, returned, or accepted as tool arguments.
+- VOD AI MediaKit requests are authenticated with
+  `Authorization: Bearer ${BYTEPLUS_VOD_MEDIAKIT_API_KEY}`; the key is never
+  logged, returned, or accepted as a tool argument.
 
 ## Settings caching
 

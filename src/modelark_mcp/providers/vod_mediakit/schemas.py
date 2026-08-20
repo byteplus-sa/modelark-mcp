@@ -338,3 +338,116 @@ class TranscodeTask(BaseModel):
         if value is not None and not value.strip():
             return None
         return value
+
+
+class VodMediaKitSeparateVoiceRequest(BaseModel):
+    """Verified request body for ``POST /tools/separate-voice``."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    audio_url: HttpsUrl | None = None
+    video_url: HttpsUrl | None = None
+    scene: Literal["Audio", "Music", "Drama", "Narrate"] = "Audio"
+    output_format: Literal["aac", "mp3", "wav", "m4a", "flac"] = "aac"
+
+    @model_validator(mode="after")
+    def require_exactly_one_source(self) -> VodMediaKitSeparateVoiceRequest:
+        if (self.audio_url is None) == (self.video_url is None):
+            raise ValueError("exactly one of audio_url or video_url is required")
+        return self
+
+
+class VodMediaKitSeparateVoiceTaskResult(BaseModel):
+    """Verified ``result`` object of a completed separate-voice task."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    voice_audio_url: HttpsUrl | None = None
+    background_audio_url: HttpsUrl | None = None
+    music_audio_url: HttpsUrl | None = None
+    sfx_audio_url: HttpsUrl | None = None
+    duration: float | None = Field(default=None, ge=0)
+
+
+class VodMediaKitSeparateVoiceTaskResponse(BaseModel):
+    """Verified polling response from ``GET /tasks/{task_id}``."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    success: Literal[True]
+    task_id: str = Field(min_length=1)
+    task_type: str | None = None
+    status: str = Field(min_length=1)
+    result: VodMediaKitSeparateVoiceTaskResult | None = None
+    error: VodMediaKitProviderErrorDetail | None = None
+    request_id: str | None = None
+    queue_id: str | None = None
+    expires_at: str | int | None = Field(
+        default=None,
+        description="Provider output URL expiry as Unix-seconds or ISO-8601.",
+    )
+    created_at: str | int | None = None
+    finished_at: str | int | None = None
+
+
+class SeparateVoiceSubmission(BaseModel):
+    """Normalized accepted separate-voice submission for the tool layer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["accepted"]
+    request_id: str | None = None
+    provider_log_id: str | None = None
+    task_id: str = Field(min_length=1)
+
+
+class SeparateVoiceTask(BaseModel):
+    """Normalized separate-voice task state for the tool layer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str = Field(min_length=1)
+    status: Literal["processing", "succeeded", "failed"]
+    provider_status: str | None = None
+    request_id: str | None = None
+    voice_url: HttpsUrl | None = None
+    background_url: HttpsUrl | None = None
+    music_url: HttpsUrl | None = None
+    sfx_url: HttpsUrl | None = None
+    duration_seconds: float | None = Field(default=None, ge=0)
+    created_at: str | None = None
+    finished_at: str | None = None
+    source_expires_at: str | None = None
+    failure_code: str | None = None
+    failure_message: str | None = None
+
+    @model_validator(mode="after")
+    def validate_state(self) -> SeparateVoiceTask:
+        if self.status == "succeeded":
+            if (
+                self.voice_url is None
+                and self.background_url is None
+                and self.music_url is None
+                and self.sfx_url is None
+            ):
+                raise ValueError("succeeded separate-voice task requires at least one track URL")
+            if self.failure_code is not None or self.failure_message is not None:
+                raise ValueError("succeeded separate-voice task must not carry a failure")
+        elif self.status == "processing":
+            if (
+                self.voice_url is not None
+                or self.background_url is not None
+                or self.music_url is not None
+                or self.sfx_url is not None
+            ):
+                raise ValueError("processing separate-voice task must not carry track URLs")
+        elif self.failure_code is None and self.failure_message is None:
+            raise ValueError("failed separate-voice task requires failure detail")
+        return self
+
+    @field_validator("failure_code", "failure_message")
+    @classmethod
+    def reject_blank_optional_strings(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            return None
+        return value

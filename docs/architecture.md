@@ -11,8 +11,8 @@ Server as shipped today. For the original design rationale, see
 - **Dedicated provider gateways, one domain layer** — Seedance and Seedream
   share the ModelArk host and Bearer auth; Seed Audio uses a separate host and
   `X-Api-Key`; VOD AI MediaKit uses its own Bearer-authenticated convenience
-  endpoint; the VOD OpenAPI uses signature-authenticated (AK/SK HMAC-SHA256)
-  requests. The differences are hidden behind normalized adapters.
+  endpoint for enhancement, transcoding, and audio separation. The differences
+  are hidden behind normalized adapters.
 - **Durable artifacts** — known provider media URLs expire (2h audio, 24h
   ModelArk image/video), so outputs are persisted to a local store and
   re-exposed as stable `seed-media://artifacts/{id}` MCP resources. MediaKit
@@ -42,8 +42,7 @@ src/modelark_mcp/
 │   ├── retry.py
 │   ├── modelark.py        # Seedream + Seedance
 │   ├── seed_speech.py     # Seed Audio
-│   ├── vod_mediakit.py    # VOD AI MediaKit (Bearer convenience surface)
-│   └── vod.py             # VOD OpenAPI (signature auth; audio separation)
+│   └── vod_mediakit.py    # VOD AI MediaKit (Bearer; enhancement, transcode, separation)
 ├── runtime.py             # lifespan-owned services (limiter, budget, ownership)
 ├── artifacts/             # durable artifact store (filesystem backend)
 │   ├── store.py           # ArtifactStore protocol
@@ -62,8 +61,7 @@ flowchart LR
     Domain --> Gateway["Provider gateways\n(providers/)"]
     Gateway -->|"Bearer auth"| ModelArk["ModelArk\nSeedream + Seedance"]
     Gateway -->|"X-Api-Key"| SeedSpeech["Seed Speech\nSeed Audio"]
-    Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nvideo enhancement + transcoding"]
-    Gateway -->|"HMAC-SHA256 signature"| VodOpenApi["VOD OpenAPI\nvoice + background separation"]
+    Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nenhancement + transcoding + separation"]
     Server -.durable.-> Store["Artifact store\n(filesystem)"]
     Server -.state.-> Runtime["Runtime services\n(runtime.py)"]
 ```
@@ -74,40 +72,28 @@ flowchart LR
 - **Seed Speech gateway** (`providers/seed_speech.py`) — serves Seed Audio.
   Uses `X-Api-Key` and base URL `https://voice.ap-southeast-1.bytepluses.com`.
 - **VOD AI MediaKit gateway** (`providers/vod_mediakit/`) — serves the
-  asynchronous `vod_enhance_video` submission endpoint and the
-  `vod_transcode_video` / `vod_get_transcode_task` submit-then-poll pair. It
-  uses Bearer auth and defaults to
-  `https://mediakit.ap-southeast-1.bytepluses.com/api/v1`. Its success schemas
-  are isolated in the adapters; the gateway accepts only known result shapes
-  and rejects unknown shapes.
-- **VOD OpenAPI gateway** (`providers/vod/`) — serves the
-  `vod_separate_audio` / `vod_get_audio_separation` submit-then-poll pair
-  against `https://vod.byteplusapi.com`. It signs each request with the
-  BytePlus OpenAPI HMAC-SHA256 scheme using `BYTEPLUS_VOD_ACCESS_KEY_ID` /
-  `BYTEPLUS_VOD_SECRET_ACCESS_KEY` and normalizes `StartExecution` /
-  `GetExecution` responses. Outputs are VOD storage `FileName` paths, not
-  provider URLs, so this surface does not persist artifacts.
+  asynchronous `vod_enhance_video` submission endpoint, the
+  `vod_transcode_video` / `vod_get_transcode_task` submit-then-poll pair, and
+  the `vod_separate_audio` / `vod_get_audio_separation` submit-then-poll pair
+  (`POST /tools/separate-voice` + `GET /tasks/{task_id}`). It uses Bearer auth
+  and defaults to `https://mediakit.ap-southeast-1.bytepluses.com/api/v1`. Its
+  success schemas are isolated in the adapters; the gateway accepts only known
+  result shapes and rejects unknown shapes.
 - These gateways extend `BaseHttpGateway` (`providers/base.py`), which wraps every
   outbound request in an OpenTelemetry span, records Prometheus
   provider metrics, and normalizes transport/HTTP errors into a single
   `ProviderError` carrying a `NormalizedProviderError`.
 
-MediaKit enhancement and transcode submission are non-idempotent mutations and
-bypass the automatic retry helper: a timeout can be ambiguous after the provider
-has begun work. Enhancement accepts asynchronous task submission with no
-verified polling route for that surface. Transcoding, by contrast, has a
-verified task-status endpoint (`GET /tasks/{task_id}`), so `vod_get_transcode_task`
-polls it and reuses the shared ownership store and task-artifact cache under the
-`vod-mediakit` provider key. For both surfaces, a completed provider URL is
-preserved and persistence is attempted separately as a best-effort operation
-under the 200 MiB video limit.
-
-VOD OpenAPI audio separation submission is likewise a non-idempotent mutation
-and is never blindly retried. Polling (`GetExecution`) is retryable only on
-provider-marked retryable errors and reuses the shared ownership store under
-the `vod` provider key. Separated tracks are returned as `FileName`/`Size`
-metadata with optional playback URLs; they are not copied into local artifact
-storage.
+MediaKit enhancement, transcode, and separation submission are non-idempotent
+mutations and bypass the automatic retry helper: a timeout can be ambiguous after
+the provider has begun work. Enhancement accepts asynchronous task submission
+with no verified polling route for that surface. Transcoding and separation, by
+contrast, have a verified task-status endpoint (`GET /tasks/{task_id}`), so
+`vod_get_transcode_task` and `vod_get_audio_separation` poll it and reuse the
+shared ownership store and task-artifact cache under the `vod-mediakit` provider
+key. For all three surfaces, a completed provider URL is preserved and
+persistence is attempted separately as a best-effort operation (under the
+200 MiB video limit for video, 10 MiB audio limit for separated tracks).
 
 ## Server lifecycle and runtime services
 

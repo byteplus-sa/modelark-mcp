@@ -1,6 +1,6 @@
 ---
 name: modelark-mcp
-description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video (including Seedance 2.5, BytePlus VOD AI MediaKit enhancement, video transcoding, and VOD OpenAPI voice/background audio separation), understand images and videos through Seed 2.1, transcribe speech to text, manage Seedance tasks, upload reference media, and fetch persisted artifacts.
+description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video (including Seedance 2.5, BytePlus VOD AI MediaKit enhancement, video transcoding, and voice/background audio separation), understand images and videos through Seed 2.1, transcribe speech to text, manage Seedance tasks, upload reference media, and fetch persisted artifacts.
 ---
 
 # ModelArk Seed Multimodal MCP Server
@@ -23,12 +23,10 @@ behind one server:
   sub-agent.
 - **Speech-to-Text** — synchronous audio transcription via Seed Speech ASR.
 - **VOD AI MediaKit** — asynchronous video-enhancement submission using the exact
-  common/professional/4K/high/24-fps profile, and asynchronous video transcoding
+  common/professional/4K/high/24-fps profile, asynchronous video transcoding
   (codec, container, resolution, bitrate, frame rate) via a submit-then-poll
-  tool pair.
-- **VOD OpenAPI audio separation** — asynchronous voice and background audio
-  separation (`StartExecution` with `Task.Type=AudioExtract`) via a
-  submit-then-poll tool pair using signature (AK/SK) auth.
+  tool pair, and voice + background (or voice + music + sfx) audio separation
+  via a submit-then-poll tool pair.
 - **Artifacts** — durable media access after provider URLs expire.
 - **Object storage upload** — presigned URL generation for URL-only media
   workflows such as Seedance video references.
@@ -52,8 +50,8 @@ Invoke this skill when the user wants to:
 - enhance a public HTTPS video with the supported VOD AI MediaKit profile;
 - transcode a public HTTPS video (codec, container, resolution, bitrate, frame
   rate) with the VOD AI MediaKit submit-then-poll tool pair;
-- separate voice from background audio for a media file stored in a BytePlus
-  VOD space (DirectUrl storage path) using the VOD OpenAPI tool pair;
+- separate voice from background audio (or voice + music + sfx) for a public
+  HTTPS audio or video URL using the VOD AI MediaKit tool pair;
 - fetch a previously persisted artifact by ID;
 - upload local or Base64 media to object storage (TOS or S3) to obtain a
   presigned HTTPS URL;
@@ -81,9 +79,6 @@ gracefully degrades to whatever is configured.
 - `vod_enhance_video`
 - `vod_transcode_video`
 - `vod_get_transcode_task`
-
-### Requires `BYTEPLUS_VOD_ACCESS_KEY_ID` + `BYTEPLUS_VOD_SECRET_ACCESS_KEY`
-
 - `vod_separate_audio`
 - `vod_get_audio_separation`
 
@@ -123,9 +118,7 @@ Copy `.env.example` to `.env` and configure at minimum:
 ```bash
 BYTEPLUS_MODELARK_API_KEY=your-modelark-key   # required for Seedream + Seedance
 BYTEPLUS_SEED_SPEECH_API_KEY=your-speech-key  # required for Seed Audio + Speech-to-Text
-BYTEPLUS_VOD_MEDIAKIT_API_KEY=your-mediakit-key # required for VOD enhancement
-BYTEPLUS_VOD_ACCESS_KEY_ID=your-vod-ak        # required for VOD audio separation
-BYTEPLUS_VOD_SECRET_ACCESS_KEY=your-vod-sk    # required for VOD audio separation
+BYTEPLUS_VOD_MEDIAKIT_API_KEY=your-mediakit-key # required for VOD enhancement, transcoding, and audio separation
 ```
 
 Optional object storage upload support (TOS default, S3 alternative):
@@ -203,8 +196,8 @@ started, and there is no MediaKit polling tool in the current integration.
 | `persist` | boolean | No | Best-effort durable artifact copy; default `true` |
 
 The verified response is `status="accepted"` with a task ID. No Bearer-surface
-polling route is verified, so do not substitute the separate AK/SK VOD OpenAPI
-tools (which cover audio separation only, not MediaKit enhancement).
+polling route is verified for enhancement, so do not substitute the transcode or
+audio-separation tools (which do have polling routes) for enhancement results.
 If a completed response supplies `source_url`, retain it even when the best-effort
 copy fails. `persistence` is `not_applicable`, `persisted`, `failed`, or `not_requested`; durable
 video copies are capped at 200 MiB. `estimated_cost_usd` remains null until
@@ -252,46 +245,42 @@ failure, `error` carries the safe provider detail.
 
 ---
 
-### VOD OpenAPI audio separation
+### VOD AI MediaKit audio separation
 
-Requires both `BYTEPLUS_VOD_ACCESS_KEY_ID` and `BYTEPLUS_VOD_SECRET_ACCESS_KEY`.
-This is a signature-authenticated (AK/SK HMAC-SHA256) surface, distinct from the
-Bearer-authenticated VOD AI MediaKit endpoints. Auth scopes: `vod:extract`
-(submit) and `vod:read` (poll).
+Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY` (same Bearer key as enhancement and
+transcoding). Auth scopes: `vod:extract` (submit) and `vod:read` (poll).
 
 #### `vod_separate_audio`
 
 Submit an asynchronous voice and background audio separation task
-(`StartExecution` with `Task.Type=AudioExtract`). Mutating, non-idempotent,
-open-world — do not retry the POST automatically (timeout/5xx means ambiguous
-completion). The media must already be stored in the VOD space's TOS bucket;
-DirectUrl mode references it by storage path (a public HTTPS URL is **not**
-accepted).
+(`POST /api/v1/tools/separate-voice`). Mutating, non-idempotent, open-world —
+do not retry the POST automatically (timeout/5xx means ambiguous completion).
+The source is a public HTTPS URL (audio or video), exactly one of the two.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `file_name` | string | Yes | Storage path (`FileName`) of the media in the VOD space's TOS bucket |
-| `space_name` | string | No | VOD space name |
-| `bucket_name` | string | No | Bucket name bound to the space |
+| `audio_url` | URL | Exactly one of `audio_url`/`video_url` | Public HTTPS audio URL (mp3, m4a, wav) |
+| `video_url` | URL | Exactly one of `audio_url`/`video_url` | Public HTTPS video URL (mp4, flv, ts, avi, mov, wmv, mkv) |
+| `scene` | `"Audio"` \| `"Music"` \| `"Drama"` \| `"Narrate"` | No | Default `Audio`. `Audio`/`Music` = 2-track; `Drama`/`Narrate` = 3-track |
+| `output_format` | `"aac"` \| `"mp3"` \| `"wav"` \| `"m4a"` \| `"flac"` | No | Default `aac` |
 
-Returns `status="accepted"` plus `run_id` and `request_id`. Poll with
-`vod_get_audio_separation`.
+Returns `status="accepted"` plus `task_id`, `request_id`, and
+`provider_log_id`. Poll with `vod_get_audio_separation`.
 
 #### `vod_get_audio_separation`
 
-Read-only poll of a separation task (`vod:read`). Requires the `run_id` returned
-by `vod_separate_audio`. Maps provider `Success`→`succeeded`, failure statuses
-(`Fail`/`Failed`/`Error`/`Terminated`/`Timeout`)→`failed`, anything else
-non-empty→`processing`. On success, `voice` and `background` carry each
-separated AAC track's `file_name`, `size_bytes`, and an optional `url`
-(`https://{domain}/{file_name}`) built when a playback domain is supplied per
-call or via `BYTEPLUS_VOD_PLAYBACK_DOMAIN`. Outputs remain in the VOD space and
-are not copied into durable local artifact storage.
+Read-only poll of a separation task (`vod:read`). Requires the `task_id`
+returned by `vod_separate_audio`. Maps provider `running`→`processing`,
+`completed`→`succeeded`, `failed`→`failed`. On success, `voice`, `background`,
+`music`, and `sfx` each carry the track's expiring `source_url` (24-hour
+lifetime) and, with `persist_output=true` (default), a durable `artifact`
+reference copied once and cached by task ID. A persistence failure never erases
+provider success. On failure, `error` carries the safe provider detail.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `run_id` | string | Yes | RunId returned by `vod_separate_audio` |
-| `playback_domain` | string | No | Bare playback domain; overrides `BYTEPLUS_VOD_PLAYBACK_DOMAIN` |
+| `task_id` | string | Yes | Task ID returned by `vod_separate_audio` |
+| `persist_output` | boolean | No | Best-effort durable copy on first successful poll; default `true` |
 
 ---
 
@@ -1049,8 +1038,7 @@ The server normalizes five distinct BytePlus API surfaces:
 |---|---|---|---|
 | **ModelArk** | `Authorization: Bearer <key>` | `https://ark.ap-southeast.bytepluses.com/api/v3` | Seedream, Seedance |
 | **Seed Speech** | `X-Api-Key: <key>` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Audio, Speech-to-Text |
-| **VOD AI MediaKit** | `Authorization: Bearer <key>` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | Video enhancement, video transcoding |
-| **VOD OpenAPI** | HMAC-SHA256 signature (AK/SK) | `https://vod.byteplusapi.com` | Voice + background audio separation |
+| **VOD AI MediaKit** | `Authorization: Bearer <key>` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | Video enhancement, video transcoding, voice + background audio separation |
 
 One Seed Speech key covers both Seed Audio and ASR — the provider distinguishes
 them by `X-Api-Resource-Id`, not by the key. ModelArk uses a separate Bearer
@@ -1348,16 +1336,11 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 - `BYTEPLUS_MODELARK_API_KEY` — enables Seedream and Seedance
 - `BYTEPLUS_SEED_SPEECH_API_KEY` — enables Seed Audio (TTS) and Speech-to-Text (ASR)
-- `BYTEPLUS_VOD_MEDIAKIT_API_KEY` — enables VOD AI MediaKit enhancement and video transcoding
-- `BYTEPLUS_VOD_ACCESS_KEY_ID` — VOD OpenAPI Access Key (enables audio separation with the SK)
-- `BYTEPLUS_VOD_SECRET_ACCESS_KEY` — VOD OpenAPI Secret Access Key (never logged)
+- `BYTEPLUS_VOD_MEDIAKIT_API_KEY` — enables VOD AI MediaKit enhancement, video transcoding, and audio separation
 - `BYTEPLUS_MODELARK_BASE_URL` — override ModelArk data-plane host
 - `BYTEPLUS_SEED_AUDIO_BASE_URL` — override Seed Audio host
 - `SEED_SPEECH_ASR_BASE_URL` — override ASR host
 - `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` — override the VOD AI MediaKit HTTPS API base
-- `BYTEPLUS_VOD_BASE_URL` — override the VOD OpenAPI endpoint
-- `BYTEPLUS_VOD_REGION` — VOD OpenAPI signing region (default `ap-southeast-1`)
-- `BYTEPLUS_VOD_PLAYBACK_DOMAIN` — optional bare playback domain for output audio URLs
 - `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` — seconds between ASR query polls (default 3)
 - `SEED_SPEECH_ASR_POLL_MAX_SECONDS` — maximum total seconds to wait for ASR result (default 600)
 

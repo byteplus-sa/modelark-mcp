@@ -21,8 +21,8 @@ surface.
 | 12 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
 | 13 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
 | 14 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 15 | `vod_separate_audio` | VOD OpenAPI (optional) | Async submission | VOD OpenAPI signature |
-| 16 | `vod_get_audio_separation` | VOD OpenAPI (optional) | Poll | VOD OpenAPI signature |
+| 15 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 16 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
 
 ## Tool Annotations
 
@@ -234,38 +234,38 @@ erases provider success. On failure, `error` carries the safe provider detail.
 
 ## vod_separate_audio
 
-Submit an asynchronous BytePlus VOD OpenAPI voice and background audio
-separation task via `StartExecution` with `Task.Type = AudioExtract`. The tool
-is registered only when `BYTEPLUS_VOD_ACCESS_KEY_ID` and
-`BYTEPLUS_VOD_SECRET_ACCESS_KEY` are configured and requires the `vod:extract`
-scope in JWT mode.
+Submit an asynchronous BytePlus VOD AI MediaKit voice and background audio
+separation task via `POST /api/v1/tools/separate-voice`. The tool is registered
+when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is configured and requires the
+`vod:extract` scope in JWT mode.
 
-Input uses DirectUrl storage-path mode — the media must already be stored in
-the VOD space's TOS bucket:
+Input takes a public HTTPS source URL and separation options:
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `file_name` | string | Yes | Storage path (`FileName`) of the media in the VOD space's TOS bucket |
-| `space_name` | string | No | VOD space name |
-| `bucket_name` | string | No | Bucket name bound to the space |
+| `audio_url` | string | No | Public HTTPS audio URL (mp3, m4a, wav). Exactly one of `audio_url`/`video_url` |
+| `video_url` | string | No | Public HTTPS video URL (mp4, flv, ts, avi, mov, wmv, mkv). Exactly one of `audio_url`/`video_url` |
+| `scene` | string | No | `Audio` (default), `Music`, `Drama`, `Narrate` |
+| `output_format` | string | No | `aac` (default), `mp3`, `wav`, `m4a`, `flac` |
 
-Returns `VodSeparateAudioOutput` with `provider` `byteplus-vod`, `status`
-`accepted`, the provider `request_id`, and the `run_id` to pass to
-`vod_get_audio_separation`. The mutation is never retried automatically because
-completion is ambiguous after a timeout.
+Returns `VodSeparateAudioOutput` with `provider` `byteplus-vod-mediakit`,
+`status` `accepted`, the provider `request_id` and `provider_log_id`, and the
+`task_id` to pass to `vod_get_audio_separation`. The mutation is never retried
+automatically because completion is ambiguous after a timeout.
 
 ### Example
 
 ```json
 // Input
-{ "file_name": "path/to/source.mp4", "space_name": "my-space" }
+{ "video_url": "https://example.com/clip.mp4", "scene": "Drama" }
 
 // Output
 {
-  "provider": "byteplus-vod",
+  "provider": "byteplus-vod-mediakit",
   "status": "accepted",
-  "request_id": "20260819...",
-  "run_id": "p0:e1a800c8...",
+  "request_id": "20260820...",
+  "provider_log_id": "20260820...",
+  "task_id": "amk-tool-separate-voice-...",
   "recommended_poll_after_ms": 3000
 }
 ```
@@ -274,51 +274,51 @@ completion is ambiguous after a timeout.
 
 ## vod_get_audio_separation
 
-Poll a BytePlus VOD OpenAPI `AudioExtract` task via `GetExecution`. Registered
-only when VOD OpenAPI signature credentials are configured and requires the
-`vod:read` scope in JWT mode.
+Poll a BytePlus VOD AI MediaKit separate-voice task via `GET
+/api/v1/tasks/{task_id}`. Registered when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is
+configured and requires the `vod:read` scope in JWT mode.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `run_id` | string | Yes | RunId returned by `vod_separate_audio` |
-| `playback_domain` | string | No | Optional bare playback domain; overrides `BYTEPLUS_VOD_PLAYBACK_DOMAIN` |
+| `task_id` | string | Yes | Task ID returned by `vod_separate_audio` |
+| `persist_output` | boolean | No | Copy completed tracks into durable artifact storage on first successful poll (default `true`) |
 
 Returns `VodAudioSeparationTaskOutput` with a normalized `status` of
-`processing`, `succeeded`, or `failed`. On success, `voice` and `background`
-carry each track's `file_name`, `size_bytes`, and an optional `url` built from
-the playback domain (`https://{domain}/{file_name}`). Outputs remain in the VOD
-space; this tool does not copy them into durable local artifact storage.
+`processing`, `succeeded`, or `failed`. On success, `voice`, `background`,
+`music`, and `sfx` each carry the track's expiring `source_url` (valid 24
+hours) and, when best-effort persistence succeeds, a durable `artifact`
+reference.
 
 ### Task Statuses
 
 | Status | Meaning |
 |---|---|
-| `processing` | Provider has not reported `Success`; still separating |
-| `succeeded` | Provider reported `Success`; `voice` populated |
-| `failed` | Provider reported a failure status; `error` populated |
+| `processing` | Provider reported `running`; still separating |
+| `succeeded` | Provider reported `completed`; at least one track populated |
+| `failed` | Provider reported `failed`; `error` populated |
 
 ### Example
 
 ```json
 // Input
-{ "run_id": "p0:e1a800c8...", "playback_domain": "play.example.com" }
+{ "task_id": "amk-tool-separate-voice-..." }
 
-// Output (succeeded)
+// Output (succeeded, 2-way)
 {
-  "provider": "byteplus-vod",
-  "run_id": "p0:e1a800c8...",
+  "provider": "byteplus-vod-mediakit",
+  "task_id": "amk-tool-separate-voice-...",
   "status": "succeeded",
-  "provider_status": "Success",
-  "duration_seconds": 107.9,
+  "provider_status": "completed",
+  "duration_seconds": 120.5,
   "voice": {
-    "file_name": "hash_audiospeech.aac",
-    "size_bytes": 1787924,
-    "url": "https://play.example.com/hash_audiospeech.aac"
+    "artifact": { "id": "...", "uri": "seed-media://artifacts/...", "media_type": "audio", "mime_type": "audio/aac", "bytes": 1787924 },
+    "source_url": "https://vod.ap-southeast-1.byteplusvod.com/voice.aac?sign=...",
+    "persistence": "persisted"
   },
   "background": {
-    "file_name": "hash_background.aac",
-    "size_bytes": 1787924,
-    "url": "https://play.example.com/hash_background.aac"
+    "artifact": null,
+    "source_url": "https://vod.ap-southeast-1.byteplusvod.com/background.aac?sign=...",
+    "persistence": "not_requested"
   }
 }
 ```

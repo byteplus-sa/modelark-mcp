@@ -21,5 +21,5 @@ class VodArtifactPersistenceIssue(BaseModel):
     message: str = Field(description="Credential- and URL-safe persistence failure message.")
     retryable: bool = Field(description="Whether persistence may succeed if attempted again later.")
     artifact_limit_bytes: int = Field(
-        description="Maximum video size accepted by the durable artifact policy, in bytes."
+        description="Maximum output size accepted by the durable artifact policy, in bytes."
     )

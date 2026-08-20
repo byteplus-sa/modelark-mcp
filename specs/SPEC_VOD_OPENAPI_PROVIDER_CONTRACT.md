@@ -1,21 +1,28 @@
 ---
 title: BytePlus VOD OpenAPI Provider Contract
 type: spec
-status: accepted
+status: deprecated
 horizon: current
 created: 2026-08-19
-updated: 2026-08-19
+updated: 2026-08-20
 source:
   - https://docs.byteplus.com/en/docs/byteplus-vod/docs-voice-background-audio-separation
   - https://docs.byteplus.com/en/docs/byteplus-vod/reference-startexecution
   - https://docs.byteplus.com/en/docs/byteplus-vod/reference-getexecution
   - https://docs.byteplus.com/en/docs/byteplus-platform/reference-how-to-calculate-a-signature
 related:
-  - plans/PLAN_BYTEPLUS_VOD_AUDIO_SEPARATION.md
+  - plans/PLAN_VOD_AUDIO_SEPARATION_MEDIAKIT_MIGRATION.md
   - specs/SPEC_VOD_MEDIAKIT_PROVIDER_CONTRACT.md
 ---
 
 <!-- markdownlint-disable MD013 -->
+
+> **Deprecated (2026-08-20).** The AK/SK-signed `StartExecution`/`GetExecution`
+> `AudioExtract` implementation described below has been **removed**. Voice and
+> background audio separation now uses the Bearer-authenticated AI MediaKit
+> `POST /api/v1/tools/separate-voice` + `GET /api/v1/tasks/{task_id}` surface
+> documented in `specs/SPEC_VOD_MEDIAKIT_PROVIDER_CONTRACT.md`. This spec is
+> retained for historical reference only.
 
 # BytePlus VOD OpenAPI Provider Contract
 

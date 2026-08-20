@@ -25,8 +25,6 @@ def configured_server(
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test")
     monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test")
     monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_API_KEY", "test-mediakit-key")
-    monkeypatch.setenv("BYTEPLUS_VOD_ACCESS_KEY_ID", "ak-test-vod")
-    monkeypatch.setenv("BYTEPLUS_VOD_SECRET_ACCESS_KEY", "sk-test-vod")
     monkeypatch.setenv("TOS_ACCESS_KEY", "ak-test-tos")
     monkeypatch.setenv("TOS_SECRET_KEY", "sk-test-tos")
     monkeypatch.setenv("TOS_BUCKET", "test-bucket")
@@ -58,8 +56,6 @@ def no_creds_server(
                 BYTEPLUS_MODELARK_API_KEY="",
                 BYTEPLUS_SEED_SPEECH_API_KEY="",
                 BYTEPLUS_VOD_MEDIAKIT_API_KEY="",
-                BYTEPLUS_VOD_ACCESS_KEY_ID="",
-                BYTEPLUS_VOD_SECRET_ACCESS_KEY="",
             )
         )
     )
@@ -346,10 +342,14 @@ class TestInputSchemas:
         assert tool.description is not None
         assert "vod_get_audio_separation" in tool.description
         input_schema = tool.parameters["properties"]["input"]
-        assert input_schema["required"] == ["file_name"]
+        assert "audio_url" in input_schema["properties"]
+        assert "video_url" in input_schema["properties"]
+        assert "scene" in input_schema["properties"]
+        assert "output_format" in input_schema["properties"]
+        assert "required" not in input_schema
         assert all("description" in field for field in input_schema["properties"].values())
         assert tool.output_schema is not None
-        assert tool.output_schema["properties"]["run_id"]["description"]
+        assert tool.output_schema["properties"]["task_id"]["description"]
         assert all(
             "description" in field or "$ref" in field
             for field in tool.output_schema["properties"].values()
@@ -362,7 +362,7 @@ class TestInputSchemas:
         tool = next(t for t in tools if t.name == "vod_get_audio_separation")
         assert tool.description is not None
         input_schema = tool.parameters["properties"]["input"]
-        assert input_schema["required"] == ["run_id"]
+        assert input_schema["required"] == ["task_id"]
         assert all("description" in field for field in input_schema["properties"].values())
         assert tool.output_schema is not None
         assert tool.output_schema["properties"]["status"]["description"]
