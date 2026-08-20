@@ -312,7 +312,7 @@ class TestGetContract:
         self, service: VodAudioSeparationService
     ) -> None:
         respx.get(f"{BASE_URL}/").mock(
-            return_value=httpx.Response(400, json={"ResponseMetadata": []})
+            return_value=httpx.Response(400, json={"ResponseMetadata": [1]})
         )
         with pytest.raises(ProviderError) as exc_info:
             await service.get("run-1")

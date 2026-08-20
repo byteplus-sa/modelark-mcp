@@ -486,10 +486,10 @@ class Settings(BaseSettings):
                 "BYTEPLUS_VOD_PLAYBACK_DOMAIN must be a bare hostname "
                 "(no scheme, path, or credentials)."
             )
-        if "?" in value or "#" in value or "/" in value or ":" in value:
+        if "?" in value or "#" in value or "/" in value or ":" in value or " " in value:
             raise ValueError(
                 "BYTEPLUS_VOD_PLAYBACK_DOMAIN must be a bare hostname "
-                "(no scheme, port, path, query, or fragment)."
+                "(no scheme, port, path, query, fragment, or whitespace)."
             )
         labels = value.split(".")
         if any(not label or label.strip() != label for label in labels):
