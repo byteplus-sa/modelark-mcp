@@ -49,17 +49,15 @@ def _normalize_timestamp(value: str | int | None) -> str | None:
             return None
 
 
-def _sanitize_task_error(detail: Any, fallback: str) -> tuple[str | None, str | None]:
+def _sanitize_task_error(detail: Any, fallback: str) -> tuple[str | None, str]:
     """Extract a safe failure code and message from a task error detail."""
     if detail is None:
-        return None, None
+        return None, fallback
     code = getattr(detail, "code", None)
     message = getattr(detail, "message", None)
-    if not message:
-        return None, None
     return (
         code if isinstance(code, str) and code else None,
-        sanitize_provider_message(message, fallback),
+        sanitize_provider_message(message or "", fallback),
     )
 
 

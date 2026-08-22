@@ -41,8 +41,8 @@ If the provider returns `403 FORBIDDEN` with "model not activated":
 3. Verify the base URL matches your key's region
 
 Model IDs are region-scoped and account-specific. The defaults in
-`.env.example` may not match your account. Use `scripts/verify_phase0.py`
-to test with minimal cost.
+`.env.example` may not match your account. Run `make check-env` to validate
+your configuration, then adjust the model IDs before making billable calls.
 
 ## Provider URL Expired
 

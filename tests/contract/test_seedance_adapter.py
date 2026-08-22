@@ -445,3 +445,94 @@ class TestSeedanceTaskSummary:
         usage = SeedanceService.extract_usage(task)
         assert usage is not None
         assert usage.completion_tokens == 50
+
+
+class TestSeedanceInvalidResponse:
+    """2xx responses with non-JSON bodies must fail as INVALID_RESPONSE."""
+
+    @respx.mock
+    async def test_create_non_json_success_body(self, service: SeedanceService) -> None:
+        respx.post(f"{MODELARK_BASE}/contents/generations/tasks").mock(
+            return_value=httpx.Response(200, content=b"<html>not json</html>")
+        )
+        request = SeedanceService.build_request(
+            model="test", content=[SeedanceContentItem(type="text", text="hi")]
+        )
+        with pytest.raises(ProviderError) as exc_info:
+            await service.create_task(request)
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert exc_info.value.http_status == 200
+
+    @respx.mock
+    async def test_get_empty_success_body(self, service: SeedanceService) -> None:
+        respx.get(f"{MODELARK_BASE}/contents/generations/tasks/task-1").mock(
+            return_value=httpx.Response(200, content=b"")
+        )
+        with pytest.raises(ProviderError) as exc_info:
+            await service.get_task("task-1")
+        assert exc_info.value.code == "INVALID_RESPONSE"
+
+    @respx.mock
+    async def test_list_non_json_success_body(self, service: SeedanceService) -> None:
+        respx.get(f"{MODELARK_BASE}/contents/generations/tasks").mock(
+            return_value=httpx.Response(200, content=b"not json")
+        )
+        with pytest.raises(ProviderError) as exc_info:
+            await service.list_tasks()
+        assert exc_info.value.code == "INVALID_RESPONSE"
+
+
+class TestSeedanceUnknownStatus:
+    """Unknown provider status strings map to SeedanceTaskStatus.UNKNOWN."""
+
+    def test_unknown_status_enum_member(self) -> None:
+        from modelark_mcp.domain.models import SeedanceTaskStatus
+
+        assert SeedanceTaskStatus("invented_status") is SeedanceTaskStatus.UNKNOWN
+
+    def test_to_task_summary_unknown_status(self) -> None:
+        from modelark_mcp.domain.models import SeedanceTaskStatus
+        from modelark_mcp.providers.modelark.schemas import SeedanceTaskResponse
+
+        task = SeedanceTaskResponse(
+            id="task-1",
+            model="dreamina-seedance-2-0-260128",
+            status="invented_status",
+            created_at=1721400000,
+            updated_at=1721400000,
+        )
+        summary = SeedanceService.to_task_summary(task)
+        assert summary.status is SeedanceTaskStatus.UNKNOWN
+
+    def test_get_task_output_validates_with_unknown_status(self) -> None:
+        from modelark_mcp.domain.models import SeedanceTaskStatus
+        from modelark_mcp.tools.seedance_get_task import SeedanceTaskOutput
+
+        output = SeedanceTaskOutput(
+            task_id="task-1",
+            model="dreamina-seedance-2-0-260128",
+            status="invented_status",
+            created_at="2026-06-02T07:36:15+00:00",
+            updated_at="2026-06-02T07:36:15+00:00",
+        )
+        assert output.status is SeedanceTaskStatus.UNKNOWN
+
+    def test_list_tasks_output_validates_with_unknown_status(self) -> None:
+        from modelark_mcp.domain.models import SeedanceTaskStatus
+        from modelark_mcp.tools.seedance_list_tasks import SeedanceTaskPage
+
+        page = SeedanceTaskPage(
+            tasks=[
+                {
+                    "task_id": "task-1",
+                    "model": "dreamina-seedance-2-0-260128",
+                    "status": "invented_status",
+                    "created_at": "2026-06-02T07:36:15+00:00",
+                    "updated_at": "2026-06-02T07:36:15+00:00",
+                }
+            ],
+            total=1,
+            page=1,
+            page_size=20,
+        )
+        assert page.tasks[0].status is SeedanceTaskStatus.UNKNOWN

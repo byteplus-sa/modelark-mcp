@@ -66,12 +66,13 @@ class SeedSpeechAsrHttpGateway(BaseHttpGateway):
         """Submit audio for ASR. Returns the task ID (request ID)."""
         audio: dict[str, Any] = {
             "format": audio_format,
-            "codec": "raw",
-            "rate": 16000,
-            "bits": 16,
-            "channel": 1,
             "language": language,
         }
+        if audio_format in {"wav", "raw"}:
+            audio["codec"] = "raw"
+            audio["rate"] = 16000
+            audio["bits"] = 16
+            audio["channel"] = 1
         if audio_data is not None:
             audio["data"] = audio_data
         if audio_url is not None:
@@ -104,7 +105,8 @@ class SeedSpeechAsrHttpGateway(BaseHttpGateway):
             raise self.normalize_error(response, "submit")
         return request_id
 
-    _NON_TERMINAL_STATUSES = frozenset({"20000001", "45000000"})
+    _SUCCESS_STATUSES = frozenset({"20000000"})
+    _NON_TERMINAL_STATUSES = frozenset({"20000001", "20000002"})
 
     async def query(self, *, task_id: str, sequence: int) -> dict[str, Any] | None:
         """Poll for ASR result. Returns None if still processing."""
@@ -120,13 +122,40 @@ class SeedSpeechAsrHttpGateway(BaseHttpGateway):
         )
         if response.status_code >= 400:
             raise self.normalize_error(response, "query")
-        api_status = response.headers.get("x-api-status-code", "")
+        api_status = response.headers.get("x-api-status-code")
+        if api_status is None:
+            raise self._status_error(
+                response,
+                code="MISSING_STATUS",
+                message="Seed Speech ASR query response is missing the x-api-status-code header.",
+            )
         if api_status in self._NON_TERMINAL_STATUSES:
             return None
-        try:
-            return cast("dict[str, Any]", response.json())
-        except json.JSONDecodeError:
-            raise self.normalize_error(response, "query") from None
+        if api_status in self._SUCCESS_STATUSES:
+            try:
+                return cast("dict[str, Any]", response.json())
+            except json.JSONDecodeError:
+                raise self.normalize_error(response, "query") from None
+        raise self._status_error(
+            response,
+            code=api_status,
+            message=f"Seed Speech ASR query failed with status code {api_status}.",
+        )
+
+    @classmethod
+    def _status_error(cls, response: httpx.Response, *, code: str, message: str) -> ProviderError:
+        return ProviderError(
+            NormalizedProviderError(
+                provider=cls.PROVIDER,
+                operation="query",
+                http_status=response.status_code,
+                code=code,
+                message=message,
+                request_id=cls.extract_request_id(response),
+                retryable=False,
+                ambiguous_completion=False,
+            )
+        )
 
     @staticmethod
     def extract_request_id(response: httpx.Response) -> str | None:

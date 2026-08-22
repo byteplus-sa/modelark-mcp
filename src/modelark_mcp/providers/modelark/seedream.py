@@ -8,7 +8,7 @@ for MVP — streaming events are deferred per the plan.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -18,6 +18,17 @@ from modelark_mcp.providers.modelark.schemas import (
     SeedreamProviderRequest,
     SeedreamProviderResponse,
 )
+from modelark_mcp.providers.modelark.seedance import _parse_success_body
+
+
+def _image_value(item: dict[str, Any]) -> str | None:
+    """Resolve one reference image to a URL or base64 data URI."""
+    if item.get("url"):
+        return cast("str", item["url"])
+    if item.get("data"):
+        mime = item.get("mime_type", "image/png")
+        return f"data:{mime};base64,{item['data']}"
+    return None
 
 
 class SeedreamService:
@@ -51,7 +62,7 @@ class SeedreamService:
         if response.status_code >= 400:
             raise ModelArkGateway.normalize_error(response, "generate_image")
 
-        body = response.json()
+        body = _parse_success_body(response, "generate_image")
         return SeedreamProviderResponse.model_validate(body), request_id
 
     @staticmethod
@@ -76,12 +87,10 @@ class SeedreamService:
         image_field: str | list[str] | None = None
         if images:
             if len(images) == 1:
-                image_field = images[0].get("url") or images[0].get("data")
+                image_field = _image_value(images[0])
             else:
                 image_field = [
-                    item.get("url") or item.get("data", "")
-                    for item in images
-                    if item.get("url") or item.get("data")
+                    value for value in (_image_value(item) for item in images) if value is not None
                 ]
 
         sequential = None

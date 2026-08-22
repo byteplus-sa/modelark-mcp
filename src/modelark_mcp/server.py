@@ -12,7 +12,7 @@ import os
 import subprocess  # nosec B404
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import truststore
@@ -22,6 +22,7 @@ truststore.inject_into_ssl()
 from fastmcp import Context, FastMCP  # noqa: E402
 from fastmcp.resources import ResourceContent, ResourceResult  # noqa: E402
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest  # noqa: E402
+from starlette.middleware import Middleware  # noqa: E402
 from starlette.responses import JSONResponse, Response  # noqa: E402
 
 if TYPE_CHECKING:
@@ -43,6 +44,10 @@ from modelark_mcp.runtime import (  # noqa: E402
 from modelark_mcp.security.http_auth import (  # noqa: E402
     build_auth_provider,
     component_auth,
+)
+from modelark_mcp.security.http_middleware import (  # noqa: E402
+    RateLimitMiddleware,
+    RequestBodyLimitMiddleware,
 )
 
 
@@ -366,6 +371,41 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
         )(handler)
 
 
+class HardenedFastMCP(FastMCP):
+    """FastMCP subclass that applies ASGI body and rate-limit middleware for HTTP."""
+
+    def __init__(
+        self,
+        *args: Any,
+        app_settings: Settings | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._app_settings = app_settings
+
+    def http_app(self, *args: Any, **kwargs: Any) -> Any:
+        if self._app_settings is not None and self._app_settings.mcp_transport == "http":
+            asgi_middleware = [
+                Middleware(
+                    RequestBodyLimitMiddleware,
+                    max_bytes=self._app_settings.mcp_http_max_body_bytes,
+                ),
+            ]
+            if self._app_settings.rate_limit_rpm > 0:
+                asgi_middleware.append(
+                    Middleware(
+                        RateLimitMiddleware,
+                        rpm=self._app_settings.rate_limit_rpm,
+                        burst=(
+                            self._app_settings.rate_limit_burst or self._app_settings.rate_limit_rpm
+                        ),
+                    )
+                )
+            asgi_middleware.extend(kwargs.get("middleware") or [])
+            kwargs["middleware"] = asgi_middleware
+        return super().http_app(*args, **kwargs)
+
+
 def create_server(
     settings: Settings | None = None,
     *,
@@ -376,7 +416,7 @@ def create_server(
     resolved_settings = settings or get_settings()
     set_level(resolved_settings.log_level)
     runtime_state = RuntimeState()
-    server: FastMCP = FastMCP(
+    server: FastMCP = HardenedFastMCP(
         "ModelArk Seed Multimodal",
         instructions=(
             "BytePlus multimodal generation server. Provides Seed Audio, Seedream, "
@@ -388,6 +428,7 @@ def create_server(
         auth=auth_provider or build_auth_provider(resolved_settings),
         lifespan=build_lifespan(resolved_settings, runtime_factory, runtime_state),
         middleware=[MetricsMiddleware()],
+        app_settings=resolved_settings,
     )
 
     @server.resource(
@@ -465,7 +506,12 @@ def create_server(
         if resolved_settings.has_modelark:
             from modelark_mcp.providers.modelark.client import ModelArkGateway
 
-            modelark_gw = ModelArkGateway()
+            modelark_gw = ModelArkGateway(
+                api_key=resolved_settings.modelark_api_key,
+                base_url=resolved_settings.modelark_base_url,
+                timeout=resolved_settings.request_timeout_ms / 1000,
+                connect_timeout=resolved_settings.connect_timeout_ms / 1000,
+            )
             try:
                 providers["modelark"] = (
                     "reachable"
@@ -478,7 +524,12 @@ def create_server(
         if resolved_settings.has_seed_audio:
             from modelark_mcp.providers.seed_speech.client import SeedSpeechGateway
 
-            audio_gw = SeedSpeechGateway()
+            audio_gw = SeedSpeechGateway(
+                api_key=resolved_settings.seed_speech_api_key,
+                base_url=resolved_settings.seed_audio_base_url,
+                timeout=resolved_settings.request_timeout_ms / 1000,
+                connect_timeout=resolved_settings.connect_timeout_ms / 1000,
+            )
             try:
                 providers["seed_audio"] = (
                     "reachable"
@@ -491,7 +542,12 @@ def create_server(
         if resolved_settings.has_stt:
             from modelark_mcp.providers.seed_speech.asr_http import SeedSpeechAsrHttpGateway
 
-            stt_gw = SeedSpeechAsrHttpGateway()
+            stt_gw = SeedSpeechAsrHttpGateway(
+                api_key=resolved_settings.seed_speech_api_key,
+                base_url=resolved_settings.seed_speech_asr_base_url,
+                timeout=resolved_settings.request_timeout_ms / 1000,
+                connect_timeout=resolved_settings.connect_timeout_ms / 1000,
+            )
             try:
                 providers["stt"] = (
                     "reachable"
@@ -504,7 +560,12 @@ def create_server(
         if resolved_settings.has_vod_mediakit:
             from modelark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
 
-            vod_gw = VodMediaKitGateway()
+            vod_gw = VodMediaKitGateway(
+                api_key=resolved_settings.vod_mediakit_api_key,
+                base_url=resolved_settings.vod_mediakit_base_url,
+                timeout=resolved_settings.request_timeout_ms / 1000,
+                connect_timeout=resolved_settings.connect_timeout_ms / 1000,
+            )
             try:
                 providers["vod_mediakit"] = (
                     "reachable"

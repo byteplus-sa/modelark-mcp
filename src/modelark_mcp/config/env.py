@@ -242,8 +242,33 @@ class Settings(BaseSettings):
 
     # --- Artifact persistence ------------------------------------------------
 
-    artifact_backend: Literal["filesystem"] = Field(
-        default="filesystem", validation_alias="ARTIFACT_BACKEND"
+    artifact_backend: Literal["filesystem", "object_storage"] = Field(
+        default="filesystem",
+        validation_alias="ARTIFACT_BACKEND",
+        description=(
+            "Durable artifact storage backend. 'filesystem' stores artifacts on "
+            "local disk; 'object_storage' stores them in the configured TOS/S3 bucket."
+        ),
+    )
+    state_backend: Literal["sqlite"] = Field(
+        default="sqlite",
+        validation_alias="STATE_BACKEND",
+        description=(
+            "Backend for task ownership, budget, and artifact-cache state. "
+            "Only 'sqlite' (single instance) is implemented today."
+        ),
+    )
+    artifact_sweep_interval_seconds: int = Field(
+        default=3600,
+        ge=60,
+        validation_alias="ARTIFACT_SWEEP_INTERVAL_SECONDS",
+        description="Interval in seconds between background artifact/state expiry sweeps.",
+    )
+    state_prune_max_age_days: int = Field(
+        default=30,
+        ge=1,
+        validation_alias="STATE_PRUNE_MAX_AGE_DAYS",
+        description="Maximum age in days for task-ownership, budget, and cache rows before pruning.",
     )
     artifact_dir: str = Field(default="~/.modelark-mcp/artifacts", validation_alias="ARTIFACT_DIR")
     artifact_ttl_seconds: int = Field(default=604800, validation_alias="ARTIFACT_TTL_SECONDS")
@@ -559,6 +584,8 @@ class Settings(BaseSettings):
                 "OBJECT_STORAGE_BACKEND=tos but TOS credentials are missing while S3 "
                 "credentials are set. Set OBJECT_STORAGE_BACKEND=s3 or provide TOS_*."
             )
+        if self.artifact_backend == "object_storage" and not self.has_object_storage:
+            raise ValueError("ARTIFACT_BACKEND=object_storage requires TOS_* or S3_* credentials.")
         return self
 
 

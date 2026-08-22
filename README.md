@@ -169,8 +169,8 @@ cp .env.example .env
 # Run the server
 make start
 
-# Or run the verification script to test your credentials
-uv run python scripts/verify_phase0.py
+# Or validate your environment configuration
+make check-env
 ```
 
 ## Configuration

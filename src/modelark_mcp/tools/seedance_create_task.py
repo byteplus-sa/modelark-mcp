@@ -15,7 +15,7 @@ from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
-from modelark_mcp.config.model_capabilities import get_capability_registry
+from modelark_mcp.config.model_capabilities import ModelFamily, get_capability_registry
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedance import SeedanceService
@@ -194,6 +194,12 @@ async def seedance_create_task(
     registry = get_capability_registry()
     caps = registry.get_video_capabilities(input.model)
 
+    if caps.family is ModelFamily.SEEDANCE_2_5:
+        raise ValueError(
+            f"Model '{input.model}' is a Seedance 2.5 model. "
+            f"Use seedance_2_5_create_task for Seedance 2.5 models."
+        )
+
     # Validate model-specific capabilities.
     registry.validate_resolution(input.model, input.resolution)
     registry.validate_duration(input.model, input.duration)
@@ -253,7 +259,7 @@ async def seedance_create_task(
 
     await ctx.report_progress(progress=50, total=100)
 
-    estimated_cost = log_cost_estimate(product="video", variations=1)
+    estimated_cost = log_cost_estimate(product="video", variations=1, model_id=caps.model_id)
 
     service = SeedanceService()
     try:

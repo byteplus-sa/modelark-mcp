@@ -11,9 +11,9 @@ import asyncio
 import json
 import sqlite3
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol
 
@@ -21,9 +21,12 @@ from cachetools import TTLCache
 from fastmcp.server.dependencies import get_access_token
 
 from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
+from modelark_mcp.artifacts.object_storage_store import ObjectStorageArtifactStore
 from modelark_mcp.config.env import Settings
 from modelark_mcp.domain.artifacts import ArtifactRef
 from modelark_mcp.domain.errors import ProviderError
+from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.observability.metrics import BUDGET_REJECTIONS
 from modelark_mcp.security.auth_context import AuthContext, PrincipalContext
 from modelark_mcp.security.safe_downloader import SafeDownloader
@@ -93,6 +96,8 @@ class TaskOwnershipStore(Protocol):
 
     async def list_task_ids(self, provider: str, owner: AuthContext) -> set[str]: ...
 
+    async def prune(self, max_age_days: int) -> int: ...
+
     async def ping(self) -> None: ...
 
     async def close(self) -> None: ...
@@ -109,6 +114,8 @@ class TaskArtifactCache(Protocol):
     ) -> None: ...
 
     async def pop(self, provider: str, task_id: str) -> dict[str, ArtifactRef | None] | None: ...
+
+    async def prune_expired(self) -> int: ...
 
     async def clear(self) -> None: ...
 
@@ -230,6 +237,16 @@ class SQLiteTaskOwnershipStore:
                 (provider, owner.principal_id, owner.tenant_id),
             ).fetchall()
         return {str(row[0]) for row in rows}
+
+    async def prune(self, max_age_days: int) -> int:
+        cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()
+        async with self._lock:
+            cursor = self._connection.execute(
+                "DELETE FROM task_ownership WHERE created_at < ?",
+                (cutoff,),
+            )
+            self._connection.commit()
+        return cursor.rowcount if cursor.rowcount is not None else 0
 
     async def ping(self) -> None:
         async with self._lock:
@@ -392,6 +409,16 @@ class SQLiteTaskArtifactCache:
             self._connection.execute("DELETE FROM task_artifacts")
             self._connection.commit()
 
+    async def prune_expired(self) -> int:
+        cutoff = (datetime.now(UTC) - timedelta(seconds=self._ttl_seconds)).isoformat()
+        async with self._lock:
+            cursor = self._connection.execute(
+                "DELETE FROM task_artifacts WHERE created_at < ?",
+                (cutoff,),
+            )
+            self._connection.commit()
+        return cursor.rowcount if cursor.rowcount is not None else 0
+
     async def close(self) -> None:
         async with self._lock:
             self._connection.close()
@@ -512,6 +539,16 @@ class BudgetLedger:
             )
             self._connection.commit()
 
+    async def prune(self, max_age_days: int) -> int:
+        cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).date().isoformat()
+        async with self._lock:
+            cursor = self._connection.execute(
+                "DELETE FROM budget_reservations WHERE usage_date < ?",
+                (cutoff,),
+            )
+            self._connection.commit()
+        return cursor.rowcount if cursor.rowcount is not None else 0
+
     async def close(self) -> None:
         async with self._lock:
             self._connection.close()
@@ -533,6 +570,29 @@ class RuntimeState:
     runtime: RuntimeServices | None = None
 
 
+def build_state_stores(
+    settings: Settings,
+    database_path: Path,
+) -> tuple[TaskOwnershipStore, BudgetLedger, TaskArtifactCache]:
+    """Build the state stores for the configured ``STATE_BACKEND``."""
+    if settings.state_backend != "sqlite":
+        raise ValueError(f"Unsupported STATE_BACKEND: {settings.state_backend}")
+    log_warning(
+        "single_instance_state_backend",
+        backend=settings.state_backend,
+        note="Only one replica may run with the SQLite state backend.",
+    )
+    return (
+        SQLiteTaskOwnershipStore(database_path),
+        BudgetLedger(database_path, daily_limit_usd=settings.daily_budget_usd or None),
+        SQLiteTaskArtifactCache(
+            database_path,
+            ttl_seconds=settings.persistence_cache_ttl_seconds,
+            max_size=settings.persistence_cache_max_size,
+        ),
+    )
+
+
 async def create_runtime_services(settings: Settings) -> RuntimeServices:
     artifact_dir = Path(settings.artifact_dir).expanduser().resolve()
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -540,29 +600,32 @@ async def create_runtime_services(settings: Settings) -> RuntimeServices:
         timeout=settings.request_timeout_ms / 1000,
         connect_timeout=settings.connect_timeout_ms / 1000,
     )
-    artifact_store = FilesystemArtifactStore(
-        artifact_dir=str(artifact_dir),
-        ttl_seconds=settings.artifact_ttl_seconds,
-        downloader=downloader,
-    )
+    if settings.artifact_backend == "object_storage":
+        artifact_store: ArtifactStore = ObjectStorageArtifactStore(
+            settings=settings,
+            downloader=downloader,
+        )
+    else:
+        artifact_store = FilesystemArtifactStore(
+            artifact_dir=str(artifact_dir),
+            ttl_seconds=settings.artifact_ttl_seconds,
+            downloader=downloader,
+        )
     database_path = artifact_dir / "runtime.sqlite3"
-    ownership_store = SQLiteTaskOwnershipStore(database_path)
-    budget_limit = settings.daily_budget_usd or None
+    ownership_store, budget_ledger, task_artifact_cache = build_state_stores(
+        settings, database_path
+    )
     return RuntimeServices(
         settings=settings,
         artifact_store=artifact_store,
         safe_downloader=downloader,
         ownership_store=ownership_store,
-        budget_ledger=BudgetLedger(database_path, daily_limit_usd=budget_limit),
+        budget_ledger=budget_ledger,
         provider_limiters=ProviderLimiters(
             provider_limit=settings.provider_max_concurrency,
             principal_limit=settings.principal_max_concurrency,
         ),
-        task_artifact_cache=SQLiteTaskArtifactCache(
-            database_path,
-            ttl_seconds=settings.persistence_cache_ttl_seconds,
-            max_size=settings.persistence_cache_max_size,
-        ),
+        task_artifact_cache=task_artifact_cache,
     )
 
 
@@ -640,6 +703,32 @@ async def billed_provider_slot(
         await runtime.budget_ledger.commit(reservation)
 
 
+async def _state_sweeper(runtime: RuntimeServices, settings: Settings) -> None:
+    """Periodically sweep expired artifacts and prune aged state rows."""
+    while True:
+        await asyncio.sleep(settings.artifact_sweep_interval_seconds)
+        try:
+            deleted = await runtime.artifact_store.delete_expired(datetime.now(UTC))
+            log_info("state_sweep_artifacts", deleted=deleted)
+        except Exception as exc:
+            log_warning("state_sweep_artifact_error", error=str(exc))
+        try:
+            pruned = await runtime.ownership_store.prune(settings.state_prune_max_age_days)
+            log_info("state_sweep_ownership", pruned=pruned)
+        except Exception as exc:
+            log_warning("state_sweep_ownership_error", error=str(exc))
+        try:
+            pruned = await runtime.budget_ledger.prune(settings.state_prune_max_age_days)
+            log_info("state_sweep_budget", pruned=pruned)
+        except Exception as exc:
+            log_warning("state_sweep_budget_error", error=str(exc))
+        try:
+            pruned = await runtime.task_artifact_cache.prune_expired()
+            log_info("state_sweep_cache", pruned=pruned)
+        except Exception as exc:
+            log_warning("state_sweep_cache_error", error=str(exc))
+
+
 def build_lifespan(
     settings: Settings,
     runtime_factory: RuntimeFactory = create_runtime_services,
@@ -655,9 +744,13 @@ def build_lifespan(
         runtime = await runtime_factory(settings)
         if state is not None:
             state.runtime = runtime
+        sweeper = asyncio.create_task(_state_sweeper(runtime, settings))
         try:
             yield {"runtime": runtime}
         finally:
+            sweeper.cancel()
+            with suppress(asyncio.CancelledError):
+                await sweeper
             if state is not None:
                 state.runtime = None
             await close_runtime_services(runtime)

@@ -149,6 +149,31 @@ class TestNestedRedaction:
         assert records[0]["matrix"][0][0]["password"] == "[REDACTED]"
         assert records[0]["matrix"][1][0]["password"] == "[REDACTED]"
 
+    def test_redacts_in_tuple_of_dicts(self, capsys: pytest.CaptureFixture[str]) -> None:
+        logger.info(
+            "test",
+            items=({"api_key": "key1", "name": "item1"},),  # pragma: allowlist secret
+        )
+        records = _parse_stderr(capsys)
+        assert records[0]["items"][0]["api_key"] == "[REDACTED]"
+        assert records[0]["items"][0]["name"] == "item1"
+
+    def test_redact_preserves_set_and_frozenset_types(self) -> None:
+        from modelark_mcp.observability.logger import _redact
+
+        assert _redact({"a", "b"}) == {"a", "b"}
+        assert isinstance(_redact({"a", "b"}), set)
+        assert _redact(frozenset({"a", "b"})) == frozenset({"a", "b"})
+        assert isinstance(_redact(frozenset({"a", "b"})), frozenset)
+
+    def test_redact_recurses_through_nested_set_containers(self) -> None:
+        from modelark_mcp.observability.logger import _redact
+
+        redacted = _redact({(1, 2), frozenset({"x"})})
+        assert isinstance(redacted, set)
+        assert (1, 2) in redacted
+        assert frozenset({"x"}) in redacted
+
 
 class TestLogLevels:
     """Verify info/warning/error/debug log at the correct level."""

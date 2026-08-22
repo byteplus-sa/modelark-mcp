@@ -294,3 +294,33 @@ class TestSttConfig:
         monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "http://voice.example.com")
         with pytest.raises(ValidationError, match="SEED_SPEECH_ASR_BASE_URL must use HTTPS"):
             Settings(_env_file=None)
+
+
+class TestStateAndArtifactBackend:
+    """Settings for the state and durable-artifact backends."""
+
+    def test_object_storage_backend_without_credentials_fails(self) -> None:
+        with pytest.raises(
+            ValidationError,
+            match="ARTIFACT_BACKEND=object_storage requires TOS_\\* or S3_\\* credentials",
+        ):
+            Settings(_env_file=None, ARTIFACT_BACKEND="object_storage")
+
+    def test_state_backend_accepts_only_sqlite(self) -> None:
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, STATE_BACKEND="redis")
+
+    def test_state_backend_sqlite_is_accepted(self) -> None:
+        settings = Settings(_env_file=None, STATE_BACKEND="sqlite")
+        assert settings.state_backend == "sqlite"
+
+    def test_object_storage_backend_with_tos_credentials_passes(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            ARTIFACT_BACKEND="object_storage",
+            TOS_ACCESS_KEY="ak-tos",
+            TOS_SECRET_KEY="sk-tos",  # pragma: allowlist secret
+            TOS_BUCKET="bucket",
+        )
+        assert settings.artifact_backend == "object_storage"
+        assert settings.has_object_storage is True

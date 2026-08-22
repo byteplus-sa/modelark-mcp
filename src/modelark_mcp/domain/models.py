@@ -21,6 +21,11 @@ class SeedanceTaskStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     EXPIRED = "expired"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def _missing_(cls, value: object) -> SeedanceTaskStatus:
+        return cls.UNKNOWN
 
 
 class SubtitleUtterance(BaseModel):

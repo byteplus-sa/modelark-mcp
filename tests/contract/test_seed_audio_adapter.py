@@ -306,6 +306,36 @@ class TestSeedAudioErrorPropagation:
         assert exc_info.value.request_id == "log-err"
 
     @respx.mock
+    async def test_200_with_non_zero_code_raises(self, service: SeedAudioService) -> None:
+        respx.post(f"{SPEECH_BASE}/api/v3/tts/create").mock(
+            return_value=httpx.Response(
+                200,
+                json={"code": 3001, "message": "boom", "audio": "aGVsbG8="},
+                headers={"X-Tt-Logid": "log-nonzero"},
+            )
+        )
+        request = SeedAudioService.build_request(text_prompt="Hello")
+        with pytest.raises(ProviderError) as exc_info:
+            await service.generate(request)
+        assert exc_info.value.http_status == 200
+        assert exc_info.value.code == "3001"
+        assert exc_info.value.request_id == "log-nonzero"
+
+    @respx.mock
+    async def test_200_with_code_zero_returns_normally(self, service: SeedAudioService) -> None:
+        respx.post(f"{SPEECH_BASE}/api/v3/tts/create").mock(
+            return_value=httpx.Response(
+                200,
+                json={"code": 0, "message": "success", "audio": "aGk="},
+            )
+        )
+        request = SeedAudioService.build_request(text_prompt="Hello")
+        response, log_id = await service.generate(request)
+        assert response.code == 0
+        assert response.audio == "aGk="
+        assert log_id is None
+
+    @respx.mock
     async def test_timeout_raises_ambiguous(self, service: SeedAudioService) -> None:
         respx.post(f"{SPEECH_BASE}/api/v3/tts/create").mock(
             side_effect=httpx.TimeoutException("timed out")

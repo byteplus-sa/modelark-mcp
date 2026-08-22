@@ -391,6 +391,21 @@ class TestUnderstandingErrorPropagation:
         assert exc_info.value.code == "CONNECTION_ERROR"
 
     @respx.mock
+    async def test_non_json_success_body_raises_invalid_response(
+        self, service: SeedUnderstandingService
+    ) -> None:
+        respx.post(f"{MODELARK_BASE}/chat/completions").mock(
+            return_value=httpx.Response(200, content=b"")
+        )
+        request = SeedUnderstandingService.build_request(
+            model="dola-seed-2-1-turbo-260628", prompt="test"
+        )
+        with pytest.raises(ProviderError) as exc_info:
+            await service.generate(request)
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert exc_info.value.http_status == 200
+
+    @respx.mock
     async def test_transport_error_raises(self, service: SeedUnderstandingService) -> None:
         respx.post(f"{MODELARK_BASE}/chat/completions").mock(
             side_effect=httpx.ReadError("read failed")

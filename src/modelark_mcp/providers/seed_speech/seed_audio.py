@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.domain.models import Subtitle, SubtitleUtterance, SubtitleWord
 from modelark_mcp.providers.seed_speech.client import SeedSpeechGateway
 from modelark_mcp.providers.seed_speech.schemas import (
@@ -55,7 +56,21 @@ class SeedAudioService:
             raise SeedSpeechGateway.normalize_error(response, "generate_audio")
 
         body = response.json()
-        return SeedAudioProviderResponse.model_validate(body), log_id
+        parsed = SeedAudioProviderResponse.model_validate(body)
+        if parsed.code not in (0, None, ""):
+            raise ProviderError(
+                NormalizedProviderError(
+                    provider="seed-speech",
+                    operation="generate_audio",
+                    http_status=response.status_code,
+                    code=str(parsed.code),
+                    message=parsed.message or f"Seed Audio failed with code {parsed.code}",
+                    request_id=log_id,
+                    retryable=False,
+                    ambiguous_completion=False,
+                )
+            )
+        return parsed, log_id
 
     @staticmethod
     def build_request(

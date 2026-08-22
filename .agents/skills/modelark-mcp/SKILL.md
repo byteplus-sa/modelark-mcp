@@ -269,10 +269,11 @@ Returns `status="accepted"` plus `task_id`, `request_id`, and
 
 **Source URL liveness.** The provider downloads `audio_url`/`video_url`
 asynchronously after submission, so the URL must stay fetchable until the
-provider has downloaded it. A short-lived presigned URL (the object-storage
-default can be as low as 600s) may expire before the provider fetches it,
-causing the task to fail. For VOD inputs, upload via `media_upload` with
-`expires_in_seconds` (e.g. 3600) or use a stable public URL.
+provider has downloaded it. A presigned URL (default 1800s / 30 min,
+configurable 60–604800s via `TOS_PRESIGN_TTL_SECONDS`/`S3_PRESIGN_TTL_SECONDS`)
+may expire before the provider fetches it, causing the task to fail. For VOD
+inputs, upload via `media_upload` with `expires_in_seconds` (e.g. 3600) or use
+a stable public URL.
 
 #### `vod_get_audio_separation`
 
@@ -388,9 +389,10 @@ failed, per-variation results with partial failure capture).
 
 ### Reusing uploaded references across shots (presign pattern)
 
-Presigned URLs expire after 10 minutes (600s). When the same reference
-images or audio are used across multiple shots (e.g., character sheets
-reused across every scene), do **not** re-upload the same file each time.
+Presigned URLs expire after 30 minutes by default (1800s, configurable
+60–604800s via `TOS_PRESIGN_TTL_SECONDS`/`S3_PRESIGN_TTL_SECONDS`). When the
+same reference images or audio are used across multiple shots (e.g., character
+sheets reused across every scene), do **not** re-upload the same file each time.
 Instead:
 
 1. **Upload once** — call `media_upload` for each reference file and store
@@ -1310,7 +1312,7 @@ Set to `0` (default) for record-only mode with no enforcement.
     and pass the presigned URL into `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5).
 
 13. **Reuse references with `media_presign` — do not re-upload.** Presigned URLs
-    expire after 10 minutes, but the underlying object persists in TOS/S3.
+    expire after 30 minutes by default, but the underlying object persists in TOS/S3.
     Upload each reference file once, store the `object_key`, and call
     `media_presign` to get a fresh URL for each new shot. This avoids
     re-uploading the same character/location/prop sheets for every scene.

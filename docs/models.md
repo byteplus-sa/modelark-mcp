@@ -8,7 +8,7 @@ with an actionable `ValueError`.
 
 ## Families
 
-`ModelFamily` (`StrEnum`) has six members:
+`ModelFamily` (`StrEnum`) has nine members:
 
 | Member | Value |
 |---|---|
@@ -18,11 +18,16 @@ with an actionable `ValueError`.
 | `SEEDANCE_2` | `seedance_2` |
 | `SEEDANCE_2_FAST` | `seedance_2_fast` |
 | `SEEDANCE_2_MINI` | `seedance_2_mini` |
+| `SEEDANCE_2_5` | `seedance_2_5` |
+| `SEED_2_1_PRO` | `seed_2_1_pro` |
+| `SEED_2_1_TURBO` | `seed_2_1_turbo` |
 
 The binding enums (`config/env.py`):
 
 - `SeedreamFamily`: `PRO = "pro"`, `LITE = "lite"`, `V4X = "4x"`.
-- `SeedanceFamily`: `STANDARD = "standard"`, `FAST = "fast"`, `MINI = "mini"`.
+- `SeedanceFamily`: `STANDARD = "standard"`, `FAST = "fast"`, `MINI = "mini"`,
+  `SEEDANCE_2_5 = "seedance_2_5"`.
+- `SeedUnderstandingFamily`: `PRO = "pro"`, `TURBO = "turbo"`.
 
 ## Image capabilities (`ImageCapabilities`)
 
@@ -85,6 +90,7 @@ are tunable via `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` and
 |---|---|---|---|
 | `seedream_default_model` | `SEEDREAM_DEFAULT_MODEL` | `dola-seedream-5-0-pro-260628` | `PRO` |
 | `seedance_default_model` | `SEEDANCE_DEFAULT_MODEL` | `dreamina-seedance-2-0-260128` | `STANDARD` |
+| `seed_understanding_default_model` | `SEED_UNDERSTANDING_DEFAULT_MODEL` | `dola-seed-2-1-turbo-260628` | `TURBO` |
 
 The "implied family" defaults are hard-coded in `Settings.validate_model_bindings`
 and apply only when the default model ID equals the built-in default.
@@ -94,9 +100,11 @@ and apply only when the default model ID equals the built-in default.
 | Env var | Format | Default |
 |---|---|---|
 | `SEEDREAM_MODEL_BINDINGS` | JSON array of `{"model_id": str, "family": "pro"\|"lite"\|"4x"}` | `[]` |
-| `SEEDANCE_MODEL_BINDINGS` | JSON array of `{"model_id": str, "family": "standard"\|"fast"\|"mini"}` | `[]` |
+| `SEEDANCE_MODEL_BINDINGS` | JSON array of `{"model_id": str, "family": "standard"\|"fast"\|"mini"\|"seedance_2_5"}` | `[]` |
+| `SEED_UNDERSTANDING_MODEL_BINDINGS` | JSON array of `{"model_id": str, "family": "pro"\|"turbo"}` | `[]` |
 | `SEEDREAM_MODEL_FAMILY` | single family string | `""` |
 | `SEEDANCE_MODEL_FAMILY` | single family string | `""` |
+| `SEED_UNDERSTANDING_MODEL_FAMILY` | single family string | `""` |
 
 Examples (from `.env.example`):
 

@@ -20,6 +20,7 @@ from modelark_mcp.providers.modelark.schemas import (
     ChatThinkingConfig,
     ChatUsage,
 )
+from modelark_mcp.providers.modelark.seedance import _parse_success_body
 
 
 class SeedUnderstandingService:
@@ -53,7 +54,7 @@ class SeedUnderstandingService:
         if response.status_code >= 400:
             raise ModelArkGateway.normalize_error(response, "chat_completion")
 
-        body = response.json()
+        body = _parse_success_body(response, "chat_completion")
         return ChatCompletionProviderResponse.model_validate(body), request_id
 
     @staticmethod
