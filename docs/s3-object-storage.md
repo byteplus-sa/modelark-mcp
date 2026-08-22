@@ -518,4 +518,3 @@ credentials are configured). They work identically with either backend.
 | Durable artifact lifecycle | [artifacts.md](artifacts.md) |
 | Tool reference | [tools.md](tools.md) |
 | Architecture overview | [architecture.md](architecture.md) |
-| Design plan | [../plans/PLAN_S3_OBJECT_STORAGE.md](../plans/PLAN_S3_OBJECT_STORAGE.md) |

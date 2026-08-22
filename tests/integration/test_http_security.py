@@ -8,11 +8,15 @@ from pathlib import Path
 
 import httpx
 import pytest
+import respx
 from fastmcp.server.auth import StaticTokenVerifier
 from starlette.middleware import Middleware
 
 from modelark_mcp.config.env import Settings
-from modelark_mcp.security.http_middleware import RequestBodyLimitMiddleware
+from modelark_mcp.security.http_middleware import (
+    RateLimitMiddleware,
+    RequestBodyLimitMiddleware,
+)
 from modelark_mcp.server import create_server
 
 
@@ -461,3 +465,113 @@ async def test_rate_limit_disabled_by_default(tmp_path: Path) -> None:
         for _ in range(20):
             resp = await client.get("/health")
             assert resp.status_code == 200
+
+
+class TestRateLimitMiddlewareBucketing:
+    """The proxy-aware client key groups by forwarded-for or client IP."""
+
+    @staticmethod
+    def _scope(client_ip: str, forwarded_for: str | None = None) -> dict[str, object]:
+        headers = [] if forwarded_for is None else [(b"x-forwarded-for", forwarded_for.encode())]
+        return {"type": "http", "client": (client_ip, 1234), "headers": headers}
+
+    def test_trust_proxy_headers_uses_first_forwarded_for(self) -> None:
+        middleware = RateLimitMiddleware(None, rpm=10, trust_proxy_headers=True)  # type: ignore[arg-type]
+        assert middleware._client_key(self._scope("10.0.0.5", "1.2.3.4, 5.6.7.8")) == "1.2.3.4"
+
+    def test_trust_proxy_headers_groups_same_forwarded_for(self) -> None:
+        middleware = RateLimitMiddleware(None, rpm=10, trust_proxy_headers=True)  # type: ignore[arg-type]
+        first = middleware._client_key(self._scope("10.0.0.5", "1.2.3.4, 9.9.9.9"))
+        second = middleware._client_key(self._scope("10.0.0.6", "1.2.3.4"))
+        assert first == second == "1.2.3.4"
+
+    def test_trust_proxy_headers_off_uses_client_ip(self) -> None:
+        middleware = RateLimitMiddleware(None, rpm=10)  # type: ignore[arg-type]
+        assert middleware._client_key(self._scope("10.0.0.5", "1.2.3.4")) == "10.0.0.5"
+
+    def test_distinct_client_ips_are_not_grouped(self) -> None:
+        middleware = RateLimitMiddleware(None, rpm=10)  # type: ignore[arg-type]
+        assert middleware._client_key(self._scope("10.0.0.1")) != middleware._client_key(
+            self._scope("10.0.0.2")
+        )
+
+    async def test_bucket_count_stays_bounded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        clock = [0.0]
+        monkeypatch.setattr(
+            "modelark_mcp.security.http_middleware.time.monotonic", lambda: clock[0]
+        )
+        middleware = RateLimitMiddleware(None, rpm=60000, burst=60000)  # type: ignore[arg-type]
+        for index in range(middleware._MAX_BUCKETS + 100):
+            await middleware._consume(f"ip-{index}")
+        assert len(middleware._buckets) > middleware._MAX_BUCKETS
+
+        clock[0] = 10_000_000
+        await middleware._consume("ip-final")
+        assert len(middleware._buckets) <= middleware._MAX_BUCKETS
+
+
+async def test_create_server_applies_body_and_rate_limit_middleware(tmp_path: Path) -> None:
+    settings = _jwt_settings(tmp_path)
+    settings.rate_limit_rpm = 10
+    settings.rate_limit_burst = 10
+    settings.rate_limit_trust_proxy_headers = True
+    server = create_server(settings, auth_provider=_verifier())
+    app = server.http_app(
+        path="/mcp",
+        stateless_http=True,
+        json_response=True,
+        host_origin_protection=True,
+        allowed_hosts=settings.allowed_hosts,
+        allowed_origins=settings.allowed_origins,
+    )
+
+    stack: list[tuple[str, object]] = []
+    node: object = app.build_middleware_stack()
+    while node is not None:
+        stack.append((type(node).__name__, node))
+        node = getattr(node, "app", None)
+
+    names = [name for name, _ in stack]
+    assert "RequestBodyLimitMiddleware" in names
+    assert "RateLimitMiddleware" in names
+    assert names.index("RequestBodyLimitMiddleware") < names.index("RateLimitMiddleware")
+    rate_limit_node = next(node for name, node in stack if name == "RateLimitMiddleware")
+    assert rate_limit_node.trust_proxy_headers is True
+
+
+async def test_ready_probes_use_resolved_settings_urls(tmp_path: Path) -> None:
+    settings = _jwt_settings(tmp_path)
+    settings = settings.model_copy(
+        update={
+            "modelark_api_key": "test-modelark-key",
+            "vod_mediakit_api_key": "",
+            "seed_speech_api_key": "",
+            "modelark_base_url": "https://override.example.com",
+        }
+    )
+    settings.readiness_check_providers = True
+    server = create_server(settings, auth_provider=_verifier())
+    app = server.http_app(
+        path="/mcp",
+        stateless_http=True,
+        json_response=True,
+        host_origin_protection=True,
+        allowed_hosts=settings.allowed_hosts,
+        allowed_origins=settings.allowed_origins,
+    )
+
+    with respx.mock:
+        probe_route = respx.get("https://override.example.com/").mock(
+            return_value=httpx.Response(200)
+        )
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+            ) as client,
+        ):
+            ready = await client.get("/ready")
+
+    assert ready.status_code == 200
+    assert ready.json() == {"status": "ready", "providers": {"modelark": "reachable"}}
+    assert probe_route.called

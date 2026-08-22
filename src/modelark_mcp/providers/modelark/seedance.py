@@ -7,11 +7,13 @@ responses to domain output models.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
+from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.domain.models import (
     SeedanceTaskStatus,
     SeedanceTaskSummary,
@@ -25,6 +27,25 @@ from modelark_mcp.providers.modelark.schemas import (
     SeedanceTaskListResponse,
     SeedanceTaskResponse,
 )
+
+
+def _parse_success_body(response: httpx.Response, operation: str) -> dict[str, Any]:
+    """Parse a success-path JSON body, raising ``ProviderError`` on malformed JSON."""
+    try:
+        return cast("dict[str, Any]", response.json())
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ProviderError(
+            NormalizedProviderError(
+                provider="modelark",
+                operation=operation,
+                http_status=response.status_code,
+                code="INVALID_RESPONSE",
+                message="ModelArk returned a non-JSON success response.",
+                request_id=ModelArkGateway.extract_request_id(response),
+                retryable=False,
+                ambiguous_completion=False,
+            )
+        ) from exc
 
 
 class SeedanceService:
@@ -56,7 +77,7 @@ class SeedanceService:
         if response.status_code >= 400:
             raise ModelArkGateway.normalize_error(response, "create_task")
 
-        body = response.json()
+        body = _parse_success_body(response, "create_task")
         parsed = SeedanceCreateProviderResponse.model_validate(body)
         return parsed.id, request_id
 
@@ -79,7 +100,7 @@ class SeedanceService:
         if response.status_code >= 400:
             raise ModelArkGateway.normalize_error(response, "get_task")
 
-        body = response.json()
+        body = _parse_success_body(response, "get_task")
         return SeedanceTaskResponse.model_validate(body), request_id
 
     async def list_tasks(
@@ -123,7 +144,7 @@ class SeedanceService:
         if response.status_code >= 400:
             raise ModelArkGateway.normalize_error(response, "list_tasks")
 
-        body = response.json()
+        body = _parse_success_body(response, "list_tasks")
         return SeedanceTaskListResponse.model_validate(body), request_id
 
     async def delete_task(self, task_id: str) -> str | None:

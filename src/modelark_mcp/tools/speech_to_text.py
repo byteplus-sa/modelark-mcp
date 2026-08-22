@@ -11,11 +11,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field, model_validator
 
+from modelark_mcp.artifacts.filesystem_store import _is_trusted_host
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.transcription import TranscriptionResult
@@ -73,8 +75,12 @@ class AsrRequestOptions(BaseModel):
 class SpeechToTextInput(BaseModel):
     """Input for the ``speech_to_text`` tool."""
 
-    audio: AsrAudioInput
-    options: AsrRequestOptions | None = None
+    audio: AsrAudioInput = Field(
+        ..., description="Audio source to transcribe — URL, Base64 bytes, or local file path."
+    )
+    options: AsrRequestOptions | None = Field(
+        None, description="Optional transcription feature toggles."
+    )
 
 
 class SpeechToTextOutput(BaseModel):
@@ -91,15 +97,22 @@ async def _resolve_audio_bytes(audio: AsrAudioInput, ctx: Context) -> bytes:
     if audio.audio_url:
         downloaded = await get_runtime(ctx).safe_downloader.download(
             audio.audio_url,
-            trusted_hosts=lambda _host: True,
+            trusted_hosts=_is_trusted_host,
             max_bytes=_STT_MAX_BYTES,
         )
         return downloaded.body
     if audio.audio_data:
         return decode_base64_safely(audio.audio_data, _STT_MAX_BYTES, label="audio")
     p = Path(audio.audio_file_path or "").expanduser().resolve()
+    settings = get_settings()
+    if settings.mcp_transport != "stdio":
+        raise ValueError("audio_file_path is only supported in stdio transport mode.")
     if not p.is_file():
         raise ValueError(f"Audio file not found: {p}")
+    if p.stat().st_size > _STT_MAX_BYTES:
+        raise ValueError(
+            f"Audio file size ({p.stat().st_size} bytes) exceeds limit ({_STT_MAX_BYTES} bytes)."
+        )
     return p.read_bytes()
 
 
@@ -135,6 +148,7 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
 
     options = input.options or AsrRequestOptions()
     service = SeedSpeechAsrService()
+    client_request_id = str(uuid4())
     try:
         async with billed_provider_slot(
             ctx,
@@ -151,6 +165,7 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
                     enable_itn=options.enable_itn,
                     poll_interval=settings.seed_speech_asr_poll_interval_seconds,
                     poll_max=settings.seed_speech_asr_poll_max_seconds,
+                    request_id=client_request_id,
                 )
             )
     except ProviderError as exc:

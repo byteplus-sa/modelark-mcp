@@ -18,11 +18,17 @@ surface.
 | 9 | `seedance_cancel_or_delete_task` | Seedance | Destructive | ModelArk |
 | 10 | `media_upload` | Object storage (optional) | Synchronous | TOS / S3 |
 | 11 | `media_presign` | Object storage (optional) | Read-only | TOS / S3 |
-| 12 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 13 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
-| 14 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 15 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 16 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 12 | `seedream_edit_image` | Seedream | Synchronous edit | ModelArk |
+| 13 | `seed_understand` | Seed 2.1 (optional) | Synchronous | ModelArk |
+| 14 | `seedance_2_5_create_task` | Seedance 2.5 | Async task | ModelArk |
+| 15 | `seedance_2_5_create_task_variations` | Seedance 2.5 | Parallel async | ModelArk |
+| 16 | `seed_media_get_artifact` | Artifacts | Read-only | Local / JWT |
+| 17 | `speech_to_text` | Seed Speech ASR (optional) | Synchronous | Seed Speech |
+| 18 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 19 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
+| 20 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 21 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 22 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
 
 ## Tool Annotations
 
@@ -39,6 +45,12 @@ surface.
 | `seedance_cancel_or_delete_task` | false | true | false | true |
 | `media_upload` | false | false | false | true |
 | `media_presign` | true | false | true | false |
+| `seedream_edit_image` | false | false | false | true |
+| `seed_understand` | true | false | false | true |
+| `seedance_2_5_create_task` | false | false | false | true |
+| `seedance_2_5_create_task_variations` | false | false | false | true |
+| `seed_media_get_artifact` | true | false | true | false |
+| `speech_to_text` | true | false | true | false |
 | `vod_enhance_video` | false | false | false | true |
 | `vod_transcode_video` | false | false | false | true |
 | `vod_get_transcode_task` | true | false | true | false |
@@ -1040,6 +1052,281 @@ transferred — only a new URL is minted.
   "url": "https://test-bucket.tos-ap-southeast-1.bytepluses.com/references/video/abc-123-def?X-Tos-Signature=...",
   "expires_at": "2026-07-24T07:30:00+00:00",
   "object_key": "references/video/abc-123-def"
+}
+```
+
+---
+
+## 12. seedream_edit_image
+
+Edit an image interactively through ModelArk Seedream with point-based or
+bounding-box targeting. The handler constructs `<point>` / `<bbox>` coordinate
+markup from validated coordinates and prepends it to the instruction. At least
+one reference image and one coordinate (point or bbox) are required.
+
+### Input
+
+| Field | Type | Required | Default | Constraints |
+|---|---|---|---|---|
+| `prompt` | string | Yes | — | 1-4000 chars; coordinate markup is prepended automatically |
+| `images` | list[MediaSource] | Yes | — | At least 1; max per model capabilities |
+| `point` | EditCoordinate | No* | — | `x`,`y` in 0-999 |
+| `bbox` | EditBbox | No* | — | `x1`,`y1`,`x2`,`y2` in 0-999 |
+| `model` | string | No | Pro model | Must be in capability registry |
+| `size` | string | No | — | e.g. "1024x1024" |
+| `seed` | integer | No | — | -1 = random, 0+ = fixed |
+| `output_format` | `"png"` \| `"jpeg"` | No | — | Not supported by 4.x models |
+| `response_format` | `"url"` \| `"b64_json"` | No | — | — |
+| `watermark` | boolean | No | — | AIGC watermark |
+| `prompt_optimization` | `"standard"` \| `"fast"` | No | — | — |
+| `persist` | boolean | No | `true` | Persist as durable MCP resources |
+
+\* Provide at least one of `point` or `bbox`.
+
+### Output
+
+| Field | Type | Description |
+|---|---|---|
+| `provider` | `"byteplus-modelark"` | Fixed |
+| `model` | string | Model used |
+| `created_at` | string | ISO-8601 |
+| `artifacts` | list[ArtifactRef] | Edited images |
+| `item_errors` | list[SeedreamItemError] | Per-item failures |
+| `usage` | SeedreamUsage | Token usage |
+
+### Example
+
+```json
+// Input
+{
+  "prompt": "Replace the object with a crown",
+  "images": [{ "kind": "url", "url": "https://.../frame.png", "mime_type": "image/png" }],
+  "bbox": { "x1": 100, "y1": 100, "x2": 400, "y2": 400 }
+}
+```
+
+---
+
+## 13. seed_understand
+
+Understand images and videos, or reason about a task, through the Seed 2.1
+multimodal model. Supports deep-thinking (chain-of-thought) reasoning. Video
+Base64 is not supported by the chat endpoint — upload local videos via
+`media_upload` first to obtain an HTTPS URL.
+
+### Input
+
+| Field | Type | Required | Default | Constraints |
+|---|---|---|---|---|
+| `prompt` | string | Yes | — | 1-32,000 chars |
+| `images` | list[UnderstandingImageInput] | No | — | Max 32; URL or Base64 |
+| `videos` | list[UnderstandingVideoInput] | No | — | Max 32; URL only |
+| `system` | string | No | — | Max 32,000 chars |
+| `model` | string | No | Configured Seed 2.1 model | Must be in capability registry |
+| `thinking` | boolean | No | `false` | When true, response includes `reasoning_content` |
+| `reasoning_effort` | `"low"` \| `"medium"` \| `"high"` | No | — | Only when `thinking=true` |
+| `temperature` | float | No | — | 0.0-2.0 |
+| `max_tokens` | integer | No | — | 1-32,768 |
+| `top_p` | float | No | — | 0.0-1.0 |
+| `repetition_penalty` | float | No | — | 0.0-2.0; Ark-only |
+
+### Output
+
+| Field | Type | Description |
+|---|---|---|
+| `provider` | `"byteplus-modelark"` | Fixed |
+| `model` | string | Model used |
+| `completion_id` | string \| null | Provider completion ID |
+| `choices` | list[UnderstandingChoice] | Content, optional `reasoning_content`, `finish_reason` |
+| `usage` | UnderstandingUsage | Token usage |
+| `request_id` | string \| null | Provider request ID |
+
+### Example
+
+```json
+// Input
+{
+  "prompt": "Describe what happens in this video and identify the objects in this image.",
+  "videos": [{ "kind": "url", "url": "https://.../sample.mp4", "mime_type": "video/mp4" }],
+  "images": [{ "kind": "url", "url": "https://.../frame.png", "mime_type": "image/png" }],
+  "thinking": true,
+  "reasoning_effort": "medium",
+  "max_tokens": 4096
+}
+```
+
+---
+
+## 14. seedance_2_5_create_task
+
+Create an asynchronous Seedance 2.5 video generation task. Supports up to
+30-second video generation, 50 multimodal references (30 images, 10 videos,
+10 audio), and 480p/720p/1080p resolution. Poll with `seedance_get_task`.
+
+### Input
+
+| Field | Type | Required | Default | Constraints |
+|---|---|---|---|---|
+| `prompt` | string | No | — | 1-32,000 chars |
+| `images` | list[SeedanceImageInput] | No | — | Max 30; roles `first_frame`, `last_frame`, `reference_image` |
+| `videos` | list[SeedanceVideoInput] | No | — | Max 10; URL-only, role `reference_video` |
+| `audios` | list[SeedanceAudioInput] | No | — | Max 10; audio-only input is supported |
+| `model` | string | No | `dreamina-seedance-2-5-260628` | Must resolve to a Seedance 2.5 family |
+| `resolution` | `"480p"` \| `"720p"` \| `"1080p"` | No | — | 4k not supported |
+| `ratio` | string | No | — | e.g. "16:9". Stripped for `extend_video`; auto-derived for `edit_video`/first-frame |
+| `duration` | integer | No | — | -1 (auto) or 1-30. Ignored for edit tasks |
+| `omni_reference_task_type` | string | No | `auto` | Task type hint (e.g. `edit_video`, `extend_video`) |
+| `generate_audio` | boolean | No | — | Generate an audio track |
+| `watermark` | boolean | No | `false` | AIGC watermark |
+| `return_last_frame` | boolean | No | — | Return last frame as image |
+| `execution_expires_after` | integer | No | — | 3600-259200 seconds |
+| `priority` | integer | No | — | 0-9 |
+| `safety_identifier` | string | No | — | Max 64 chars |
+
+### Output
+
+| Field | Type | Description |
+|---|---|---|
+| `task_id` | string | Task ID for polling |
+| `status` | `"queued"` | Initial status |
+| `recommended_poll_after_ms` | integer | Suggested poll delay |
+
+### Example
+
+```json
+// Input
+{
+  "prompt": "A cat walking through a garden",
+  "duration": 10,
+  "resolution": "1080p"
+}
+
+// Output
+{
+  "task_id": "cgt-20260721134956-h5cz9",
+  "status": "queued",
+  "recommended_poll_after_ms": 5000
+}
+```
+
+---
+
+## 15. seedance_2_5_create_task_variations
+
+Create N independent Seedance 2.5 video generation tasks in parallel. Each
+variation creates a separate task; poll each task ID via `seedance_get_task`.
+Partial failures are captured per variation.
+
+### Input
+
+Inherits all fields from `seedance_2_5_create_task`, plus:
+
+| Field | Type | Required | Default | Constraints |
+|---|---|---|---|---|
+| `prompt` | string | No* | — | Base prompt, 1-32,000 chars |
+| `variations` | integer | No | 1 | 1-5 |
+| `variation_prompts` | list[string] | No | — | Must have `variations` entries; each 1-32,000 chars |
+
+\* Either `prompt` or `variation_prompts` must be provided.
+
+### Output
+
+| Field | Type | Description |
+|---|---|---|
+| `summary` | VariationSummary | Per-variation task IDs and errors |
+| `recommended_poll_after_ms` | integer | Suggested poll delay |
+
+---
+
+## 16. seed_media_get_artifact
+
+Retrieve persisted media by artifact ID. Returns the raw media bytes
+(Base64-encoded) with MIME type, SHA-256 hash, and byte count. Use this to
+fetch media after the provider URL has expired (2h audio, 24h image/video).
+Always registered; requires `artifacts:read` in JWT mode.
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `artifact_id` | string | Yes | Artifact ID returned by a previous generation call |
+
+### Output
+
+| Field | Type | Description |
+|---|---|---|
+| `artifact_id` | string | Artifact identifier |
+| `media_type` | `"image"` \| `"audio"` \| `"video"` | Logical media type |
+| `mime_type` | string | MIME type of the stored content |
+| `sha256` | string | SHA-256 hex digest |
+| `bytes` | integer | Size in bytes |
+| `expires_at` | string \| null | Local artifact expiry, if applicable |
+| `data` | string | Base64-encoded media data |
+
+### Example
+
+```json
+// Input
+{ "artifact_id": "71e9c2a8-..." }
+
+// Output
+{
+  "artifact_id": "71e9c2a8-...",
+  "media_type": "video",
+  "mime_type": "video/mp4",
+  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "bytes": 1748096,
+  "data": "AAAAIGZ0cBAAA..."
+}
+```
+
+---
+
+## 17. speech_to_text
+
+Transcribe audio to text via Seed Speech ASR in a single synchronous call.
+Submits audio over HTTP and polls until complete; returns the full
+`TranscriptionResult` directly — no task ID, no polling, no object-storage
+upload required.
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `audio` | AsrAudioInput | Yes | Audio source (see below) |
+| `options` | AsrRequestOptions | No | Transcription feature toggles |
+
+**AsrAudioInput** — provide exactly one source:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `audio_url` | string | No* | HTTPS URL of the audio file (SSRF-safe, trusted hosts only) |
+| `audio_data` | string | No* | Base64-encoded audio bytes |
+| `audio_file_path` | string | No* | Absolute local file path (stdio transport only) |
+| `audio_format` | `wav` \| `mp3` \| `ogg` \| `raw` \| `flac` | Yes | Audio format |
+
+**AsrRequestOptions:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `language` | string | `"en-US"` | BCP-47 language code |
+| `enable_punc` | boolean | `null` | Enable punctuation |
+| `enable_itn` | boolean | `null` | Enable ITN |
+
+### Output
+
+| Field | Type | Description |
+|---|---|---|
+| `result` | TranscriptionResult | Full transcript: `text`, `utterances`, `duration_ms` |
+| `log_id` | string \| null | Provider-side log ID |
+
+### Example
+
+```json
+// Input
+{
+  "audio": { "audio_url": "https://example.com/meeting.wav", "audio_format": "wav" },
+  "options": { "language": "en-US", "enable_punc": true, "enable_itn": true }
 }
 ```
 

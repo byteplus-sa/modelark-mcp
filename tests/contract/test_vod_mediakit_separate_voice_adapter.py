@@ -308,6 +308,24 @@ class TestSeparateVoiceTaskContract:
         assert "secret" not in (result.failure_message or "")
 
     @respx.mock
+    async def test_failed_task_with_null_error_returns_fallback_message(
+        self, service: VodMediaKitSeparateVoiceService
+    ) -> None:
+        respx.get(TASK_ENDPOINT).mock(
+            return_value=httpx.Response(
+                200,
+                json={"success": True, "task_id": "task-1", "status": "failed", "error": None},
+            )
+        )
+
+        result = await service.get("task-1")
+
+        assert result.status == "failed"
+        assert result.failure_code is None
+        assert result.failure_message
+        assert len(result.failure_message) > 0
+
+    @respx.mock
     async def test_unknown_status_fails_closed(
         self, service: VodMediaKitSeparateVoiceService
     ) -> None:

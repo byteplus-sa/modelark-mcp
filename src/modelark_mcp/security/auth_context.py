@@ -24,7 +24,7 @@ class PrincipalContext(BaseModel):
 
     @property
     def is_local(self) -> bool:
-        return self.principal_id == "local"
+        return self.principal_id == "local" and self.transport == "stdio"
 
 
 # Compatibility alias while persistence protocols migrate terminology.

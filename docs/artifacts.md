@@ -19,12 +19,15 @@ readable until the local TTL elapses.
 
 ## Storage backend
 
-Only the `filesystem` backend is implemented.
+Two backends are available. `filesystem` stores artifacts on local disk;
+`object_storage` stores them in the configured TOS/S3 bucket (via
+`ObjectStorageArtifactStore`). For `object_storage`, TTL enforcement is
+delegated to a bucket lifecycle policy — `delete_expired` is a no-op there.
 
 | Env var | Default | Notes |
 |---|---|---|
-| `ARTIFACT_BACKEND` | `"filesystem"` | only `filesystem` is implemented |
-| `ARTIFACT_DIR` | `.artifacts` | resolved via `Path(...).expanduser().resolve()` |
+| `ARTIFACT_BACKEND` | `"filesystem"` | `filesystem` or `object_storage` (requires TOS/S3 credentials) |
+| `ARTIFACT_DIR` | `~/.modelark-mcp/artifacts` | local media + `runtime.sqlite3` state; resolved via `Path(...).expanduser().resolve()` |
 | `ARTIFACT_TTL_SECONDS` | `604800` (7 days) | must be `> 0` |
 
 `FilesystemArtifactStore` (`artifacts/filesystem_store.py`) lays out
@@ -144,8 +147,13 @@ resolved principal to `runtime.artifact_store.get(...)`.
 deletes the artifact + sidecar when `metadata.ref.expires_at <= now`.
 Failures are logged as `artifact_cleanup_error` and skipped; it logs
 `artifacts_expired_deleted count=N` when something was deleted, and returns
-the deleted count. There is no automatic background sweeper — call it from a
-scheduled task if you need proactive cleanup.
+the deleted count.
+
+A background sweeper runs inside the server lifespan every
+`ARTIFACT_SWEEP_INTERVAL_SECONDS` (default 3600). It calls `delete_expired`
+plus the ownership/budget/cache `prune`/`prune_expired` methods, each with its
+own error isolation. For `ARTIFACT_BACKEND=object_storage`, `delete_expired`
+is a no-op — enforce TTL there with a bucket lifecycle policy instead.
 
 ## What is not persisted here
 

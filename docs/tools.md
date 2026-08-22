@@ -371,6 +371,44 @@ certain parameters are auto-derived from the input media:
 Returns a `SeedanceCreateTaskOutput` with task ID, status, and recommended
 poll delay in `recommended_poll_after_ms`.
 
+## seedance_2_5_create_task
+
+Create an asynchronous Seedance 2.5 video generation task. Supports up to
+30-second video generation, 50 multimodal references (30 images, 10 videos,
+10 audio), and 480p/720p/1080p resolution. Poll with `seedance_get_task`.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | No | Text prompt (1-32,000 chars) |
+| `images` | list[SeedanceImageInput] | No | Reference images (max 30; roles `first_frame`, `last_frame`, `reference_image`) |
+| `videos` | list[SeedanceVideoInput] | No | Reference videos (max 10; URL-only) |
+| `audios` | list[SeedanceAudioInput] | No | Reference audio (max 10; audio-only input is supported) |
+| `model` | string | No | Model ID (defaults to `dreamina-seedance-2-5-260628`) |
+| `resolution` | "480p" \| "720p" \| "1080p" | No | Output resolution (4k not supported) |
+| `ratio` | string | No | Aspect ratio. Stripped for `extend_video`; auto-derived for `edit_video`/first-frame |
+| `duration` | integer | No | Duration in seconds (-1 for auto, max 30). Ignored for edit tasks |
+| `omni_reference_task_type` | string | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
+| `generate_audio` | boolean | No | Generate an audio track for the video |
+| `watermark` | boolean | No | AIGC watermark (default: false) |
+| `return_last_frame` | boolean | No | Return last frame as a separate image |
+| `execution_expires_after` | integer | No | Task TTL in seconds (3600-259200) |
+| `priority` | integer | No | Priority (0-9) |
+| `safety_identifier` | string | No | Safety identifier (max 64 chars) |
+
+Seedance 2.5 supports audio-only input (a single BGM, voice, or sound-effect
+track can drive visual pacing, beat matching, and lip-sync). The model must
+resolve to the `seedance_2_5` family or the call raises a `ValueError`.
+
+### Output
+
+Returns a `Seedance25CreateTaskOutput` with task ID, status, and recommended
+poll delay in `recommended_poll_after_ms`.
+
 ## seedance_get_task
 
 Retrieve the status and output of a Seedance task.
@@ -512,13 +550,33 @@ for async polling via `seedance_get_task`.
 
 **Output:** `VariationSummary` + `recommended_poll_after_ms`.
 
+### seedance_2_5_create_task_variations
+
+Create N independent Seedance 2.5 video tasks in parallel (each a separate
+task). Poll each task ID via `seedance_get_task`; partial failures are
+captured per variation.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+**Input:** Inherits all fields from `seedance_2_5_create_task`, plus:
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `variations` | integer | No | 1 | Number of variations (1-5) |
+| `variation_prompts` | list[string] | No | — | Explicit prompts per variation (each 1-32,000 chars) |
+
+\* Either `prompt` or `variation_prompts` must be provided.
+
+**Output:** `VariationSummary` + `recommended_poll_after_ms`.
+
 ## seed_understand
 
 Understand images and videos, or reason about a task, through the Seed 2.1
 multimodal model.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
-`idempotentHint=False`, `openWorldHint=False`
+`idempotentHint=False`, `openWorldHint=True`
 
 ### Input
 

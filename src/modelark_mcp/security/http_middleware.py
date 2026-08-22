@@ -78,21 +78,28 @@ class RateLimitMiddleware:
 
     _MAX_BUCKETS = 10_000
 
-    def __init__(self, app: ASGIApp, *, rpm: int, burst: int | None = None) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        rpm: int,
+        burst: int | None = None,
+        trust_proxy_headers: bool = False,
+    ) -> None:
         self.app = app
         self.rpm = rpm
         self.capacity = burst if burst and burst > 0 else rpm
         self._rate = rpm / 60.0
         self._buckets: dict[str, tuple[float, float]] = {}
         self._lock = asyncio.Lock()
+        self.trust_proxy_headers = trust_proxy_headers
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or self.rpm <= 0:
             await self.app(scope, receive, send)
             return
 
-        client = scope.get("client")
-        ip = client[0] if client else "unknown"
+        ip = self._client_key(scope)
 
         retry_after = await self._consume(ip)
         if retry_after > 0:
@@ -106,10 +113,23 @@ class RateLimitMiddleware:
 
         await self.app(scope, receive, send)
 
+    def _client_key(self, scope: Scope) -> str:
+        if self.trust_proxy_headers:
+            headers = dict(scope.get("headers", []))
+            forwarded = headers.get(b"x-forwarded-for")
+            if isinstance(forwarded, bytes):
+                first = forwarded.decode("latin-1").split(",", 1)[0].strip()
+                if first:
+                    return first
+        client = scope.get("client")
+        return str(client[0]) if client else "unknown"
+
     async def _consume(self, ip: str) -> float:
         """Try to consume one token. Return 0 on success, or seconds to wait."""
         now = time.monotonic()
         async with self._lock:
+            if len(self._buckets) > self._MAX_BUCKETS:
+                self._evict_expired()
             tokens, last_refill = self._buckets.get(ip, (self.capacity, now))
             elapsed = now - last_refill
             tokens = min(self.capacity, tokens + elapsed * self._rate)
@@ -118,8 +138,6 @@ class RateLimitMiddleware:
                 tokens -= 1.0
                 self._buckets[ip] = (tokens, now)
                 return 0.0
-            if len(self._buckets) > self._MAX_BUCKETS:
-                self._evict_expired()
             deficit = 1.0 - tokens
             return deficit / self._rate if self._rate > 0 else 0.0
 

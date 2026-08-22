@@ -74,16 +74,16 @@ Use this when iterating on server code.
 
 ## Verifying Your Setup
 
-Run the Phase 0 verification script to confirm your credentials and model
-IDs work:
+Validate your environment configuration:
 
 ```bash
-uv run python scripts/verify_phase0.py
+make check-env
+# or
+uv run python -c "from modelark_mcp.config.env import validate; validate()"
 ```
 
-This performs minimal billable calls to each product (one image, one audio,
-one Seedance task that is immediately cancelled) and prints redacted
-responses.
+This checks that required environment variables are present and
+syntactically valid without making any billable provider calls.
 
 ## Using with MCP Clients
 

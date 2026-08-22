@@ -15,8 +15,8 @@ source:
   - https://docs.byteplus.com/zh-CN/docs/byteplus-vod/ai-mediakit-create-a-video-transcoding-task
   - https://docs.byteplus.com/en/docs/byteplus-vod/ai-mediakit-get-task-details
 related:
-  - plans/PLAN_BYTEPLUS_VOD_AI_MEDIAKIT_VIDEO_ENHANCEMENT.md
-  - plans/PLAN_BYTEPLUS_VOD_AI_MEDIAKIT_VIDEO_TRANSCODING.md
+  - specs/SPEC_VOD_OPENAPI_PROVIDER_CONTRACT.md
+  - docs/tools.md
 ---
 
 <!-- markdownlint-disable MD013 MD025 -->

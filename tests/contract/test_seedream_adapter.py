@@ -63,6 +63,30 @@ class TestSeedreamRequestBuilding:
         assert isinstance(request.image, list)
         assert len(request.image) == 2
 
+    def test_base64_image_becomes_data_uri(self) -> None:
+        request = SeedreamService.build_request(
+            model="dola-seedream-5-0-pro-260628",
+            prompt="edit this",
+            images=[{"kind": "base64", "data": "aV9hbV9hbl9pbWFnZQ==", "mime_type": "image/png"}],
+        )
+        assert request.image == "data:image/png;base64,aV9hbV9hbl9pbWFnZQ=="
+
+    def test_base64_image_without_mime_defaults_to_png(self) -> None:
+        request = SeedreamService.build_request(
+            model="dola-seedream-5-0-pro-260628",
+            prompt="edit this",
+            images=[{"kind": "base64", "data": "aV9hbV9hbl9pbWFnZQ=="}],
+        )
+        assert request.image == "data:image/png;base64,aV9hbV9hbl9pbWFnZQ=="
+
+    def test_url_image_passed_through_unchanged(self) -> None:
+        request = SeedreamService.build_request(
+            model="dola-seedream-5-0-pro-260628",
+            prompt="edit this",
+            images=[{"url": "https://cdn.example.com/input.png"}],
+        )
+        assert request.image == "https://cdn.example.com/input.png"
+
     def test_batch_request_derives_sequential(self) -> None:
         request = SeedreamService.build_request(
             model="seedream-5-0-260128",
@@ -251,3 +275,16 @@ class TestSeedreamErrorPropagation:
         with pytest.raises(ProviderError) as exc_info:
             await service.generate(request)
         assert exc_info.value.code == "CONNECTION_ERROR"
+
+    @respx.mock
+    async def test_non_json_success_body_raises_invalid_response(
+        self, service: SeedreamService
+    ) -> None:
+        respx.post(f"{MODELARK_BASE}/images/generations").mock(
+            return_value=httpx.Response(200, content=b"not json")
+        )
+        request = SeedreamService.build_request(model="test", prompt="cat")
+        with pytest.raises(ProviderError) as exc_info:
+            await service.generate(request)
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert exc_info.value.http_status == 200

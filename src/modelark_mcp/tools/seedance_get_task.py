@@ -160,9 +160,10 @@ async def seedance_get_task(
                     )
                     await ctx.warning(f"Failed to persist last-frame artifact: {exc}")
 
-            # Only cache if at least one artifact was persisted.
-            # Don't cache failures — allow retry on next poll.
-            if video_ref is not None or last_frame_ref is not None:
+            video_ok = task.video_url is None or video_ref is not None
+            last_frame_ok = task.last_frame_url is None or last_frame_ref is not None
+
+            if video_ok and last_frame_ok:
                 await runtime.task_artifact_cache.set(
                     "modelark",
                     input.task_id,

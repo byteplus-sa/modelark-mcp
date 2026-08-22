@@ -52,6 +52,7 @@ not contain embedded credentials.
 | `READINESS_PROVIDER_TIMEOUT_SECONDS` | `2.0` | Per-provider timeout for readiness checks |
 | `RATE_LIMIT_RPM` | `0` | Max HTTP requests per minute per client IP; 0 disables |
 | `RATE_LIMIT_BURST` | `0` | Token bucket burst size; 0 defaults to `RATE_LIMIT_RPM` |
+| `RATE_LIMIT_TRUST_PROXY_HEADERS` | `false` | Trust the first `X-Forwarded-For` entry for rate-limit keys; enable only behind a trusted proxy |
 | `MCP_AUTH_MODE` | `local` | `local` or `jwt` |
 | `MCP_JWT_JWKS_URI` | empty | HTTPS JWKS endpoint for JWT verification |
 | `MCP_JWT_ISSUER` | empty | Required token issuer |
@@ -170,9 +171,12 @@ S3-compatible storage.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ARTIFACT_BACKEND` | `filesystem` | Only implemented backend |
+| `ARTIFACT_BACKEND` | `filesystem` | `filesystem` (local disk) or `object_storage` (TOS/S3) |
+| `STATE_BACKEND` | `sqlite` | Task ownership/budget/cache backend; only `sqlite` (single instance) is implemented |
 | `ARTIFACT_DIR` | `~/.modelark-mcp/artifacts` | Media, metadata, ownership, and budget state |
 | `ARTIFACT_TTL_SECONDS` | `604800` | Artifact retention, in seconds |
+| `ARTIFACT_SWEEP_INTERVAL_SECONDS` | `3600` | Interval between background artifact/state expiry sweeps |
+| `STATE_PRUNE_MAX_AGE_DAYS` | `30` | Max age for ownership/budget/cache rows before pruning |
 | `MCP_INLINE_MEDIA_MAX_BYTES` | `8388608` | Maximum inline MCP media size |
 | `PROVIDER_MAX_CONCURRENCY` | `5` | Process-wide slots per provider |
 | `PRINCIPAL_MAX_CONCURRENCY` | `3` | Shared slots per authenticated principal |

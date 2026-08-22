@@ -13,7 +13,7 @@ from fastmcp import Context
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
-from modelark_mcp.config.model_capabilities import get_capability_registry
+from modelark_mcp.config.model_capabilities import ModelFamily, get_capability_registry
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.models import VariationError, VariationResult, VariationSummary
 from modelark_mcp.observability.logger import info as log_info
@@ -88,14 +88,24 @@ async def seedance_create_task_variations(
     await ctx.info(f"Starting {input.variations} parallel Seedance task creations")
     await ctx.report_progress(progress=10, total=100)
 
-    log_cost_estimate(product="video", variations=input.variations)
-
     settings = get_settings()
     if not settings.has_modelark:
         raise ValueError("BYTEPLUS_MODELARK_API_KEY is not configured.")
 
     registry = get_capability_registry()
     caps = registry.get_video_capabilities(input.model)
+
+    if caps.family is ModelFamily.SEEDANCE_2_5:
+        raise ValueError(
+            f"Model '{input.model}' is a Seedance 2.5 model. "
+            f"Use seedance_2_5_create_task for Seedance 2.5 models."
+        )
+
+    log_cost_estimate(
+        product="video",
+        variations=input.variations,
+        model_id=caps.model_id,
+    )
 
     registry.validate_resolution(input.model, input.resolution)
     registry.validate_duration(input.model, input.duration)
@@ -159,7 +169,11 @@ async def seedance_create_task_variations(
                 ctx,
                 provider="modelark",
                 product="video",
-                estimated_cost_usd=estimate_cost(product="video", variations=1),
+                estimated_cost_usd=estimate_cost(
+                    product="video",
+                    variations=1,
+                    model_id=caps.model_id,
+                ),
             ):
                 task_id, request_id = await call_with_retry(lambda: service.create_task(request))
             await get_runtime(ctx).ownership_store.record("modelark", task_id, get_principal(ctx))

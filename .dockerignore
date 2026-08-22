@@ -14,3 +14,10 @@ specs
 docs
 tests
 .pre-commit-config.yaml
+.artifacts
+.coverage
+.DS_Store
+.secrets.baseline
+sample/
+out/
+pr-reviews/

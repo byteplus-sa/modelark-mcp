@@ -43,6 +43,7 @@ class SeedSpeechAsrService:
         language: str = "en-US",
         enable_punc: bool | None = None,
         enable_itn: bool | None = None,
+        request_id: str | None = None,
         poll_interval: float = 3.0,
         poll_max: float = 600.0,
     ) -> tuple[TranscriptionResult, str | None]:
@@ -58,6 +59,8 @@ class SeedSpeechAsrService:
             language: BCP-47 language code.
             enable_punc: Enable punctuation output.
             enable_itn: Enable inverse text normalization.
+            request_id: Client request ID reused as the ASR task ID for submit
+                and query; a fresh UUID is minted when omitted.
             poll_interval: Seconds between query polls (default 3).
             poll_max: Maximum total seconds to wait (default 600).
         """
@@ -66,7 +69,7 @@ class SeedSpeechAsrService:
         if audio_bytes is not None and audio_url is not None:
             raise ValueError("Provide audio_bytes or audio_url, not both")
 
-        task_id = str(uuid4())
+        task_id = request_id or str(uuid4())
         audio_data = base64.b64encode(audio_bytes).decode() if audio_bytes is not None else None
         gateway = self._gateway
         if gateway is None:

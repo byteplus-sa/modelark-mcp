@@ -124,6 +124,41 @@ class TestSeedSpeechAsrGatewaySubmit:
         assert exc_info.value.http_status == 500
         assert exc_info.value.retryable
 
+    @respx.mock
+    async def test_submit_mp3_omits_codec_and_rate(self, gateway: SeedSpeechAsrHttpGateway) -> None:
+        import json
+
+        route = respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/submit").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        await gateway.submit(audio_data="aGVsbG8=", audio_format="mp3", request_id="req-mp3")
+        body = json.loads(route.calls.last.request.content)
+        assert body["audio"]["format"] == "mp3"
+        assert "codec" not in body["audio"]
+        assert "rate" not in body["audio"]
+        assert "bits" not in body["audio"]
+        assert "channel" not in body["audio"]
+
+    @pytest.mark.parametrize("audio_format", ["wav", "raw"])
+    @respx.mock
+    async def test_submit_pcm_formats_include_codec_and_rate(
+        self,
+        gateway: SeedSpeechAsrHttpGateway,
+        audio_format: str,
+    ) -> None:
+        import json
+
+        route = respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/submit").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        await gateway.submit(audio_data="aGVsbG8=", audio_format=audio_format, request_id="req-pcm")
+        body = json.loads(route.calls.last.request.content)
+        assert body["audio"]["format"] == audio_format
+        assert body["audio"]["codec"] == "raw"
+        assert body["audio"]["rate"] == 16000
+        assert body["audio"]["bits"] == 16
+        assert body["audio"]["channel"] == 1
+
 
 class TestSeedSpeechAsrGatewayQuery:
     """Tests for query polling and response parsing."""
@@ -134,11 +169,40 @@ class TestSeedSpeechAsrGatewayQuery:
             return_value=httpx.Response(
                 200,
                 json=_asr_result_body(),
+                headers={"x-api-status-code": "20000000"},
             )
         )
         result = await gateway.query(task_id="req-001", sequence=0)
         assert result is not None
         assert result["result"]["text"] == "hello world"
+
+    @respx.mock
+    async def test_query_missing_status_header_raises(
+        self, gateway: SeedSpeechAsrHttpGateway
+    ) -> None:
+        respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/query").mock(
+            return_value=httpx.Response(200, json=_asr_result_body())
+        )
+        with pytest.raises(ProviderError) as exc_info:
+            await gateway.query(task_id="req-001", sequence=0)
+        assert exc_info.value.code == "MISSING_STATUS"
+        assert exc_info.value.http_status == 200
+
+    @respx.mock
+    async def test_query_terminal_failure_status_raises(
+        self, gateway: SeedSpeechAsrHttpGateway
+    ) -> None:
+        respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/query").mock(
+            return_value=httpx.Response(
+                200,
+                json=_asr_result_body(),
+                headers={"x-api-status-code": "20000003"},
+            )
+        )
+        with pytest.raises(ProviderError) as exc_info:
+            await gateway.query(task_id="req-001", sequence=0)
+        assert exc_info.value.code == "20000003"
+        assert not exc_info.value.retryable
 
     @respx.mock
     async def test_query_non_terminal_returns_none(self, gateway: SeedSpeechAsrHttpGateway) -> None:
@@ -153,12 +217,14 @@ class TestSeedSpeechAsrGatewayQuery:
         assert result is None
 
     @respx.mock
-    async def test_query_non_terminal_45000000(self, gateway: SeedSpeechAsrHttpGateway) -> None:
+    async def test_query_non_terminal_queued_returns_none(
+        self, gateway: SeedSpeechAsrHttpGateway
+    ) -> None:
         respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/query").mock(
             return_value=httpx.Response(
                 200,
                 json={},
-                headers={"x-api-status-code": "45000000"},
+                headers={"x-api-status-code": "20000002"},
             )
         )
         result = await gateway.query(task_id="req-001", sequence=1)
@@ -349,7 +415,11 @@ class TestSeedSpeechAsrServiceTransportErrors:
             return_value=httpx.Response(200, json={})
         )
         respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/query").mock(
-            return_value=httpx.Response(200, content=b"not json at all")
+            return_value=httpx.Response(
+                200,
+                content=b"not json at all",
+                headers={"x-api-status-code": "20000000"},
+            )
         )
         with pytest.raises(ProviderError) as exc_info:
             await service.transcribe(
@@ -375,7 +445,9 @@ class TestSeedSpeechAsrServiceTranscribe:
             return_value=httpx.Response(200, json={})
         )
         respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/query").mock(
-            return_value=httpx.Response(200, json=_asr_result_body())
+            return_value=httpx.Response(
+                200, json=_asr_result_body(), headers={"x-api-status-code": "20000000"}
+            )
         )
         result, log_id = await service.transcribe(
             audio_bytes=b"fake audio",
@@ -406,7 +478,9 @@ class TestSeedSpeechAsrServiceTranscribe:
             return_value=httpx.Response(200, json={})
         )
         respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/query").mock(
-            return_value=httpx.Response(200, json=_asr_result_body())
+            return_value=httpx.Response(
+                200, json=_asr_result_body(), headers={"x-api-status-code": "20000000"}
+            )
         )
         result, _ = await service.transcribe(
             audio_url="https://example.com/audio.wav",
@@ -433,7 +507,9 @@ class TestSeedSpeechAsrServiceTranscribe:
         route.mock(
             side_effect=[
                 httpx.Response(200, json={}, headers={"x-api-status-code": "20000001"}),
-                httpx.Response(200, json=_asr_result_body()),
+                httpx.Response(
+                    200, json=_asr_result_body(), headers={"x-api-status-code": "20000000"}
+                ),
             ]
         )
         result, _ = await service.transcribe(
@@ -465,6 +541,65 @@ class TestSeedSpeechAsrServiceTranscribe:
             )
         assert exc_info.value.code == "TIMEOUT"
         assert "ASR polling timed out" in exc_info.value.message
+
+
+class TestSeedSpeechAsrServiceRequestId:
+    """The service reuses a supplied request_id across submit and query."""
+
+    @respx.mock
+    async def test_transcribe_reuses_fixed_request_id(self) -> None:
+        service = SeedSpeechAsrService(
+            gateway=SeedSpeechAsrHttpGateway(
+                api_key="sk-test",  # pragma: allowlist secret
+                base_url=ASR_BASE,
+                timeout=10.0,
+                connect_timeout=5.0,
+            )
+        )
+        submit_route = respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/submit").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        query_route = respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/query").mock(
+            return_value=httpx.Response(
+                200, json=_asr_result_body(), headers={"x-api-status-code": "20000000"}
+            )
+        )
+        result, _ = await service.transcribe(
+            audio_bytes=b"fake",
+            audio_format="wav",
+            request_id="fixed-request-id",
+            poll_interval=0.0,
+            poll_max=5.0,
+        )
+        assert result.text == "hello world"
+        assert submit_route.calls.last.request.headers["X-Api-Request-Id"] == "fixed-request-id"
+        assert query_route.calls.last.request.headers["X-Api-Request-Id"] == "fixed-request-id"
+
+    @respx.mock
+    async def test_transcribe_mints_fresh_uuid_when_omitted(self) -> None:
+        import uuid as uuid_module
+
+        service = SeedSpeechAsrService(
+            gateway=SeedSpeechAsrHttpGateway(
+                api_key="sk-test",  # pragma: allowlist secret
+                base_url=ASR_BASE,
+                timeout=10.0,
+                connect_timeout=5.0,
+            )
+        )
+        submit_route = respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/submit").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/query").mock(
+            return_value=httpx.Response(
+                200, json=_asr_result_body(), headers={"x-api-status-code": "20000000"}
+            )
+        )
+        await service.transcribe(
+            audio_bytes=b"fake", audio_format="wav", poll_interval=0.0, poll_max=5.0
+        )
+        sent_id = submit_route.calls.last.request.headers["X-Api-Request-Id"]
+        uuid_module.UUID(sent_id)
 
 
 class TestSeedSpeechAsrServiceLifecycle:
@@ -555,7 +690,9 @@ class TestSeedSpeechAsrServiceLifecycle:
             return_value=httpx.Response(200, json={})
         )
         respx.post(f"{ASR_BASE}/api/v3/auc/bigmodel/query").mock(
-            return_value=httpx.Response(200, json=_asr_result_body())
+            return_value=httpx.Response(
+                200, json=_asr_result_body(), headers={"x-api-status-code": "20000000"}
+            )
         )
 
         with patch.object(SeedSpeechAsrHttpGateway, "close", new_callable=AsyncMock) as mock_close:
