@@ -147,8 +147,13 @@ resolved principal to `runtime.artifact_store.get(...)`.
 deletes the artifact + sidecar when `metadata.ref.expires_at <= now`.
 Failures are logged as `artifact_cleanup_error` and skipped; it logs
 `artifacts_expired_deleted count=N` when something was deleted, and returns
-the deleted count. There is no automatic background sweeper — call it from a
-scheduled task if you need proactive cleanup.
+the deleted count.
+
+A background sweeper runs inside the server lifespan every
+`ARTIFACT_SWEEP_INTERVAL_SECONDS` (default 3600). It calls `delete_expired`
+plus the ownership/budget/cache `prune`/`prune_expired` methods, each with its
+own error isolation. For `ARTIFACT_BACKEND=object_storage`, `delete_expired`
+is a no-op — enforce TTL there with a bucket lifecycle policy instead.
 
 ## What is not persisted here
 
