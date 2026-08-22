@@ -514,6 +514,7 @@ async def test_create_server_applies_body_and_rate_limit_middleware(tmp_path: Pa
     settings = _jwt_settings(tmp_path)
     settings.rate_limit_rpm = 10
     settings.rate_limit_burst = 10
+    settings.rate_limit_trust_proxy_headers = True
     server = create_server(settings, auth_provider=_verifier())
     app = server.http_app(
         path="/mcp",
@@ -524,15 +525,18 @@ async def test_create_server_applies_body_and_rate_limit_middleware(tmp_path: Pa
         allowed_origins=settings.allowed_origins,
     )
 
-    stack: list[str] = []
+    stack: list[tuple[str, object]] = []
     node: object = app.build_middleware_stack()
     while node is not None:
-        stack.append(type(node).__name__)
+        stack.append((type(node).__name__, node))
         node = getattr(node, "app", None)
 
-    assert "RequestBodyLimitMiddleware" in stack
-    assert "RateLimitMiddleware" in stack
-    assert stack.index("RequestBodyLimitMiddleware") < stack.index("RateLimitMiddleware")
+    names = [name for name, _ in stack]
+    assert "RequestBodyLimitMiddleware" in names
+    assert "RateLimitMiddleware" in names
+    assert names.index("RequestBodyLimitMiddleware") < names.index("RateLimitMiddleware")
+    rate_limit_node = next(node for name, node in stack if name == "RateLimitMiddleware")
+    assert rate_limit_node.trust_proxy_headers is True
 
 
 async def test_ready_probes_use_resolved_settings_urls(tmp_path: Path) -> None:

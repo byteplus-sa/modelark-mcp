@@ -19,12 +19,15 @@ readable until the local TTL elapses.
 
 ## Storage backend
 
-Only the `filesystem` backend is implemented.
+Two backends are available. `filesystem` stores artifacts on local disk;
+`object_storage` stores them in the configured TOS/S3 bucket (via
+`ObjectStorageArtifactStore`). For `object_storage`, TTL enforcement is
+delegated to a bucket lifecycle policy — `delete_expired` is a no-op there.
 
 | Env var | Default | Notes |
 |---|---|---|
-| `ARTIFACT_BACKEND` | `"filesystem"` | only `filesystem` is implemented |
-| `ARTIFACT_DIR` | `.artifacts` | resolved via `Path(...).expanduser().resolve()` |
+| `ARTIFACT_BACKEND` | `"filesystem"` | `filesystem` or `object_storage` (requires TOS/S3 credentials) |
+| `ARTIFACT_DIR` | `~/.modelark-mcp/artifacts` | local media + `runtime.sqlite3` state; resolved via `Path(...).expanduser().resolve()` |
 | `ARTIFACT_TTL_SECONDS` | `604800` (7 days) | must be `> 0` |
 
 `FilesystemArtifactStore` (`artifacts/filesystem_store.py`) lays out

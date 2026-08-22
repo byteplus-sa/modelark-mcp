@@ -399,6 +399,7 @@ class HardenedFastMCP(FastMCP):
                         burst=(
                             self._app_settings.rate_limit_burst or self._app_settings.rate_limit_rpm
                         ),
+                        trust_proxy_headers=self._app_settings.rate_limit_trust_proxy_headers,
                     )
                 )
             asgi_middleware.extend(kwargs.get("middleware") or [])

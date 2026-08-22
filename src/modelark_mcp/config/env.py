@@ -239,6 +239,14 @@ class Settings(BaseSettings):
         validation_alias="RATE_LIMIT_BURST",
         description="Maximum burst size for the token bucket. 0 defaults to RATE_LIMIT_RPM.",
     )
+    rate_limit_trust_proxy_headers: bool = Field(
+        default=False,
+        validation_alias="RATE_LIMIT_TRUST_PROXY_HEADERS",
+        description=(
+            "Trust the first X-Forwarded-For entry for rate-limit keys instead of the "
+            "socket peer IP. Only enable behind a trusted proxy that overwrites the header."
+        ),
+    )
 
     # --- Artifact persistence ------------------------------------------------
 
