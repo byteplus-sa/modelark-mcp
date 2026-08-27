@@ -953,6 +953,16 @@ Returns `SpeechToTextOutput` with `result: TranscriptionResult` and optional
 
 Transcription output is text — no artifact persistence needed.
 
+**ASR error code `20000003` (silent audio).** Seed Speech ASR reports task
+state in the `X-Api-Status-Code` header: `20000000` = success, `20000001` /
+`20000002` = still processing, and `20000003` = terminal failure meaning
+**silent audio — no human speech was detected**. The tool surfaces this as
+`Seed Speech ASR query failed with status code 20000003` with
+`retryable=false`. It is not transient — retrying the same task will not help.
+Verify the audio actually contains speech and matches the declared
+`audio_format`: for `wav`/`raw` the gateway assumes 16 kHz, 16-bit, mono PCM,
+and a mismatch decodes to silence or garbage. Re-submit with corrected audio.
+
 ---
 
 ### Object Storage Upload
@@ -1256,6 +1266,7 @@ Set to `0` (default) for record-only mode with no enforcement.
 | Auth error (JWT mode) | Missing or invalid token | Check JWT configuration and scopes |
 | Budget rejected | Daily limit exceeded | Wait for UTC day rollover or increase budget |
 | `speech_to_text` timeout | ASR poll cap reached | Increase `SEED_SPEECH_ASR_POLL_MAX_SECONDS` or provide shorter audio |
+| `speech_to_text` error code `20000003` | Silent audio — no speech detected, or a format mismatch (e.g. non-16 kHz/16-bit/mono WAV) decoded to silence | Verify the audio contains speech and matches the declared `audio_format`; re-submit with corrected audio |
 | `media_upload` / `media_presign` not available | Missing TOS/S3 credentials | Set `TOS_*` or `S3_*` env vars and `OBJECT_STORAGE_BACKEND` |
 | Presigned URL expired | TTL elapsed (default 30 min) | Call `media_presign` with the `object_key` to generate a fresh URL |
 
