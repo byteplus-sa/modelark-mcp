@@ -345,3 +345,79 @@ class TestMediaPresignErrors:
         assert isinstance(result, MediaPresignOutput)
         assert result.url == "https://s3.example.com/recovered-url"
         assert call_count == 2
+
+
+class TestMediaPresignOwnership:
+    async def test_unknown_key_rejected_for_remote_principal(
+        self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from modelark_mcp.security.auth_context import AuthContext
+
+        monkeypatch.setattr(
+            "modelark_mcp.tools.media_presign.get_principal",
+            lambda _ctx: AuthContext(principal_id="alice", tenant_id="tenant-a", transport="http"),
+        )
+        mock_gw = _mock_gateway()
+        with (
+            patch(
+                "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+                return_value=mock_gw,
+            ),
+            pytest.raises(PermissionError, match="not owned"),
+        ):
+            await media_presign(MediaPresignInput(object_key=_VALID_KEY), fake_ctx)
+        mock_gw.presign_get.assert_not_called()
+
+    async def test_cross_principal_presign_rejected(
+        self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import base64
+
+        from modelark_mcp.security.auth_context import AuthContext
+        from modelark_mcp.tools.media_upload import MediaUploadInput, media_upload
+
+        monkeypatch.setattr(
+            "modelark_mcp.tools.media_upload.get_principal",
+            lambda _ctx: AuthContext(principal_id="bob", tenant_id="tenant-a", transport="http"),
+        )
+        upload_gw = AsyncMock()
+        upload_gw.upload_bytes = AsyncMock(return_value=None)
+        upload_gw.presign_get = AsyncMock(return_value="https://tos.example.com/original-url")
+        upload_gw.close = AsyncMock()
+        with patch(
+            "modelark_mcp.tools.media_upload.make_object_storage_gateway",
+            return_value=upload_gw,
+        ):
+            uploaded = await media_upload(
+                MediaUploadInput(
+                    media_type="video",
+                    mime_type="video/mp4",
+                    data=base64.b64encode(b"fake-video-bytes").decode(),
+                ),
+                fake_ctx,
+            )
+
+        monkeypatch.setattr(
+            "modelark_mcp.tools.media_presign.get_principal",
+            lambda _ctx: AuthContext(principal_id="alice", tenant_id="tenant-a", transport="http"),
+        )
+        presign_gw = _mock_gateway()
+        with (
+            patch(
+                "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+                return_value=presign_gw,
+            ),
+            pytest.raises(PermissionError, match="not owned"),
+        ):
+            await media_presign(MediaPresignInput(object_key=uploaded.object_key), fake_ctx)
+
+        monkeypatch.setattr(
+            "modelark_mcp.tools.media_presign.get_principal",
+            lambda _ctx: AuthContext(principal_id="bob", tenant_id="tenant-a", transport="http"),
+        )
+        with patch(
+            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            return_value=presign_gw,
+        ):
+            ok = await media_presign(MediaPresignInput(object_key=uploaded.object_key), fake_ctx)
+        assert isinstance(ok, MediaPresignOutput)

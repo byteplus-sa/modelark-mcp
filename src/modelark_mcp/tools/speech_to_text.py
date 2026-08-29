@@ -22,11 +22,12 @@ from modelark_mcp.config.env import get_settings
 from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.transcription import TranscriptionResult
 from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.providers.seed_speech.asr import SeedSpeechAsrService
 from modelark_mcp.runtime import billed_provider_slot, get_runtime
 from modelark_mcp.security.media_policy import decode_base64_safely
-from modelark_mcp.security.url_policy import validate_url
+from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
 
@@ -108,7 +109,7 @@ async def _resolve_audio_bytes(audio: AsrAudioInput, ctx: Context) -> bytes:
     if settings.mcp_transport != "stdio":
         raise ValueError("audio_file_path is only supported in stdio transport mode.")
     if not p.is_file():
-        raise ValueError(f"Audio file not found: {p}")
+        raise ValueError("Audio file not found.")
     if p.stat().st_size > _STT_MAX_BYTES:
         raise ValueError(
             f"Audio file size ({p.stat().st_size} bytes) exceeds limit ({_STT_MAX_BYTES} bytes)."
@@ -134,11 +135,13 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
     try:
         audio_bytes = await _resolve_audio_bytes(input.audio, ctx)
     except (ProviderError, ValueError) as exc:
-        await ctx.error(f"Audio resolution failed: {exc}")
+        log_warning("audio_resolution_failed", error=str(exc))
+        await ctx.error("Audio resolution failed.")
         if isinstance(exc, ProviderError):
             return provider_error_result(exc)
+        detail = "Invalid audio source URL." if isinstance(exc, UrlValidationError) else str(exc)
         return ToolResult(
-            content=[{"type": "text", "text": f"Invalid audio input: {exc}"}],
+            content=[{"type": "text", "text": f"Invalid audio input: {detail}"}],
             is_error=True,
         )
 

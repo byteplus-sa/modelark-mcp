@@ -58,6 +58,10 @@ not contain embedded credentials.
 | `MCP_JWT_ISSUER` | empty | Required token issuer |
 | `MCP_JWT_AUDIENCE` | empty | Required token audience |
 | `MCP_TENANT_CLAIM` | `tenant_id` | Claim used for tenant isolation |
+| `MCP_JWT_CLOCK_SKEW_SECONDS` | `30` | Tolerated clock skew (seconds) for JWT `exp`/`nbf` validation |
+| `MCP_JWT_PROVIDE_DISCOVERY` | `false` | When true in JWT mode, serve RFC 9728 OAuth Protected Resource Metadata so MCP clients can discover the authorization server |
+| `MCP_PUBLIC_BASE_URL` | empty | Public HTTPS base URL of this server; required when `MCP_JWT_PROVIDE_DISCOVERY=true` |
+| `MCP_JWT_SCOPES_SUPPORTED` | empty | Comma-separated scopes advertised in Protected Resource Metadata |
 
 `FASTMCP_TRANSPORT`, `FASTMCP_HOST`, and `FASTMCP_PORT` are accepted as
 aliases for the corresponding `MCP_*` transport settings.

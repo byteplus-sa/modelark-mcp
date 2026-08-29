@@ -103,10 +103,16 @@ class RateLimitMiddleware:
 
         retry_after = await self._consume(ip)
         if retry_after > 0:
+            reset = math.ceil(retry_after)
             response = PlainTextResponse(
                 "Rate limit exceeded",
                 status_code=429,
-                headers={"Retry-After": str(math.ceil(retry_after))},
+                headers={
+                    "Retry-After": str(reset),
+                    "X-RateLimit-Limit": str(self.capacity),
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": str(reset),
+                },
             )
             await response(scope, receive, send)
             return

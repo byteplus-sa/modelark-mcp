@@ -31,7 +31,23 @@ The verifier is constructed with these settings (all required in JWT mode):
 | `jwks_uri` | `MCP_JWT_JWKS_URI` | must be `https://` with a hostname |
 | `issuer` | `MCP_JWT_ISSUER` | non-empty |
 | `audience` | `MCP_JWT_AUDIENCE` | non-empty |
+| `clock_skew_seconds` | `MCP_JWT_CLOCK_SKEW_SECONDS` | `0..300` (default `30`) |
 | `ssrf_safe` | — | hard-coded `True` |
+
+The verifier is `StrictJWTVerifier`, pinned to RS256. Tokens missing an `exp`
+claim are rejected, and a token whose `nbf` claim is still in the future
+(beyond the configured clock skew) is rejected.
+
+### OAuth discovery (optional)
+
+By default JWT mode is a bare verifier with no OAuth discovery — suitable for
+internal machine-to-machine clients that already know how to obtain tokens.
+Set `MCP_JWT_PROVIDE_DISCOVERY=true` (plus `MCP_PUBLIC_BASE_URL`) to wrap the
+verifier in FastMCP's `RemoteAuthProvider`, which serves RFC 9728 OAuth
+Protected Resource Metadata at `/.well-known/oauth-protected-resource` and
+advertises the scopes in `MCP_JWT_SCOPES_SUPPORTED`. This makes the server
+discoverable by spec-compliant MCP clients. The bare-verifier mode is
+unchanged when the flag is off.
 
 ### Principal and tenant extraction
 
@@ -109,6 +125,12 @@ caller-supplied prefix; `key_prefix` is sanitized to alphanumeric, `-`, `_`,
 and `/`. File-path input is restricted to the `stdio` transport to prevent
 remote file reads over HTTP.
 
+Uploaded object keys are recorded in the SQLite `object_key_ownership`
+ledger keyed by `(principal_id, tenant_id)`. `media_presign` verifies the
+caller owns the key before minting a read URL; a remote principal cannot
+re-presign another tenant's object. In `LOCAL` mode, unrecorded keys remain
+presignable by the single local principal.
+
 ## Host / Origin protection
 
 Enabled in `__main__.py` for HTTP transport via FastMCP-native guards
@@ -153,7 +175,9 @@ Behavior: each client IP gets an in-memory token bucket. The refill rate is
 `rpm / 60` tokens per second. Each request consumes one token. When the
 bucket is empty, the middleware returns `429 "Rate limit exceeded"` with a
 `Retry-After` header indicating the seconds until the next token is
-available. The bucket dict is protected by an `asyncio.Lock`.
+available, plus `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and
+`X-RateLimit-Reset` headers so well-behaved clients can self-throttle. The
+bucket dict is protected by an `asyncio.Lock`.
 
 ## SSRF-safe downloader (`security/safe_downloader.py`)
 
@@ -203,13 +227,15 @@ Exception: `UrlValidationError(ValueError)`.
   `allow_http=True`. `file://` is never allowed.
 - **No credentials in URLs** (`userinfo` rejected).
 - **Hostname** is IDNA-encoded → ASCII → lowercased.
-- **Ports:** any explicit port is accepted syntactically; there is no
-  per-port allowlist. Default is 443 (https) / 80 (http).
+- **Ports:** only `443` (https) and `80` (http) are allowed; any other
+  explicit port is rejected. Default is 443 (https) / 80 (http).
 - **DNS + IP denial:** `resolve_public_addresses` resolves the hostname
-  (or uses a literal IP directly), then denies any address that is
-  `is_private`, `is_loopback`, `is_link_local`, `is_multicast`,
-  `is_reserved`, or `is_unspecified`. For IPv6, embedded IPv4 transition
-  formats (`ipv4_mapped`, `sixtofour`, `teredo[1]`) are recursively checked.
+  (or uses a literal IP directly), then denies any address that is not
+  globally reachable — `is_private`, `is_loopback`, `is_link_local`,
+  `is_multicast`, `is_reserved`, `is_unspecified`, or `not is_global` (which
+  additionally covers CGNAT shared space `100.64.0.0/10`). For IPv6, embedded
+  IPv4 transition formats (`ipv4_mapped`, `sixtofour`, `teredo[1]`) are
+  recursively checked.
 
 `validate_url` combines syntax validation + DNS resolution and returns a
 `ValidatedUrl(url, parsed, hostname, port, addresses)`.

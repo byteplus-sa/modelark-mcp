@@ -22,6 +22,7 @@ from modelark_mcp.runtime import (
     CostEstimate,
     ProviderLimiters,
     RuntimeServices,
+    SQLiteObjectKeyOwnershipStore,
     SQLiteTaskArtifactCache,
     SQLiteTaskOwnershipStore,
     _state_sweeper,
@@ -447,6 +448,10 @@ class TestStateSweeper:
             async def close(self) -> None:
                 return None
 
+        class _FakeObjectKeyOwnershipStore:
+            async def close(self) -> None:
+                return None
+
         class _FakeBudgetLedger:
             async def close(self) -> None:
                 return None
@@ -460,6 +465,7 @@ class TestStateSweeper:
             artifact_store=_FakeArtifactStore(),  # type: ignore[arg-type]
             safe_downloader=SimpleNamespace(),  # type: ignore[arg-type]
             ownership_store=_FakeOwnershipStore(),  # type: ignore[arg-type]
+            object_key_ownership_store=_FakeObjectKeyOwnershipStore(),  # type: ignore[arg-type]
             budget_ledger=_FakeBudgetLedger(),  # type: ignore[arg-type]
             provider_limiters=SimpleNamespace(),  # type: ignore[arg-type]
             task_artifact_cache=_FakeTaskArtifactCache(),  # type: ignore[arg-type]
@@ -539,6 +545,61 @@ class TestPruneMethods:
         ).fetchone()
         assert remaining is not None and remaining[0] == 1
         await ledger.close()
+
+
+class TestObjectKeyOwnershipStore:
+    """Object-storage key ownership ledger: record, require, prune."""
+
+    async def test_record_then_require_owner_succeeds(self, tmp_path: Path) -> None:
+        store = SQLiteObjectKeyOwnershipStore(tmp_path / "runtime.sqlite3")
+        owner = AuthContext(principal_id="alice", tenant_id="tenant-a")
+        await store.record("references/video/abc", owner)
+        await store.require_owner("references/video/abc", owner)
+        await store.close()
+
+    async def test_require_owner_rejects_different_principal(self, tmp_path: Path) -> None:
+        store = SQLiteObjectKeyOwnershipStore(tmp_path / "runtime.sqlite3")
+        owner = AuthContext(principal_id="alice", tenant_id="tenant-a")
+        await store.record("references/video/abc", owner)
+        other = AuthContext(principal_id="mallory", tenant_id="tenant-a")
+        with pytest.raises(PermissionError, match="not owned"):
+            await store.require_owner("references/video/abc", other)
+        await store.close()
+
+    async def test_unknown_key_allowed_for_local_owner(self, tmp_path: Path) -> None:
+        store = SQLiteObjectKeyOwnershipStore(tmp_path / "runtime.sqlite3")
+        await store.require_owner("references/video/unknown", AuthContext())
+        await store.close()
+
+    async def test_unknown_key_rejected_for_remote_owner(self, tmp_path: Path) -> None:
+        store = SQLiteObjectKeyOwnershipStore(tmp_path / "runtime.sqlite3")
+        remote = AuthContext(principal_id="alice", tenant_id="tenant-a", transport="http")
+        with pytest.raises(PermissionError, match="not owned"):
+            await store.require_owner("references/video/unknown", remote)
+        await store.close()
+
+    async def test_prune_deletes_only_aged_rows(self, tmp_path: Path) -> None:
+        store = SQLiteObjectKeyOwnershipStore(tmp_path / "runtime.sqlite3")
+        owner = AuthContext(principal_id="alice", tenant_id="tenant-a")
+        await store.record("references/video/fresh", owner)
+        await store.record("references/video/aged", owner)
+        aged = (datetime.now(UTC) - timedelta(days=40)).isoformat()
+        store._connection.execute(
+            "UPDATE object_key_ownership SET created_at = ? WHERE object_key = ?",
+            (aged, "references/video/aged"),
+        )
+        store._connection.commit()
+
+        pruned = await store.prune(30)
+
+        assert pruned == 1
+        await store.require_owner("references/video/fresh", owner)
+        with pytest.raises(PermissionError, match="not owned"):
+            await store.require_owner(
+                "references/video/aged",
+                AuthContext(principal_id="alice", tenant_id="tenant-a", transport="http"),
+            )
+        await store.close()
 
 
 class TestArtifactBackendSelection:

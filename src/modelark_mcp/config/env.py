@@ -211,6 +211,34 @@ class Settings(BaseSettings):
         min_length=1,
         validation_alias="MCP_TENANT_CLAIM",
     )
+    mcp_jwt_clock_skew_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=300,
+        validation_alias="MCP_JWT_CLOCK_SKEW_SECONDS",
+        description="Tolerated clock skew (seconds) when validating JWT exp/nbf claims.",
+    )
+    mcp_jwt_provide_discovery: bool = Field(
+        default=False,
+        validation_alias="MCP_JWT_PROVIDE_DISCOVERY",
+        description=(
+            "When true and MCP_AUTH_MODE=jwt, serve RFC 9728 OAuth Protected Resource "
+            "Metadata so spec-compliant MCP clients can discover the authorization server."
+        ),
+    )
+    mcp_public_base_url: str = Field(
+        default="",
+        validation_alias="MCP_PUBLIC_BASE_URL",
+        description=(
+            "Public HTTPS base URL of this server, required when MCP_JWT_PROVIDE_DISCOVERY "
+            "is enabled (e.g. 'https://mcp.example.com')."
+        ),
+    )
+    mcp_jwt_scopes_supported: str = Field(
+        default="",
+        validation_alias="MCP_JWT_SCOPES_SUPPORTED",
+        description="Comma-separated scopes to advertise in Protected Resource Metadata.",
+    )
     readiness_check_providers: bool = Field(
         default=False,
         validation_alias="READINESS_CHECK_PROVIDERS",
@@ -437,6 +465,12 @@ class Settings(BaseSettings):
     def allowed_hosts(self) -> list[str]:
         return [host.strip() for host in self.mcp_allowed_hosts.split(",") if host.strip()]
 
+    @property
+    def jwt_scopes_supported(self) -> list[str]:
+        return [
+            scope.strip() for scope in self.mcp_jwt_scopes_supported.split(",") if scope.strip()
+        ]
+
     @field_validator("mcp_transport")
     @classmethod
     def validate_transport(cls, v: str) -> str:
@@ -569,6 +603,12 @@ class Settings(BaseSettings):
             parsed_jwks = urlsplit(self.mcp_jwt_jwks_uri or "")
             if parsed_jwks.scheme != "https" or not parsed_jwks.hostname:
                 raise ValueError("MCP_JWT_JWKS_URI must be an HTTPS URL")
+        if self.mcp_jwt_provide_discovery:
+            if self.mcp_auth_mode is not AuthMode.JWT:
+                raise ValueError("MCP_JWT_PROVIDE_DISCOVERY requires MCP_AUTH_MODE=jwt.")
+            parsed_base = urlsplit(self.mcp_public_base_url)
+            if parsed_base.scheme != "https" or not parsed_base.hostname:
+                raise ValueError("MCP_PUBLIC_BASE_URL must be an HTTPS URL with a hostname.")
         if (
             self.mcp_transport == "http"
             and self.mcp_auth_mode is AuthMode.LOCAL

@@ -442,6 +442,9 @@ async def test_rate_limit_retry_after_header(tmp_path: Path) -> None:
     assert "retry-after" in {k.lower() for k in blocked.headers}
     retry_after = int(blocked.headers["retry-after"])
     assert retry_after > 0
+    assert blocked.headers["x-ratelimit-limit"] == "1"
+    assert blocked.headers["x-ratelimit-remaining"] == "0"
+    assert int(blocked.headers["x-ratelimit-reset"]) == retry_after
 
 
 async def test_rate_limit_disabled_by_default(tmp_path: Path) -> None:
