@@ -15,11 +15,12 @@ from pydantic import AnyUrl, BaseModel, Field, UrlConstraints
 from modelark_mcp.artifacts.store import ArtifactPersistenceError
 from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.domain.errors import ProviderError
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
 from modelark_mcp.providers.vod_mediakit.schemas import VodMediaKitEnhancementRequest
 from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.security.media_policy import get_media_limits
-from modelark_mcp.security.url_policy import validate_url
+from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._errors import provider_error_result
 from modelark_mcp.tools._vod_shared import VodArtifactPersistenceIssue
 
@@ -133,7 +134,14 @@ async def vod_enhance_video(
             "BYTEPLUS_VOD_MEDIAKIT_API_KEY is not configured. Set it to enable this tool."
         )
 
-    validated_source = validate_url(str(input.video_url))
+    try:
+        validated_source = validate_url(str(input.video_url))
+    except UrlValidationError as exc:
+        log_warning("vod_enhance_video_invalid_source_url", error=str(exc))
+        return ToolResult(
+            content=[{"type": "text", "text": UrlValidationError.safe_message}],
+            is_error=True,
+        )
     request = VodMediaKitEnhancementRequest.model_validate(
         {
             "video_url": validated_source.url,

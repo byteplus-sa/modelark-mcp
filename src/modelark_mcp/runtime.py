@@ -300,7 +300,8 @@ class SQLiteObjectKeyOwnershipStore:
                 VALUES (?, ?, ?, ?)
                 ON CONFLICT(object_key) DO UPDATE SET
                     principal_id = excluded.principal_id,
-                    tenant_id = excluded.tenant_id
+                    tenant_id = excluded.tenant_id,
+                    created_at = excluded.created_at
                 """,
                 (
                     object_key,
@@ -320,12 +321,17 @@ class SQLiteObjectKeyOwnershipStore:
                 """,
                 (object_key,),
             ).fetchone()
-        if row is None:
-            if owner.is_local:
-                return
-            raise PermissionError("Object key is not owned by the current principal.")
-        if row != (owner.principal_id, owner.tenant_id):
-            raise PermissionError("Object key is not owned by the current principal.")
+            if row is None:
+                if owner.is_local:
+                    return
+                raise PermissionError("Object key is not owned by the current principal.")
+            if row != (owner.principal_id, owner.tenant_id):
+                raise PermissionError("Object key is not owned by the current principal.")
+            self._connection.execute(
+                "UPDATE object_key_ownership SET created_at = ? WHERE object_key = ?",
+                (datetime.now(UTC).isoformat(), object_key),
+            )
+            self._connection.commit()
 
     async def prune(self, max_age_days: int) -> int:
         cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()

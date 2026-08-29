@@ -131,3 +131,26 @@ class TestBuildAuthProvider:
                 MCP_JWT_AUDIENCE="modelark-mcp",
                 MCP_JWT_PROVIDE_DISCOVERY=True,
             )
+
+    def test_discovery_requires_http_url_issuer(self) -> None:
+        with pytest.raises(ValueError, match="MCP_JWT_ISSUER"):
+            Settings(
+                _env_file=None,
+                MCP_AUTH_MODE="jwt",
+                MCP_JWT_JWKS_URI="https://identity.example.com/.well-known/jwks.json",
+                MCP_JWT_ISSUER="urn:example:issuer",
+                MCP_JWT_AUDIENCE="modelark-mcp",
+                MCP_JWT_PROVIDE_DISCOVERY=True,
+                MCP_PUBLIC_BASE_URL="https://mcp.example.com",
+            )
+
+    def test_bare_jwt_mode_accepts_non_url_issuer(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            MCP_AUTH_MODE="jwt",
+            MCP_JWT_JWKS_URI="https://identity.example.com/.well-known/jwks.json",
+            MCP_JWT_ISSUER="urn:example:issuer",
+            MCP_JWT_AUDIENCE="modelark-mcp",
+        )
+        provider = build_auth_provider(settings)
+        assert isinstance(provider, StrictJWTVerifier)

@@ -74,6 +74,13 @@ class TestMediaSource:
                 url="https://example.com/img.png",
             )
 
+    def test_blocked_ip_url_raises_sanitized_error(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            MediaSource(kind=MediaSourceKind.url, url="https://10.0.0.1/img.png")
+        message = str(exc_info.value)
+        assert "Invalid media URL." in message
+        assert "resolves to blocked" not in message
+
 
 class TestAudioReference:
     """Tests for the AudioReference model."""
@@ -120,3 +127,10 @@ class TestAudioReference:
         data = base64.b64encode(raw).decode()
         ref = AudioReference(kind="base64", data=data, mime_type="audio/mp3")
         assert ref.kind == "base64"
+
+    def test_blocked_ip_url_raises_sanitized_error(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            AudioReference(kind="url", url="https://127.0.0.1/audio.wav")
+        message = str(exc_info.value)
+        assert "Invalid media URL." in message
+        assert "resolves to blocked" not in message

@@ -17,7 +17,13 @@ import httpx
 
 
 class UrlValidationError(ValueError):
-    """Raised when a URL fails security validation."""
+    """Raised when a URL fails security validation.
+
+    ``safe_message`` is a caller-visible message that never contains the
+    hostname or IP that failed validation (which ``str(exc)`` does).
+    """
+
+    safe_message = "Invalid media URL."
 
 
 _BLOCKED_HOSTS: frozenset[str] = frozenset(

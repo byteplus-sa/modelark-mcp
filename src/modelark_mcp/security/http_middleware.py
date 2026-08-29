@@ -111,7 +111,7 @@ class RateLimitMiddleware:
                     "Retry-After": str(reset),
                     "X-RateLimit-Limit": str(self.capacity),
                     "X-RateLimit-Remaining": "0",
-                    "X-RateLimit-Reset": str(reset),
+                    "X-RateLimit-Reset": str(int(time.time()) + reset),
                 },
             )
             await response(scope, receive, send)

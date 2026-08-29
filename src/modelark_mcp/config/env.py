@@ -216,7 +216,7 @@ class Settings(BaseSettings):
         ge=0,
         le=300,
         validation_alias="MCP_JWT_CLOCK_SKEW_SECONDS",
-        description="Tolerated clock skew (seconds) when validating JWT exp/nbf claims.",
+        description="Tolerated clock skew (seconds) when validating JWT nbf (not-before) claims.",
     )
     mcp_jwt_provide_discovery: bool = Field(
         default=False,
@@ -609,6 +609,12 @@ class Settings(BaseSettings):
             parsed_base = urlsplit(self.mcp_public_base_url)
             if parsed_base.scheme != "https" or not parsed_base.hostname:
                 raise ValueError("MCP_PUBLIC_BASE_URL must be an HTTPS URL with a hostname.")
+            parsed_issuer = urlsplit(self.mcp_jwt_issuer or "")
+            if parsed_issuer.scheme not in {"https", "http"} or not parsed_issuer.hostname:
+                raise ValueError(
+                    "MCP_JWT_ISSUER must be an HTTP(S) URL with a hostname when "
+                    "MCP_JWT_PROVIDE_DISCOVERY is enabled."
+                )
         if (
             self.mcp_transport == "http"
             and self.mcp_auth_mode is AuthMode.LOCAL

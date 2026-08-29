@@ -129,7 +129,12 @@ Uploaded object keys are recorded in the SQLite `object_key_ownership`
 ledger keyed by `(principal_id, tenant_id)`. `media_presign` verifies the
 caller owns the key before minting a read URL; a remote principal cannot
 re-presign another tenant's object. In `LOCAL` mode, unrecorded keys remain
-presignable by the single local principal.
+presignable by the single local principal. A successful `record` or
+`require_owner` refreshes the row's `created_at` timestamp, so regularly
+presigned keys are not expired by the state sweeper. Rows are pruned by the
+background state sweeper after `STATE_PRUNE_MAX_AGE_DAYS` (default `30`) of
+inactivity; a long-lived key that has not been presigned within that window
+must be re-uploaded before it can be presigned again by a remote principal.
 
 ## Host / Origin protection
 

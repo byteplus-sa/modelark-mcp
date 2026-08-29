@@ -9,12 +9,13 @@ from fastmcp.tools import ToolResult
 from pydantic import AnyUrl, BaseModel, Field, UrlConstraints, model_validator
 
 from modelark_mcp.domain.errors import ProviderError
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.providers.vod_mediakit.schemas import VodMediaKitSeparateVoiceRequest
 from modelark_mcp.providers.vod_mediakit.separate_voice import (
     VodMediaKitSeparateVoiceService,
 )
 from modelark_mcp.runtime import get_principal, get_runtime
-from modelark_mcp.security.url_policy import validate_url
+from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._errors import provider_error_result
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
@@ -100,7 +101,14 @@ async def vod_separate_audio(
         )
 
     source = input.audio_url or input.video_url
-    validated_source = validate_url(str(source))
+    try:
+        validated_source = validate_url(str(source))
+    except UrlValidationError as exc:
+        log_warning("vod_separate_audio_invalid_source_url", error=str(exc))
+        return ToolResult(
+            content=[{"type": "text", "text": UrlValidationError.safe_message}],
+            is_error=True,
+        )
     request = VodMediaKitSeparateVoiceRequest.model_validate(
         {
             "audio_url": validated_source.url if input.audio_url else None,

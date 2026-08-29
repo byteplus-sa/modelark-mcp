@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -444,7 +445,8 @@ async def test_rate_limit_retry_after_header(tmp_path: Path) -> None:
     assert retry_after > 0
     assert blocked.headers["x-ratelimit-limit"] == "1"
     assert blocked.headers["x-ratelimit-remaining"] == "0"
-    assert int(blocked.headers["x-ratelimit-reset"]) == retry_after
+    reset_epoch = int(blocked.headers["x-ratelimit-reset"])
+    assert time.time() <= reset_epoch <= time.time() + retry_after
 
 
 async def test_rate_limit_disabled_by_default(tmp_path: Path) -> None:

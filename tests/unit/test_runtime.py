@@ -601,6 +601,48 @@ class TestObjectKeyOwnershipStore:
             )
         await store.close()
 
+    async def test_require_owner_refreshes_created_at(self, tmp_path: Path) -> None:
+        store = SQLiteObjectKeyOwnershipStore(tmp_path / "runtime.sqlite3")
+        owner = AuthContext(principal_id="alice", tenant_id="tenant-a")
+        await store.record("references/video/abc", owner)
+        aged = (datetime.now(UTC) - timedelta(days=40)).isoformat()
+        store._connection.execute(
+            "UPDATE object_key_ownership SET created_at = ? WHERE object_key = ?",
+            (aged, "references/video/abc"),
+        )
+        store._connection.commit()
+
+        await store.require_owner("references/video/abc", owner)
+
+        refreshed = store._connection.execute(
+            "SELECT created_at FROM object_key_ownership WHERE object_key = ?",
+            ("references/video/abc",),
+        ).fetchone()
+        assert refreshed is not None
+        assert (datetime.now(UTC) - datetime.fromisoformat(refreshed[0])).total_seconds() < 5
+        await store.close()
+
+    async def test_record_upsert_refreshes_created_at(self, tmp_path: Path) -> None:
+        store = SQLiteObjectKeyOwnershipStore(tmp_path / "runtime.sqlite3")
+        owner = AuthContext(principal_id="alice", tenant_id="tenant-a")
+        await store.record("references/video/abc", owner)
+        aged = (datetime.now(UTC) - timedelta(days=40)).isoformat()
+        store._connection.execute(
+            "UPDATE object_key_ownership SET created_at = ? WHERE object_key = ?",
+            (aged, "references/video/abc"),
+        )
+        store._connection.commit()
+
+        await store.record("references/video/abc", owner)
+
+        refreshed = store._connection.execute(
+            "SELECT created_at FROM object_key_ownership WHERE object_key = ?",
+            ("references/video/abc",),
+        ).fetchone()
+        assert refreshed is not None
+        assert (datetime.now(UTC) - datetime.fromisoformat(refreshed[0])).total_seconds() < 5
+        await store.close()
+
 
 class TestArtifactBackendSelection:
     """``create_runtime_services`` selects the artifact store from settings."""
