@@ -16,6 +16,7 @@ import httpx
 import pytest
 import respx
 from fastmcp.tools import ToolResult
+from pydantic import ValidationError
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.runtime import close_runtime_services, create_runtime_services
@@ -137,6 +138,13 @@ class TestSpeechToTextHappyPath:
 
 
 class TestSpeechToTextAudioResolution:
+    def test_blocked_ip_audio_url_raises_sanitized_error(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            AsrAudioInput(audio_url="https://10.0.0.1/audio.wav", audio_format="wav")
+        message = str(exc_info.value)
+        assert "Invalid media URL." in message
+        assert "resolves to blocked" not in message
+
     async def test_url_to_untrusted_host_is_rejected(self, stt_ctx: FakeContext) -> None:
         result = await speech_to_text(
             SpeechToTextInput(

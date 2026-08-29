@@ -61,7 +61,11 @@ class AsrAudioInput(BaseModel):
         if provided != 1:
             raise ValueError("Provide exactly one of audio_url, audio_data, or audio_file_path.")
         if self.audio_url:
-            validate_url(self.audio_url)
+            try:
+                validate_url(self.audio_url)
+            except UrlValidationError as exc:
+                log_warning("asr_audio_invalid_url", error=str(exc))
+                raise ValueError(UrlValidationError.safe_message) from exc
         return self
 
 
