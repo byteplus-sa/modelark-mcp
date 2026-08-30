@@ -78,6 +78,15 @@ class TestSeedanceCreateTaskInput:
         )
         assert len(inp.videos or []) == 1
 
+    def test_blocked_ip_video_url_raises_sanitized_error(self) -> None:
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        with pytest.raises(ValidationError) as exc_info:
+            SeedanceVideoInput(url="https://10.0.0.1/dog.mp4")
+        message = str(exc_info.value)
+        assert "Invalid media URL." in message
+        assert "resolves to blocked" not in message
+
     def test_text_only_valid(self) -> None:
         inp = SeedanceCreateTaskInput(prompt="Just text")
         assert inp.prompt == "Just text"

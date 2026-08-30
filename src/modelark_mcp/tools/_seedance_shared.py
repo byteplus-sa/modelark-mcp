@@ -22,7 +22,7 @@ from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.providers.modelark.seedance import SeedanceService
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
-from modelark_mcp.security.url_policy import validate_url
+from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
 
@@ -52,7 +52,11 @@ class SeedanceVideoInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_video_url(self) -> SeedanceVideoInput:
-        validate_url(self.url)
+        try:
+            validate_url(self.url)
+        except UrlValidationError as exc:
+            log_warning("seedance_video_invalid_source_url", error=str(exc))
+            raise ValueError(UrlValidationError.safe_message) from exc
         return self
 
 

@@ -20,7 +20,7 @@ from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.object_storage import make_object_storage_gateway
 from modelark_mcp.providers.retry import call_with_retry
-from modelark_mcp.runtime import billed_provider_slot
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._errors import provider_error_result
 
 _OBJECT_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-_/]*$")
@@ -94,6 +94,9 @@ async def media_presign(input: MediaPresignInput, ctx: Context) -> MediaPresignO
             product="presign",
             estimated_cost_usd=0.0,
         ):
+            await get_runtime(ctx).object_key_ownership_store.require_owner(
+                input.object_key, get_principal(ctx)
+            )
             if input.expires_in_seconds is not None:
                 url = await call_with_retry(
                     lambda: gateway.presign_get(

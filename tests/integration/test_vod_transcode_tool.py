@@ -86,6 +86,20 @@ async def test_transcode_submit_accepts_and_records_ownership(
     }
 
 
+async def test_blocked_source_url_returns_sanitized_error(
+    test_env: None,
+    fake_ctx: FakeContext,
+) -> None:
+    result = await vod_transcode_video(
+        VodTranscodeVideoInput(video_url="https://10.0.0.1/input.mp4"), fake_ctx
+    )
+    assert isinstance(result, ToolResult)
+    assert result.is_error
+    assert "Invalid media URL." in result.content[0].text
+    assert "10.0.0.1" not in result.content[0].text
+    assert "resolves to blocked" not in result.content[0].text
+
+
 async def test_transcode_submit_default_options_are_verified_profile(
     test_env: None,
     fake_ctx: FakeContext,

@@ -66,6 +66,20 @@ async def test_success_without_persistence_preserves_provider_url(
     assert captured
 
 
+async def test_blocked_source_url_returns_sanitized_error(
+    test_env: None,
+    fake_ctx: FakeContext,
+) -> None:
+    result = await vod_enhance_video(
+        VodEnhanceVideoInput(video_url="https://10.0.0.1/input.mp4"), fake_ctx
+    )
+    assert isinstance(result, ToolResult)
+    assert result.is_error
+    assert "Invalid media URL." in result.content[0].text
+    assert "10.0.0.1" not in result.content[0].text
+    assert "resolves to blocked" not in result.content[0].text
+
+
 async def test_accepted_task_is_owned_and_not_persisted(
     test_env: None,
     fake_ctx: FakeContext,

@@ -103,6 +103,20 @@ class TaskOwnershipStore(Protocol):
     async def close(self) -> None: ...
 
 
+class ObjectKeyOwnershipStore(Protocol):
+    """Ownership ledger for object-storage keys minted by ``media_upload``."""
+
+    async def record(self, object_key: str, owner: AuthContext) -> None: ...
+
+    async def require_owner(self, object_key: str, owner: AuthContext) -> None: ...
+
+    async def prune(self, max_age_days: int) -> int: ...
+
+    async def ping(self) -> None: ...
+
+    async def close(self) -> None: ...
+
+
 class TaskArtifactCache(Protocol):
     async def get(self, provider: str, task_id: str) -> dict[str, ArtifactRef | None] | None: ...
 
@@ -243,6 +257,87 @@ class SQLiteTaskOwnershipStore:
         async with self._lock:
             cursor = self._connection.execute(
                 "DELETE FROM task_ownership WHERE created_at < ?",
+                (cutoff,),
+            )
+            self._connection.commit()
+        return cursor.rowcount if cursor.rowcount is not None else 0
+
+    async def ping(self) -> None:
+        async with self._lock:
+            self._connection.execute("SELECT 1").fetchone()
+
+    async def close(self) -> None:
+        async with self._lock:
+            self._connection.close()
+
+
+class SQLiteObjectKeyOwnershipStore:
+    """SQLite ownership ledger for object-storage keys (``media_upload``)."""
+
+    def __init__(self, database_path: Path) -> None:
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        self._connection = sqlite3.connect(database_path)
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS object_key_ownership (
+                object_key TEXT NOT NULL PRIMARY KEY,
+                principal_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.commit()
+        self._lock = asyncio.Lock()
+
+    async def record(self, object_key: str, owner: AuthContext) -> None:
+        async with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO object_key_ownership(
+                    object_key, principal_id, tenant_id, created_at
+                )
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(object_key) DO UPDATE SET
+                    principal_id = excluded.principal_id,
+                    tenant_id = excluded.tenant_id,
+                    created_at = excluded.created_at
+                """,
+                (
+                    object_key,
+                    owner.principal_id,
+                    owner.tenant_id,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+            self._connection.commit()
+
+    async def require_owner(self, object_key: str, owner: AuthContext) -> None:
+        async with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT principal_id, tenant_id FROM object_key_ownership
+                WHERE object_key = ?
+                """,
+                (object_key,),
+            ).fetchone()
+            if row is None:
+                if owner.is_local:
+                    return
+                raise PermissionError("Object key is not owned by the current principal.")
+            if row != (owner.principal_id, owner.tenant_id):
+                raise PermissionError("Object key is not owned by the current principal.")
+            self._connection.execute(
+                "UPDATE object_key_ownership SET created_at = ? WHERE object_key = ?",
+                (datetime.now(UTC).isoformat(), object_key),
+            )
+            self._connection.commit()
+
+    async def prune(self, max_age_days: int) -> int:
+        cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()
+        async with self._lock:
+            cursor = self._connection.execute(
+                "DELETE FROM object_key_ownership WHERE created_at < ?",
                 (cutoff,),
             )
             self._connection.commit()
@@ -560,6 +655,7 @@ class RuntimeServices:
     artifact_store: ArtifactStore
     safe_downloader: SafeDownloader
     ownership_store: TaskOwnershipStore
+    object_key_ownership_store: ObjectKeyOwnershipStore
     budget_ledger: BudgetLedger
     provider_limiters: ProviderLimiters
     task_artifact_cache: TaskArtifactCache
@@ -573,7 +669,7 @@ class RuntimeState:
 def build_state_stores(
     settings: Settings,
     database_path: Path,
-) -> tuple[TaskOwnershipStore, BudgetLedger, TaskArtifactCache]:
+) -> tuple[TaskOwnershipStore, ObjectKeyOwnershipStore, BudgetLedger, TaskArtifactCache]:
     """Build the state stores for the configured ``STATE_BACKEND``."""
     if settings.state_backend != "sqlite":
         raise ValueError(f"Unsupported STATE_BACKEND: {settings.state_backend}")
@@ -584,6 +680,7 @@ def build_state_stores(
     )
     return (
         SQLiteTaskOwnershipStore(database_path),
+        SQLiteObjectKeyOwnershipStore(database_path),
         BudgetLedger(database_path, daily_limit_usd=settings.daily_budget_usd or None),
         SQLiteTaskArtifactCache(
             database_path,
@@ -612,14 +709,15 @@ async def create_runtime_services(settings: Settings) -> RuntimeServices:
             downloader=downloader,
         )
     database_path = artifact_dir / "runtime.sqlite3"
-    ownership_store, budget_ledger, task_artifact_cache = build_state_stores(
-        settings, database_path
+    ownership_store, object_key_ownership_store, budget_ledger, task_artifact_cache = (
+        build_state_stores(settings, database_path)
     )
     return RuntimeServices(
         settings=settings,
         artifact_store=artifact_store,
         safe_downloader=downloader,
         ownership_store=ownership_store,
+        object_key_ownership_store=object_key_ownership_store,
         budget_ledger=budget_ledger,
         provider_limiters=ProviderLimiters(
             provider_limit=settings.provider_max_concurrency,
@@ -632,6 +730,7 @@ async def create_runtime_services(settings: Settings) -> RuntimeServices:
 async def close_runtime_services(runtime: RuntimeServices) -> None:
     await runtime.artifact_store.close()
     await runtime.ownership_store.close()
+    await runtime.object_key_ownership_store.close()
     await runtime.budget_ledger.close()
     await runtime.task_artifact_cache.close()
 
@@ -717,6 +816,13 @@ async def _state_sweeper(runtime: RuntimeServices, settings: Settings) -> None:
             log_info("state_sweep_ownership", pruned=pruned)
         except Exception as exc:
             log_warning("state_sweep_ownership_error", error=str(exc))
+        try:
+            pruned = await runtime.object_key_ownership_store.prune(
+                settings.state_prune_max_age_days
+            )
+            log_info("state_sweep_object_keys", pruned=pruned)
+        except Exception as exc:
+            log_warning("state_sweep_object_keys_error", error=str(exc))
         try:
             pruned = await runtime.budget_ledger.prune(settings.state_prune_max_age_days)
             log_info("state_sweep_budget", pruned=pruned)

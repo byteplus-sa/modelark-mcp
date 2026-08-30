@@ -122,6 +122,20 @@ async def test_submit_accepts_and_records_ownership(
     }
 
 
+async def test_blocked_source_url_returns_sanitized_error(
+    test_env: None,
+    fake_ctx: FakeContext,
+) -> None:
+    result = await vod_separate_audio(
+        VodSeparateAudioInput(audio_url="https://10.0.0.1/input.mp3"), fake_ctx
+    )
+    assert isinstance(result, ToolResult)
+    assert result.is_error
+    assert "Invalid media URL." in result.content[0].text
+    assert "10.0.0.1" not in result.content[0].text
+    assert "resolves to blocked" not in result.content[0].text
+
+
 async def test_submit_serializes_documented_request(
     test_env: None,
     fake_ctx: FakeContext,

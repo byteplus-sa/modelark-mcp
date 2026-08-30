@@ -17,7 +17,13 @@ import httpx
 
 
 class UrlValidationError(ValueError):
-    """Raised when a URL fails security validation."""
+    """Raised when a URL fails security validation.
+
+    ``safe_message`` is a caller-visible message that never contains the
+    hostname or IP that failed validation (which ``str(exc)`` does).
+    """
+
+    safe_message = "Invalid media URL."
 
 
 _BLOCKED_HOSTS: frozenset[str] = frozenset(
@@ -63,6 +69,7 @@ def _is_blocked_address(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> 
         or addr.is_multicast
         or addr.is_reserved
         or addr.is_unspecified
+        or not addr.is_global
     )
     if blocked or isinstance(addr, ipaddress.IPv4Address):
         return blocked
@@ -92,6 +99,13 @@ def validate_url_syntax(url: str, *, allow_http: bool = False) -> tuple[SplitRes
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
     except (UnicodeError, ValueError) as exc:
         raise UrlValidationError(f"URL has an invalid hostname or port: {exc}") from exc
+
+    allowed_ports = {443} if parsed.scheme == "https" else {80}
+    if parsed.port is not None and parsed.port not in allowed_ports:
+        raise UrlValidationError(
+            f"URL port '{parsed.port}' is not allowed for {parsed.scheme}. "
+            f"Allowed ports: {sorted(allowed_ports)}."
+        )
 
     if hostname in _BLOCKED_HOSTS:
         raise UrlValidationError(f"Host '{hostname}' is blocked (metadata endpoint).")

@@ -9,10 +9,11 @@ from fastmcp.tools import ToolResult
 from pydantic import AnyUrl, BaseModel, Field, UrlConstraints, model_validator
 
 from modelark_mcp.domain.errors import ProviderError
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.providers.vod_mediakit.schemas import VodMediaKitTranscodeRequest
 from modelark_mcp.providers.vod_mediakit.transcode import VodMediaKitTranscodeService
 from modelark_mcp.runtime import get_principal, get_runtime
-from modelark_mcp.security.url_policy import validate_url
+from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._errors import provider_error_result
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
@@ -157,7 +158,14 @@ async def vod_transcode_video(
             "BYTEPLUS_VOD_MEDIAKIT_API_KEY is not configured. Set it to enable this tool."
         )
 
-    validated_source = validate_url(str(input.video_url))
+    try:
+        validated_source = validate_url(str(input.video_url))
+    except UrlValidationError as exc:
+        log_warning("vod_transcode_video_invalid_source_url", error=str(exc))
+        return ToolResult(
+            content=[{"type": "text", "text": UrlValidationError.safe_message}],
+            is_error=True,
+        )
     request = VodMediaKitTranscodeRequest.model_validate(
         {
             "video_url": validated_source.url,

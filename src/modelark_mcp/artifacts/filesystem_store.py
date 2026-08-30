@@ -339,12 +339,12 @@ class FilesystemArtifactStore(ArtifactStore):
         if not path.exists():
             raise FileNotFoundError(f"Artifact '{artifact_id}' not found.")
 
-        data = path.read_bytes()
-
         metadata = self._load_metadata(meta_path)
         owner = auth or AuthContext()
         if metadata.principal_id != owner.principal_id or metadata.tenant_id != owner.tenant_id:
             raise PermissionError("Artifact is not owned by the current principal.")
+
+        data = path.read_bytes()
 
         artifact = StoredArtifact(
             data=data,

@@ -17,6 +17,7 @@ from typing import ClassVar, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.domain.artifacts import MediaType
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.security.media_policy import (
     check_audio_duration_from_base64,
     check_base64_size,
@@ -25,7 +26,7 @@ from modelark_mcp.security.media_policy import (
     validate_image_mime,
     validate_video_mime,
 )
-from modelark_mcp.security.url_policy import validate_url
+from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 
 
 class MediaSourceKind(StrEnum):
@@ -71,7 +72,11 @@ class MediaSource(BaseModel):
             raise ValueError("url must not be set when kind is 'base64'")
 
         if self.kind == MediaSourceKind.url and self.url:
-            validate_url(self.url)
+            try:
+                validate_url(self.url)
+            except UrlValidationError as exc:
+                log_warning("media_source_invalid_url", error=str(exc))
+                raise ValueError(UrlValidationError.safe_message) from exc
 
         if self.kind == MediaSourceKind.base64 and self.data:
             limits = get_media_limits()
@@ -134,7 +139,11 @@ class AudioReference(BaseModel):
             raise ValueError("speaker_id/url must not be set when kind is 'base64'")
 
         if self.kind == "url" and self.url:
-            validate_url(self.url)
+            try:
+                validate_url(self.url)
+            except UrlValidationError as exc:
+                log_warning("audio_reference_invalid_url", error=str(exc))
+                raise ValueError(UrlValidationError.safe_message) from exc
 
         if self.kind == "base64" and self.data:
             limits = get_media_limits()
