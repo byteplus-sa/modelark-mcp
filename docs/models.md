@@ -8,7 +8,7 @@ with an actionable `ValueError`.
 
 ## Families
 
-`ModelFamily` (`StrEnum`) has nine members:
+`ModelFamily` (`StrEnum`) has eleven members:
 
 | Member | Value |
 |---|---|
@@ -21,6 +21,8 @@ with an actionable `ValueError`.
 | `SEEDANCE_2_5` | `seedance_2_5` |
 | `SEED_2_1_PRO` | `seed_2_1_pro` |
 | `SEED_2_1_TURBO` | `seed_2_1_turbo` |
+| `SEED3D_HYPER3D` | `seed3d_hyper3d` |
+| `SEED3D_HITEM3D` | `seed3d_hitem3d` |
 
 The binding enums (`config/env.py`):
 
@@ -28,6 +30,7 @@ The binding enums (`config/env.py`):
 - `SeedanceFamily`: `STANDARD = "standard"`, `FAST = "fast"`, `MINI = "mini"`,
   `SEEDANCE_2_5 = "seedance_2_5"`.
 - `SeedUnderstandingFamily`: `PRO = "pro"`, `TURBO = "turbo"`.
+- `Seed3DFamily`: `HYPER3D = "hyper3d"`, `HITEM3D = "hitem3d"`.
 
 ## Image capabilities (`ImageCapabilities`)
 

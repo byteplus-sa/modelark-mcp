@@ -32,6 +32,7 @@ from modelark_mcp.security.auth_context import AuthContext
 from modelark_mcp.security.media_policy import (
     decode_base64_safely,
     get_media_limits,
+    validate_3d_mime,
     validate_audio_mime,
     validate_image_mime,
     validate_video_mime,
@@ -51,6 +52,7 @@ def _max_bytes_for(limits: MediaLimits, media_type: MediaType) -> int:
         "image": limits.image_max_bytes,
         "audio": limits.audio_max_bytes,
         "video": limits.video_max_bytes,
+        "three_d": limits.three_d_max_bytes,
     }[media_type]
 
 
@@ -59,6 +61,7 @@ def _validate_mime(media_type: MediaType, mime_type: str) -> None:
         "image": validate_image_mime,
         "audio": validate_audio_mime,
         "video": validate_video_mime,
+        "three_d": validate_3d_mime,
     }[media_type](mime_type)
 
 

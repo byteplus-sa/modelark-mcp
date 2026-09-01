@@ -323,6 +323,7 @@ async def test_copy_preserves_artifact_size_ceiling(
             image_max_bytes=4,
             audio_max_bytes=4,
             video_max_bytes=6,
+            three_d_max_bytes=6,
         ),
     )
     try:

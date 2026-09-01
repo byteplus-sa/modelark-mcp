@@ -45,6 +45,11 @@ class SeedUnderstandingFamily(StrEnum):
     TURBO = "turbo"
 
 
+class Seed3DFamily(StrEnum):
+    HYPER3D = "hyper3d"
+    HITEM3D = "hitem3d"
+
+
 class AuthMode(StrEnum):
     LOCAL = "local"
     JWT = "jwt"
@@ -63,6 +68,11 @@ class VideoModelBinding(BaseModel):
 class UnderstandingModelBinding(BaseModel):
     model_id: str = Field(min_length=1)
     family: SeedUnderstandingFamily
+
+
+class Seed3DModelBinding(BaseModel):
+    model_id: str = Field(min_length=1)
+    family: Seed3DFamily
 
 
 class Settings(BaseSettings):
@@ -179,6 +189,30 @@ class Settings(BaseSettings):
     seed_understanding_model_bindings: list[UnderstandingModelBinding] = Field(
         default_factory=list,
         validation_alias="SEED_UNDERSTANDING_MODEL_BINDINGS",
+    )
+
+    # --- 3D generation feature flag and model bindings ----------------------
+
+    seed3d_enabled: bool = Field(
+        default=False,
+        validation_alias="BYTEPLUS_MODELARK_3D_ENABLED",
+        description=(
+            "Feature flag for ModelArk 3D generation (Hyper3D + Hitem3d). "
+            "Disabled by default. When false, no 3D tools are registered even "
+            "if BYTEPLUS_MODELARK_API_KEY is configured."
+        ),
+    )
+    hyper3d_default_model: str = Field(
+        default="hyper3d-gen2",
+        validation_alias="HYPER3D_DEFAULT_MODEL",
+    )
+    hitem3d_default_model: str = Field(
+        default="hitem3d-2-0",
+        validation_alias="HITEM3D_DEFAULT_MODEL",
+    )
+    seed3d_model_bindings: list[Seed3DModelBinding] = Field(
+        default_factory=list,
+        validation_alias="SEED3D_MODEL_BINDINGS",
     )
 
     # --- MCP transport -------------------------------------------------------
@@ -416,6 +450,11 @@ class Settings(BaseSettings):
         return bool(self.modelark_api_key)
 
     @property
+    def has_seed3d(self) -> bool:
+        """Whether ModelArk 3D generation is enabled (separate flag, same key)."""
+        return self.seed3d_enabled and bool(self.modelark_api_key)
+
+    @property
     def has_seed_audio(self) -> bool:
         """Whether Seed Audio credentials are configured."""
         return bool(self.seed_speech_api_key)
@@ -562,6 +601,18 @@ class Settings(BaseSettings):
                 )
             ]
 
+        if not self.seed3d_model_bindings:
+            self.seed3d_model_bindings = [
+                Seed3DModelBinding(
+                    model_id=self.hyper3d_default_model,
+                    family=Seed3DFamily.HYPER3D,
+                ),
+                Seed3DModelBinding(
+                    model_id=self.hitem3d_default_model,
+                    family=Seed3DFamily.HITEM3D,
+                ),
+            ]
+
         for label, bindings, default_model in (
             ("Seedream", self.seedream_model_bindings, self.seedream_default_model),
             ("Seedance", self.seedance_model_bindings, self.seedance_default_model),
@@ -570,6 +621,8 @@ class Settings(BaseSettings):
                 self.seed_understanding_model_bindings,
                 self.seed_understanding_default_model,
             ),
+            ("Seed3D", self.seed3d_model_bindings, self.hyper3d_default_model),
+            ("Seed3D", self.seed3d_model_bindings, self.hitem3d_default_model),
         ):
             ids = [binding.model_id for binding in bindings]
             if len(ids) != len(set(ids)):

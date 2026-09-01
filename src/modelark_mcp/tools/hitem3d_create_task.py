@@ -1,0 +1,138 @@
+"""``hitem3d_create_task`` tool — create an asynchronous Hitem3d 3D task.
+
+Hitem3d (Hitem3d-2.0) is image-to-3D only (1-4 images). Model parameters
+are passed as ``--<param> <value>`` commands in the text content item.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from fastmcp import Context
+from fastmcp.tools import ToolResult
+from pydantic import BaseModel, Field, model_validator
+
+from modelark_mcp.config.env import get_settings
+from modelark_mcp.config.model_capabilities import get_capability_registry
+from modelark_mcp.tools._seed3d_shared import (
+    Seed3DCreateTaskOutput,
+    Seed3DImageInput,
+    execute_seed3d_create,
+)
+
+_HITEM3D_FILE_FORMATS: dict[str, int] = {
+    "obj": 1,
+    "glb": 2,
+    "stl": 3,
+    "fbx": 4,
+    "usdz": 5,
+}
+
+
+class Hitem3dCreateTaskInput(BaseModel):
+    """Input model for ``hitem3d_create_task``."""
+
+    images: list[Seed3DImageInput] = Field(
+        ...,
+        min_length=1,
+        max_length=4,
+        description="Reference images for image-to-3D. 1-4 images required.",
+    )
+    model: str | None = Field(
+        None,
+        description="Model ID. Omit to use the configured Hitem3d default.",
+    )
+    callback_url: str | None = Field(
+        None,
+        description="Optional callback URL notified when the task status changes.",
+    )
+    resolution: Literal["1536", "1536pro"] | None = Field(
+        None,
+        description="Model resolution. 1536 (default) or 1536pro.",
+    )
+    face: int | None = Field(
+        None,
+        ge=100000,
+        le=2000000,
+        description="Custom model face count (100000-2000000).",
+    )
+    file_format: Literal["obj", "glb", "stl", "fbx", "usdz"] | None = Field(
+        None,
+        description="Output 3D file format. Defaults to obj (provider default).",
+    )
+    request_type: Literal[1, 3] | None = Field(
+        None,
+        description="Request type. 1 = geometry only, 3 = geometry + texture (default).",
+    )
+    multi_images_bit: str | None = Field(
+        None,
+        max_length=4,
+        description=(
+            "Bitmap marking which views are present, in order front/back/left/right "
+            "(e.g. '1010' = front + left)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_multi_images_bit(self) -> Hitem3dCreateTaskInput:
+        if self.multi_images_bit is not None and not all(
+            ch in "01" for ch in self.multi_images_bit
+        ):
+            raise ValueError("multi_images_bit must contain only 0 and 1.")
+        return self
+
+    def command_params(self) -> dict[str, object]:
+        """Collect model text-command parameters for the provider request."""
+        return {
+            "resolution": self.resolution,
+            "face": self.face,
+            "fileformat": (_HITEM3D_FILE_FORMATS[self.file_format] if self.file_format else None),
+            "request_type": self.request_type,
+            "multi_images_bit": self.multi_images_bit,
+        }
+
+
+async def hitem3d_create_task(
+    input: Hitem3dCreateTaskInput, ctx: Context
+) -> Seed3DCreateTaskOutput | ToolResult:
+    """Create an asynchronous Hitem3d 3D generation task.
+
+    Hitem3d is image-to-3D only. The task runs asynchronously — use
+    ``hitem3d_get_task`` to poll for completion.
+    """
+    await ctx.info("Creating Hitem3d 3D generation task")
+    settings = get_settings()
+    if not settings.has_seed3d:
+        raise ValueError(
+            "BYTEPLUS_MODELARK_3D_ENABLED is not set. Enable it in .env to use Hitem3d tools."
+        )
+
+    registry = get_capability_registry()
+    caps = registry.get_seed3d_capabilities(input.model)
+
+    result = await execute_seed3d_create(
+        ctx=ctx,
+        caps=caps,
+        prompt=None,
+        images=input.images,
+        seed=None,
+        callback_url=input.callback_url,
+        command_params=input.command_params(),
+    )
+    if isinstance(result, ToolResult):
+        return result
+
+    task_id, _request_id = result
+    return Seed3DCreateTaskOutput(
+        task_id=task_id,
+        status="queued",
+        recommended_poll_after_ms=5000,
+    )
+
+
+TOOL_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+    "openWorldHint": True,
+}

@@ -1,0 +1,36 @@
+"""``hitem3d_get_task`` tool — retrieve the status and output of a Hitem3d task.
+
+On first successful retrieval, copies the 24-hour ``file_url`` (zip package
+of the 3D file) into the durable artifact store.
+"""
+
+from __future__ import annotations
+
+from fastmcp import Context
+from fastmcp.tools import ToolResult
+
+from modelark_mcp.tools._seed3d_shared import (
+    Seed3DGetTaskInput,
+    Seed3DTaskOutput,
+    seed3d_get_task_impl,
+)
+
+
+async def hitem3d_get_task(
+    input: Seed3DGetTaskInput, ctx: Context
+) -> Seed3DTaskOutput | ToolResult:
+    """Retrieve the status and output of a Hitem3d 3D generation task.
+
+    On first successful retrieval with ``persist_output=True``, copies the
+    provider's 24-hour zip URL into durable artifact storage so the
+    ``seed-media://`` resource remains available after expiry.
+    """
+    return await seed3d_get_task_impl(input, ctx, "hitem3d")
+
+
+TOOL_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}

@@ -14,6 +14,7 @@ products plus artifact access and an optional media upload helper:
 | **Seed Audio** | `seed_audio_generate`, `seed_audio_generate_variations` | Full-scene audio generation through Seed Speech |
 | **Seedream** | `seedream_generate_image`, `seedream_edit_image`, `seedream_generate_image_variations` | Image generation and editing through ModelArk |
 | **Seedance** | `seedance_create_task`, `seedance_create_task_variations`, `seedance_get_task`, `seedance_list_tasks`, `seedance_cancel_or_delete_task` | Async video generation and task management through ModelArk |
+| **Hyper3D / Hitem3d** | `hyper3d_*`, `hitem3d_*` task tools | Async 3D model generation through ModelArk (gated by `BYTEPLUS_MODELARK_3D_ENABLED`, disabled by default) |
 | **Seed 2.1 Understanding** | `seed_understand` | Multimodal video/image understanding and reasoning through ModelArk Chat Completions |
 | **Speech-to-Text** | `speech_to_text` | Synchronous audio transcription through Seed Speech ASR (HTTP) |
 | **VOD AI MediaKit** | `vod_enhance_video` | Submit asynchronous AI enhancement for the exact common/professional/4K/high/24-fps profile |

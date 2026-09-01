@@ -29,6 +29,14 @@ surface.
 | 20 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
 | 21 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
 | 22 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 23 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
+| 24 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
+| 25 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
+| 26 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
+| 27 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
+| 28 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
+| 29 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
+| 30 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
 
 ## Tool Annotations
 
@@ -56,6 +64,14 @@ surface.
 | `vod_get_transcode_task` | true | false | true | false |
 | `vod_separate_audio` | false | false | false | true |
 | `vod_get_audio_separation` | true | false | true | false |
+| `hyper3d_create_task` | false | false | false | true |
+| `hyper3d_get_task` | true | false | true | false |
+| `hyper3d_list_tasks` | true | false | true | false |
+| `hyper3d_cancel_or_delete_task` | false | true | false | true |
+| `hitem3d_create_task` | false | false | false | true |
+| `hitem3d_get_task` | true | false | true | false |
+| `hitem3d_list_tasks` | true | false | true | false |
+| `hitem3d_cancel_or_delete_task` | false | true | false | true |
 
 ---
 

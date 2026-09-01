@@ -370,6 +370,122 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             auth=component_auth(settings, scope),
         )(handler)
 
+    if settings.has_seed3d:
+        from modelark_mcp.tools._seed3d_shared import (
+            Seed3DCancelOrDeleteOutput,
+            Seed3DCreateTaskOutput,
+            Seed3DTaskOutput,
+            Seed3DTaskPage,
+        )
+        from modelark_mcp.tools.hitem3d_cancel_or_delete_task import (
+            TOOL_ANNOTATIONS as hitem3d_cancel_annotations,
+        )
+        from modelark_mcp.tools.hitem3d_cancel_or_delete_task import (
+            hitem3d_cancel_or_delete_task,
+        )
+        from modelark_mcp.tools.hitem3d_create_task import (
+            TOOL_ANNOTATIONS as hitem3d_create_annotations,
+        )
+        from modelark_mcp.tools.hitem3d_create_task import hitem3d_create_task
+        from modelark_mcp.tools.hitem3d_get_task import (
+            TOOL_ANNOTATIONS as hitem3d_get_annotations,
+        )
+        from modelark_mcp.tools.hitem3d_get_task import hitem3d_get_task
+        from modelark_mcp.tools.hitem3d_list_tasks import (
+            TOOL_ANNOTATIONS as hitem3d_list_annotations,
+        )
+        from modelark_mcp.tools.hitem3d_list_tasks import hitem3d_list_tasks
+        from modelark_mcp.tools.hyper3d_cancel_or_delete_task import (
+            TOOL_ANNOTATIONS as hyper3d_cancel_annotations,
+        )
+        from modelark_mcp.tools.hyper3d_cancel_or_delete_task import (
+            hyper3d_cancel_or_delete_task,
+        )
+        from modelark_mcp.tools.hyper3d_create_task import (
+            TOOL_ANNOTATIONS as hyper3d_create_annotations,
+        )
+        from modelark_mcp.tools.hyper3d_create_task import hyper3d_create_task
+        from modelark_mcp.tools.hyper3d_get_task import (
+            TOOL_ANNOTATIONS as hyper3d_get_annotations,
+        )
+        from modelark_mcp.tools.hyper3d_get_task import hyper3d_get_task
+        from modelark_mcp.tools.hyper3d_list_tasks import (
+            TOOL_ANNOTATIONS as hyper3d_list_annotations,
+        )
+        from modelark_mcp.tools.hyper3d_list_tasks import hyper3d_list_tasks
+
+        seed3d_registrations = (
+            (
+                "hyper3d_create_task",
+                hyper3d_create_annotations,
+                Seed3DCreateTaskOutput,
+                "hyper3d:create",
+                hyper3d_create_task,
+            ),
+            (
+                "hyper3d_get_task",
+                hyper3d_get_annotations,
+                Seed3DTaskOutput,
+                "hyper3d:read",
+                hyper3d_get_task,
+            ),
+            (
+                "hyper3d_list_tasks",
+                hyper3d_list_annotations,
+                Seed3DTaskPage,
+                "hyper3d:read",
+                hyper3d_list_tasks,
+            ),
+            (
+                "hyper3d_cancel_or_delete_task",
+                hyper3d_cancel_annotations,
+                Seed3DCancelOrDeleteOutput,
+                "hyper3d:delete",
+                hyper3d_cancel_or_delete_task,
+            ),
+            (
+                "hitem3d_create_task",
+                hitem3d_create_annotations,
+                Seed3DCreateTaskOutput,
+                "hitem3d:create",
+                hitem3d_create_task,
+            ),
+            (
+                "hitem3d_get_task",
+                hitem3d_get_annotations,
+                Seed3DTaskOutput,
+                "hitem3d:read",
+                hitem3d_get_task,
+            ),
+            (
+                "hitem3d_list_tasks",
+                hitem3d_list_annotations,
+                Seed3DTaskPage,
+                "hitem3d:read",
+                hitem3d_list_tasks,
+            ),
+            (
+                "hitem3d_cancel_or_delete_task",
+                hitem3d_cancel_annotations,
+                Seed3DCancelOrDeleteOutput,
+                "hitem3d:delete",
+                hitem3d_cancel_or_delete_task,
+            ),
+        )
+        for (
+            seed3d_name,
+            seed3d_annotations,
+            seed3d_output_model,
+            seed3d_scope,
+            seed3d_handler,
+        ) in seed3d_registrations:
+            server.tool(
+                name=seed3d_name,
+                annotations={**seed3d_annotations},
+                output_schema=seed3d_output_model.model_json_schema(),
+                auth=component_auth(settings, seed3d_scope),
+            )(seed3d_handler)
+
 
 class HardenedFastMCP(FastMCP):
     """FastMCP subclass that applies ASGI body and rate-limit middleware for HTTP."""
@@ -471,6 +587,7 @@ def create_server(
             f"Build: {stamp}\n"
             "Status: healthy\n"
             f"ModelArk configured: {resolved_settings.has_modelark}\n"
+            f"Seed 3D configured: {resolved_settings.has_seed3d}\n"
             f"Seed Audio configured: {resolved_settings.has_seed_audio}\n"
             f"VOD AI MediaKit configured: {resolved_settings.has_vod_mediakit}\n"
             f"TOS configured: {resolved_settings.has_tos}\n"

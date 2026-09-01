@@ -17,6 +17,8 @@ COST_PER_VIDEO_TASK_2_5 = 0.35
 COST_PER_STT_SECOND = 0.0006
 COST_UNDERSTANDING_INPUT_PER_MTOK = 0.50
 COST_UNDERSTANDING_OUTPUT_PER_MTOK = 3.00
+COST_PER_3D_TASK_HYPER3D = 0.25
+COST_PER_3D_TASK_HITEM3D = 1.0
 
 # Default max concurrent provider calls.
 DEFAULT_MAX_CONCURRENT = 5
@@ -37,6 +39,13 @@ def _video_cost_for_model(model_id: str | None) -> float:
     if model_id and "seedance-2-5" in model_id:
         return COST_PER_VIDEO_TASK_2_5
     return COST_PER_VIDEO_TASK
+
+
+def _3d_cost_for_model(model_id: str | None) -> float:
+    """Return the cost-per-task for a given 3D model, defaulting to Hyper3D."""
+    if model_id and "hitem3d" in model_id:
+        return COST_PER_3D_TASK_HITEM3D
+    return COST_PER_3D_TASK_HYPER3D
 
 
 def estimate_cost(
@@ -67,6 +76,8 @@ def estimate_cost(
         return round(variations * max(duration_seconds, 10) * COST_PER_AUDIO_SECOND, 2)
     if product == "video":
         return round(variations * _video_cost_for_model(model_id), 2)
+    if product == "3d":
+        return round(variations * _3d_cost_for_model(model_id), 2)
     if product == "stt":
         return round(variations * max(duration_seconds, 10) * COST_PER_STT_SECOND, 2)
     if product == "understanding":

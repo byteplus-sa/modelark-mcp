@@ -17,6 +17,7 @@ from enum import StrEnum
 from typing import Any
 
 from modelark_mcp.config.env import (
+    Seed3DFamily,
     SeedanceFamily,
     SeedreamFamily,
     SeedUnderstandingFamily,
@@ -36,6 +37,8 @@ class ModelFamily(StrEnum):
     SEEDANCE_2_5 = "seedance_2_5"
     SEED_2_1_PRO = "seed_2_1_pro"
     SEED_2_1_TURBO = "seed_2_1_turbo"
+    SEED3D_HYPER3D = "seed3d_hyper3d"
+    SEED3D_HITEM3D = "seed3d_hitem3d"
 
 
 @dataclass(frozen=True)
@@ -89,6 +92,20 @@ class UnderstandingCapabilities:
     supports_thinking: bool = True
     max_media_parts: int = 32
     reasoning_efforts: tuple[str, ...] = ("low", "medium", "high")
+
+
+@dataclass(frozen=True)
+class Seed3DCapabilities:
+    """Capabilities for 3D generation models (Hyper3D, Hitem3d)."""
+
+    family: ModelFamily
+    model_id: str
+    supports_text_to_3d: bool
+    max_reference_images: int
+    supported_file_formats: tuple[str, ...]
+    supports_seed: bool
+    seed_range: tuple[int, int] = (0, 65535)
+    supports_callback_url: bool = True
 
 
 def _seedream_capabilities() -> dict[str, ImageCapabilities]:
@@ -197,6 +214,33 @@ def _seed_understanding_capabilities() -> dict[str, UnderstandingCapabilities]:
     return capabilities
 
 
+def _seed3d_capabilities() -> dict[str, Seed3DCapabilities]:
+    """Build the Seed3D capability registry from configured model IDs."""
+    settings = get_settings()
+    capabilities: dict[str, Seed3DCapabilities] = {}
+    for binding in settings.seed3d_model_bindings:
+        if binding.family is Seed3DFamily.HYPER3D:
+            capabilities[binding.model_id] = Seed3DCapabilities(
+                family=ModelFamily.SEED3D_HYPER3D,
+                model_id=binding.model_id,
+                supports_text_to_3d=True,
+                max_reference_images=5,
+                supported_file_formats=("glb", "obj", "usdz", "fbx", "stl"),
+                supports_seed=True,
+                seed_range=(0, 65535),
+            )
+        else:
+            capabilities[binding.model_id] = Seed3DCapabilities(
+                family=ModelFamily.SEED3D_HITEM3D,
+                model_id=binding.model_id,
+                supports_text_to_3d=False,
+                max_reference_images=4,
+                supported_file_formats=("obj", "glb", "stl", "fbx", "usdz"),
+                supports_seed=False,
+            )
+    return capabilities
+
+
 class CapabilityRegistry:
     """Registry of model capabilities, keyed by configured model ID."""
 
@@ -206,6 +250,7 @@ class CapabilityRegistry:
         self._understanding_caps: dict[str, UnderstandingCapabilities] = (
             _seed_understanding_capabilities()
         )
+        self._seed3d_caps: dict[str, Seed3DCapabilities] = _seed3d_capabilities()
 
     def get_image_capabilities(self, model_id: str | None = None) -> ImageCapabilities:
         """Return image capabilities for the given model or the default."""
@@ -236,6 +281,22 @@ class CapabilityRegistry:
     def list_video_models(self) -> list[str]:
         """Return all configured video model IDs."""
         return list(self._video_caps.keys())
+
+    def get_seed3d_capabilities(self, model_id: str | None = None) -> Seed3DCapabilities:
+        """Return 3D generation capabilities for the given model or the default."""
+        settings = get_settings()
+        if model_id is None:
+            model_id = settings.hyper3d_default_model
+        if model_id not in self._seed3d_caps:
+            raise ValueError(
+                f"Model '{model_id}' is not in the configured Seed3D capability "
+                f"registry. Allowed: {list(self._seed3d_caps.keys())}"
+            )
+        return self._seed3d_caps[model_id]
+
+    def list_seed3d_models(self) -> list[str]:
+        """Return all configured 3D generation model IDs."""
+        return list(self._seed3d_caps.keys())
 
     def get_understanding_capabilities(
         self, model_id: str | None = None
