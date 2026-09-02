@@ -179,17 +179,6 @@ class Seed3DTaskError(BaseModel):
     message: str = Field("", description="Error description.")
 
 
-class Seed3DTaskSettings(BaseModel):
-    """Known Seed3D settings, preserving provider extensions."""
-
-    model_config = ConfigDict(extra="allow")
-
-    file_format: str | None = Field(None, description="Generated 3D file format.")
-    subdivision_level: str | None = Field(
-        None, description="Polygon count level (high/medium/low)."
-    )
-
-
 class VariationResult(BaseModel):
     """Result of a single variation within a parallel generation."""
 

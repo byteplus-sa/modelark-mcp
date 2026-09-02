@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Literal
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.model_capabilities import Seed3DCapabilities
 from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
@@ -19,7 +19,6 @@ from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.domain.media import MediaSource
 from modelark_mcp.domain.models import (
     Seed3DTaskError,
-    Seed3DTaskSettings,
     Seed3DTaskStatus,
     Seed3DTaskSummary,
     Seed3DTaskUsage,
@@ -81,10 +80,6 @@ class Seed3DTaskOutput(BaseModel):
     )
     usage: Seed3DTaskUsage | None = Field(
         None, description="Token usage and billing information for the completed task."
-    )
-    settings: Seed3DTaskSettings = Field(
-        default_factory=lambda: Seed3DTaskSettings(),
-        description="Generation settings used for this task (file format, subdivision level, etc.).",
     )
 
 
@@ -148,6 +143,23 @@ class Seed3DCancelOrDeleteInput(BaseModel):
         description="Must be True to confirm the destructive action. This is a safety guard.",
     )
 
+    @model_validator(mode="after")
+    def validate_mode_status_consistency(self) -> Seed3DCancelOrDeleteInput:
+        """Ensure the mode is valid for the expected status."""
+        if self.mode == "cancel" and self.expected_status not in _CANCELABLE_STATES:
+            raise ValueError(
+                f"Cancel mode requires the task to be in 'queued' state, "
+                f"but expected_status is '{self.expected_status}'. "
+                f"Use mode='delete' for terminal states."
+            )
+        if self.mode == "delete" and self.expected_status not in _DELETABLE_STATES:
+            raise ValueError(
+                f"Delete mode requires the task to be in a terminal state "
+                f"(succeeded, failed, expired), but expected_status is "
+                f"'{self.expected_status}'. Use mode='cancel' for queued tasks."
+            )
+        return self
+
 
 class Seed3DCancelOrDeleteOutput(BaseModel):
     """Output model for 3D cancel/delete tools."""
@@ -203,7 +215,12 @@ async def execute_seed3d_create(
 
     await ctx.report_progress(progress=50, total=100)
 
-    estimated_cost = log_cost_estimate(product="3d", variations=1, model_id=caps.model_id)
+    estimated_cost = log_cost_estimate(
+        product="3d",
+        variations=1,
+        model_id=caps.model_id,
+        seed3d_family=caps.family.value,
+    )
 
     service = Seed3DService()
     try:
@@ -314,7 +331,6 @@ async def seed3d_get_task_impl(
         error=error_dict,
         file=file_ref,
         usage=Seed3DService.extract_usage(task),
-        settings=Seed3DTaskSettings.model_validate(task.content or {}),
     )
 
 
@@ -374,7 +390,7 @@ async def seed3d_list_tasks_impl(
         total=response.total,
         page=input.page or 1,
         page_size=input.page_size or 20,
-        has_more=False,
+        has_more=response.has_more or False,
     )
 
 

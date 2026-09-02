@@ -13,7 +13,7 @@ from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
-from modelark_mcp.config.model_capabilities import get_capability_registry
+from modelark_mcp.config.model_capabilities import ModelFamily, get_capability_registry
 from modelark_mcp.tools._seed3d_shared import (
     Seed3DCreateTaskOutput,
     Seed3DImageInput,
@@ -108,7 +108,15 @@ async def hitem3d_create_task(
         )
 
     registry = get_capability_registry()
-    caps = registry.get_seed3d_capabilities(input.model)
+    caps = registry.get_seed3d_capabilities(
+        input.model, default_model=settings.hitem3d_default_model
+    )
+
+    if caps.family is not ModelFamily.SEED3D_HITEM3D:
+        raise ValueError(
+            f"Model '{caps.model_id}' is not a Hitem3d model. "
+            f"Use hyper3d_create_task for Hyper3D models."
+        )
 
     result = await execute_seed3d_create(
         ctx=ctx,

@@ -278,6 +278,7 @@ class Seed3DTaskListResponse(BaseModel):
         validation_alias=AliasChoices("items", "data"),
     )
     total: int = 0
+    has_more: bool | None = None
 
 
 # ---------------------------------------------------------------------------

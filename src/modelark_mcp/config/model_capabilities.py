@@ -282,11 +282,16 @@ class CapabilityRegistry:
         """Return all configured video model IDs."""
         return list(self._video_caps.keys())
 
-    def get_seed3d_capabilities(self, model_id: str | None = None) -> Seed3DCapabilities:
-        """Return 3D generation capabilities for the given model or the default."""
+    def get_seed3d_capabilities(
+        self,
+        model_id: str | None = None,
+        *,
+        default_model: str | None = None,
+    ) -> Seed3DCapabilities:
+        """Return 3D generation capabilities for the given model or the family default."""
         settings = get_settings()
         if model_id is None:
-            model_id = settings.hyper3d_default_model
+            model_id = default_model or settings.hyper3d_default_model
         if model_id not in self._seed3d_caps:
             raise ValueError(
                 f"Model '{model_id}' is not in the configured Seed3D capability "
