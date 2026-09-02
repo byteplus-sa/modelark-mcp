@@ -749,3 +749,38 @@ presigned URL has expired or is about to expire.
 
 Returns `MediaPresignOutput` with presigned `url`, `expires_at`, and
 `object_key`.
+
+## hyper3d_create_task / hitem3d_create_task
+
+Create an asynchronous 3D generation task. Both tools are gated by
+`BYTEPLUS_MODELARK_3D_ENABLED=true` (disabled by default) and reuse the
+ModelArk API key.
+
+- `hyper3d_create_task` (Hyper3d-Gen2): text-to-3D and/or image-to-3D
+  (1-5 images). Exposes `seed`, `callback_url`, and model text-command
+  parameters (`material`, `mesh_mode`, `quality_override`, `addons`,
+  `use_original_alpha`, `bbox_condition`, `ta_pose`, `subdivision_level`,
+  `file_format`, `hd_texture`).
+- `hitem3d_create_task` (Hitem3d-2.0): image-to-3D only (1-4 images).
+  Exposes `callback_url` and model text-command parameters (`resolution`,
+  `face`, `file_format`, `request_type`, `multi_images_bit`).
+
+### Output
+
+Returns `Seed3DCreateTaskOutput` with `task_id`, `status="queued"`, and a
+recommended polling delay.
+
+## hyper3d_get_task / hitem3d_get_task
+
+Retrieve a 3D task's status and, on first success, persist the provider's
+zip URL into durable artifact storage (`seed-media://artifacts/{id}`).
+
+## hyper3d_list_tasks / hitem3d_list_tasks
+
+List recent 3D tasks (provider keeps 7 days), filtered by status, task IDs,
+or model.
+
+## hyper3d_cancel_or_delete_task / hitem3d_cancel_or_delete_task
+
+Cancel a queued task or delete the record of a terminal (succeeded, failed,
+expired) task. The handler verifies `expected_status` matches before acting.

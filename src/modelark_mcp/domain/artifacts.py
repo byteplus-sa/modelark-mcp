@@ -20,6 +20,7 @@ class MediaType(StrEnum):
     IMAGE = "image"
     AUDIO = "audio"
     VIDEO = "video"
+    THREE_D = "three_d"
 
 
 class ArtifactRef(BaseModel):

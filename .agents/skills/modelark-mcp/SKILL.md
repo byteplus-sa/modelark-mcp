@@ -44,6 +44,7 @@ Invoke this skill when the user wants to:
 - generate or edit an image;
 - generate audio, voice-clone from references, or request several variations;
 - create, poll, list, cancel, or delete Seedance video tasks (Seedance 2.0 and 2.5);
+- create, poll, list, cancel, or delete Hyper3D and Hitem3d 3D generation tasks (requires the 3D feature flag);
 - understand images or videos (OCR, scene analysis, content review), or use a
   multimodal reasoning sub-agent;
 - transcribe audio or video into timestamped, speaker-diarized text;
@@ -95,6 +96,21 @@ gracefully degrades to whatever is configured.
 - `seedance_2_5_create_task`
 - `seedance_2_5_create_task_variations`
 - `seed_understand`
+
+### Requires `BYTEPLUS_MODELARK_3D_ENABLED=true` (and `BYTEPLUS_MODELARK_API_KEY`)
+
+- `hyper3d_create_task`
+- `hyper3d_get_task`
+- `hyper3d_list_tasks`
+- `hyper3d_cancel_or_delete_task`
+- `hitem3d_create_task`
+- `hitem3d_get_task`
+- `hitem3d_list_tasks`
+- `hitem3d_cancel_or_delete_task`
+
+3D generation is **disabled by default**; it reuses the ModelArk API key and
+base URL but is gated by its own feature flag so it stays off unless
+explicitly enabled.
 
 ### Requires object storage credentials (TOS or S3)
 
@@ -596,7 +612,7 @@ polling.
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` \| `"4k"` | No | |
 | `ratio` | `str` | No | Aspect ratio. For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
 | `duration` | `int` | No | -1 (auto) to 15 seconds. Ignored for edit tasks (auto-derived from input video) |
-| `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
+| `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto`. Note: 2.0 `edit_video` output caps at ~5s in practice. |
 | `generate_audio` | `bool` | No | Generate audio track |
 | `watermark` | `bool` | No | Provider watermark |
 | `return_last_frame` | `bool` | No | Include last frame image in output |
@@ -763,9 +779,9 @@ Create an asynchronous Seedance 2.5 video generation task.
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). |
 | `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` | No | 2.5 supports 480p, 720p, and 1080p. 4k is not supported. |
-| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
+| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit`, auto-derived from input video. For first/last-frame, locks to first image. |
 | `duration` | `int` | No | -1 (auto) to 30 seconds. Ignored for edit tasks (auto-derived from input video). |
-| `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto`. |
+| `omni_reference_task_type` | `str` | No | Task type hint. 2.5 values: `auto | reference | edit | extend` — `edit_video` is 2.0-only and is rejected. Default: `auto`. |
 | `generate_audio` | `bool` | No | Whether to generate an audio track. |
 | `watermark` | `bool` | No | Apply AIGC watermark. |
 | `return_last_frame` | `bool` | No | Return the last frame as a separate image. |

@@ -28,6 +28,22 @@ class SeedanceTaskStatus(StrEnum):
         return cls.UNKNOWN
 
 
+class Seed3DTaskStatus(StrEnum):
+    """Task lifecycle states for 3D generation (identical to Seedance)."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    CANCELLED = "cancelled"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    EXPIRED = "expired"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def _missing_(cls, value: object) -> Seed3DTaskStatus:
+        return cls.UNKNOWN
+
+
 class SubtitleUtterance(BaseModel):
     """Utterance-level subtitle timing returned by Seed Audio."""
 
@@ -133,6 +149,34 @@ class SeedanceTaskSettings(BaseModel):
     )
     service_tier: str | None = Field(None, description="Service tier used (default or flex).")
     priority: int | None = Field(None, description="Task priority (0-9).")
+
+
+class Seed3DTaskUsage(BaseModel):
+    """Usage/billing information for a completed Seed3D task."""
+
+    completion_tokens: int | None = Field(
+        default=None, description="Tokens consumed generating 3D."
+    )
+    total_tokens: int | None = Field(
+        default=None, description="Total tokens consumed (equals completion_tokens for 3D)."
+    )
+
+
+class Seed3DTaskSummary(BaseModel):
+    """Summary of a Seed3D task for list results."""
+
+    task_id: str = Field(..., description="Provider task ID.")
+    model: str = Field(..., description="Model ID used for generation.")
+    status: Seed3DTaskStatus = Field(..., description="Current task status.")
+    created_at: str = Field(..., description="ISO-8601 timestamp of task creation.")
+    updated_at: str = Field(..., description="ISO-8601 timestamp of last status update.")
+
+
+class Seed3DTaskError(BaseModel):
+    """Typed task failure returned by Seed3D."""
+
+    code: str = Field("", description="Provider error code.")
+    message: str = Field("", description="Error description.")
 
 
 class VariationResult(BaseModel):

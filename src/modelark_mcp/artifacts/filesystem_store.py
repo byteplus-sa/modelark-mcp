@@ -29,6 +29,7 @@ from modelark_mcp.security.auth_context import AuthContext
 from modelark_mcp.security.media_policy import (
     decode_base64_safely,
     get_media_limits,
+    validate_3d_mime,
     validate_audio_mime,
     validate_image_mime,
     validate_video_mime,
@@ -85,6 +86,11 @@ def _mime_to_media_type(mime_type: str) -> MediaType:
         return MediaType.AUDIO
     if mime_type.startswith("video/"):
         return MediaType.VIDEO
+    if mime_type.startswith("model/") or mime_type in {
+        "application/zip",
+        "application/x-zip-compressed",
+    }:
+        return MediaType.THREE_D
     return MediaType.IMAGE  # Conservative default
 
 
@@ -102,6 +108,11 @@ _MIME_TO_EXT: dict[str, str] = {
     "image/webp": ".webp",
     "video/mp4": ".mp4",
     "video/webm": ".webm",
+    "application/zip": ".zip",
+    "application/x-zip-compressed": ".zip",
+    "model/gltf-binary": ".glb",
+    "model/gltf+json": ".gltf",
+    "model/vnd.usdz+zip": ".usdz",
 }
 
 
@@ -163,6 +174,7 @@ class FilesystemArtifactStore(ArtifactStore):
             "image": limits.image_max_bytes,
             "audio": limits.audio_max_bytes,
             "video": limits.video_max_bytes,
+            "three_d": limits.three_d_max_bytes,
         }[media_type]
         raw = decode_base64_safely(data, max_bytes, label=media_type)
         return await self._store_bytes(raw, media_type, mime_type, source_expires_at, auth)
@@ -185,6 +197,7 @@ class FilesystemArtifactStore(ArtifactStore):
             "image": limits.image_max_bytes,
             "audio": limits.audio_max_bytes,
             "video": limits.video_max_bytes,
+            "three_d": limits.three_d_max_bytes,
         }[media_type]
         try:
             downloaded = await self._downloader.download(
@@ -246,6 +259,7 @@ class FilesystemArtifactStore(ArtifactStore):
             "image": limits.image_max_bytes,
             "audio": limits.audio_max_bytes,
             "video": limits.video_max_bytes,
+            "three_d": limits.three_d_max_bytes,
         }[media_type]
         if len(raw) > max_bytes:
             raise ValueError(
@@ -255,6 +269,7 @@ class FilesystemArtifactStore(ArtifactStore):
             "image": validate_image_mime,
             "audio": validate_audio_mime,
             "video": validate_video_mime,
+            "three_d": validate_3d_mime,
         }[media_type](mime_type)
 
         owner = auth or AuthContext()

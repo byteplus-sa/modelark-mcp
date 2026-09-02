@@ -205,6 +205,83 @@ class SeedanceTaskListResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Seed3D 3D generation task API
+# ---------------------------------------------------------------------------
+
+
+class Seed3DContentItem(BaseModel):
+    """Content item for the Seed3D task creation request."""
+
+    type: str = Field(..., description="text or image_url")
+    text: str | None = None
+    image_url: dict[str, str] | None = None
+
+
+class Seed3DCreateProviderRequest(BaseModel):
+    """Raw request body for ``POST /contents/generations/tasks`` (3D)."""
+
+    model: str
+    content: list[Seed3DContentItem] = Field(default_factory=list)
+    seed: int | None = None
+    callback_url: str | None = None
+
+
+class Seed3DCreateProviderResponse(BaseModel):
+    """Response from ``POST /contents/generations/tasks`` (3D)."""
+
+    id: str
+
+
+class Seed3DErrorDetail(BaseModel):
+    """Error detail in a Seed3D task response."""
+
+    code: str = ""
+    message: str = ""
+
+
+class Seed3DUsage(BaseModel):
+    """Usage data in a Seed3D task response."""
+
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class Seed3DTaskResponse(BaseModel):
+    """Full task object from the Seed3D retrieve/list APIs."""
+
+    id: str
+    model: str = ""
+    status: str = ""
+    content: dict[str, Any] | None = None
+    created_at: int | str | None = None
+    updated_at: int | str | None = None
+    error: Seed3DErrorDetail | None = None
+    usage: Seed3DUsage | None = None
+
+    @property
+    def file_url(self) -> str | None:
+        """Extract the generated 3D file URL from the content object."""
+        if self.content and isinstance(self.content, dict):
+            url = self.content.get("file_url")
+            if isinstance(url, str):
+                return url
+            if isinstance(url, dict):
+                return url.get("url")
+        return None
+
+
+class Seed3DTaskListResponse(BaseModel):
+    """Response from ``GET /contents/generations/tasks`` (3D)."""
+
+    items: list[Seed3DTaskResponse] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("items", "data"),
+    )
+    total: int = 0
+    has_more: bool | None = None
+
+
+# ---------------------------------------------------------------------------
 # Chat Completions (Seed 2.1 multimodal understanding)
 # ---------------------------------------------------------------------------
 
