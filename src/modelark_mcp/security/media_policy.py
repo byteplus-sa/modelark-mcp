@@ -63,6 +63,7 @@ _ALLOWED_3D_MIMES: frozenset[str] = frozenset(
         "model/gltf-binary",
         "model/gltf+json",
         "application/octet-stream",
+        "binary/octet-stream",
         "model/vnd.usdz+zip",
         "text/plain",
     }

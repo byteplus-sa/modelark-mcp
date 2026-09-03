@@ -203,11 +203,11 @@ class Settings(BaseSettings):
         ),
     )
     hyper3d_default_model: str = Field(
-        default="hyper3d-gen2",
+        default="hyper3d-gen2-260112",
         validation_alias="HYPER3D_DEFAULT_MODEL",
     )
     hitem3d_default_model: str = Field(
-        default="hitem3d-2-0",
+        default="hitem3d-2-0-251223",
         validation_alias="HITEM3D_DEFAULT_MODEL",
     )
     seed3d_model_bindings: list[Seed3DModelBinding] = Field(

@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from modelark_mcp.artifacts.filesystem_store import (
+    _GENERIC_OCTET_STREAM,
     _is_trusted_host,
     _mime_to_ext,
     _translate_download_error,
@@ -137,7 +138,7 @@ class ObjectStorageArtifactStore:
             raise _translate_download_error(exc) from exc
 
         content_type = downloaded.content_type or ""
-        if content_type and content_type != mime_type:
+        if content_type and content_type != mime_type and content_type not in _GENERIC_OCTET_STREAM:
             log_info(
                 "artifact_mime_mismatch",
                 expected=mime_type,

@@ -183,6 +183,27 @@ def _family_label(family: str) -> str:
     return "Hyper3D" if family == "hyper3d" else "Hitem3d"
 
 
+_3D_MIME_BY_EXT: dict[str, str] = {
+    ".glb": "model/gltf-binary",
+    ".gltf": "model/gltf+json",
+    ".obj": "text/plain",
+    ".stl": "application/octet-stream",
+    ".fbx": "application/octet-stream",
+    ".usdz": "model/vnd.usdz+zip",
+    ".usd": "model/vnd.usdz+zip",
+    ".zip": "application/zip",
+}
+
+
+def _infer_3d_mime(file_url: str) -> str:
+    """Infer a MIME type for a generated 3D file from its URL extension."""
+    lowered = file_url.lower().split("?")[0]
+    for ext, mime in _3D_MIME_BY_EXT.items():
+        if lowered.endswith(ext):
+            return mime
+    return "application/zip"
+
+
 async def execute_seed3d_create(
     *,
     ctx: Context,
@@ -293,7 +314,7 @@ async def seed3d_get_task_impl(
                     file_ref = await store.copy_from_trusted_url(
                         url=task.file_url,
                         media_type=MediaType.THREE_D,
-                        mime_type="application/zip",
+                        mime_type=_infer_3d_mime(task.file_url),
                         source_expires_at=source_expiry,
                         auth=owner,
                     )

@@ -61,6 +61,17 @@ def _is_trusted_host(hostname: str) -> bool:
     )
 
 
+# Generic binary content-types that carry no useful file-type signal. When a
+# provider returns one of these for a known file extension (e.g. .glb), keep
+# the caller-supplied MIME type instead of adopting the generic header.
+_GENERIC_OCTET_STREAM: frozenset[str] = frozenset(
+    {
+        "application/octet-stream",
+        "binary/octet-stream",
+    }
+)
+
+
 def _translate_download_error(exc: SafeDownloadError) -> ArtifactPersistenceError:
     code_map: dict[SafeDownloadErrorCode, ArtifactPersistenceErrorCode] = {
         "untrusted_host": "untrusted_output_host",
@@ -210,7 +221,7 @@ class FilesystemArtifactStore(ArtifactStore):
 
         # Validate MIME from content-type if the header is present.
         content_type = downloaded.content_type or ""
-        if content_type and content_type != mime_type:
+        if content_type and content_type != mime_type and content_type not in _GENERIC_OCTET_STREAM:
             log_info(
                 "artifact_mime_mismatch",
                 expected=mime_type,
