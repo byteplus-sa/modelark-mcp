@@ -51,7 +51,7 @@ not contain embedded credentials.
 | `MCP_PORT` | `3000` | HTTP listen port |
 | `MCP_ALLOWED_HOSTS` | loopback hosts | Comma-separated accepted Host headers |
 | `MCP_ALLOWED_ORIGINS` | empty | Comma-separated accepted browser Origins |
-| `MCP_HTTP_MAX_BODY_BYTES` | `10485760` | Maximum HTTP request body |
+| `MCP_HTTP_MAX_BODY_BYTES` | `314572800` (300 MiB) | Maximum HTTP request body; sized to inline the largest supported Base64 media upload (200 MiB video inflates ~4/3x). A smaller value logs a warning at startup (large inlined uploads will 413). |
 | `READINESS_CHECK_PROVIDERS` | `false` | When true, `/ready` also checks provider connectivity |
 | `READINESS_PROVIDER_TIMEOUT_SECONDS` | `2.0` | Per-provider timeout for readiness checks |
 | `RATE_LIMIT_RPM` | `0` | Max HTTP requests per minute per client IP; 0 disables |

@@ -27,6 +27,32 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _warn_if_http_body_limit_blocks_media_upload(body_bytes: int) -> None:
+    """Warn when the HTTP body limit cannot carry the largest media upload.
+
+    ``MediaLimits.video_max_bytes`` (200 MiB) is the largest Base64 media the
+    upload tool accepts, and Base64 inflates ~4/3x inside the JSON-RPC envelope.
+    A body limit below that will 413 on inlined large uploads, so we warn — but
+    do not fail — because an operator may intentionally keep a small body cap
+    and route large media through ``media_upload`` (presign) or a file path.
+    """
+    from modelark_mcp.observability.logger import warning as log_warning
+    from modelark_mcp.security.media_policy import MediaLimits
+
+    video_max_bytes = MediaLimits().video_max_bytes
+    inflated = (video_max_bytes * 4) // 3
+    if body_bytes < inflated:
+        log_warning(
+            "http_body_limit_below_media_upload_max",
+            mcp_http_max_body_bytes=body_bytes,
+            media_video_max_bytes=video_max_bytes,
+            note=(
+                "Inlined Base64 media uploads larger than this body limit will be "
+                "rejected with HTTP 413; use the presign/direct-upload path for large media."
+            ),
+        )
+
+
 class SeedreamFamily(StrEnum):
     PRO = "pro"
     LITE = "lite"
@@ -346,9 +372,14 @@ class Settings(BaseSettings):
         default=8388608, validation_alias="MCP_INLINE_MEDIA_MAX_BYTES"
     )
     mcp_http_max_body_bytes: int = Field(
-        default=10_485_760,
+        default=300 * 1024 * 1024,
         ge=1,
         validation_alias="MCP_HTTP_MAX_BODY_BYTES",
+        description=(
+            "Maximum Streamable HTTP request body in bytes. Defaults large enough to "
+            "inline the largest supported Base64 media upload (200 MiB video inflates "
+            "~4/3x when Base64-encoded inside the JSON-RPC envelope)."
+        ),
     )
 
     # --- TOS object storage -------------------------------------------------
@@ -635,6 +666,10 @@ class Settings(BaseSettings):
             raise ValueError("ARTIFACT_TTL_SECONDS must be positive")
         if self.mcp_inline_media_max_bytes <= 0:
             raise ValueError("MCP_INLINE_MEDIA_MAX_BYTES must be positive")
+        if self.mcp_http_max_body_bytes <= 0:
+            raise ValueError("MCP_HTTP_MAX_BODY_BYTES must be positive")
+        if self.mcp_transport == "http":
+            _warn_if_http_body_limit_blocks_media_upload(self.mcp_http_max_body_bytes)
         if self.connect_timeout_ms <= 0 or self.request_timeout_ms <= 0:
             raise ValueError("Provider timeouts must be positive")
         for origin in self.allowed_origins:

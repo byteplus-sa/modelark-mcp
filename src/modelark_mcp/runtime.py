@@ -15,7 +15,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppres
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 from cachetools import TTLCache
 from fastmcp.server.dependencies import get_access_token
@@ -37,6 +37,37 @@ if TYPE_CHECKING:
     from modelark_mcp.artifacts.store import ArtifactStore
 
 ProviderKey = Literal["modelark", "seed-speech", "vod-mediakit", "tos", "s3"]
+
+
+def _open_sqlite_connection(database_path: Path) -> sqlite3.Connection:
+    """Open a WAL-mode SQLite connection safe for thread-offloaded access.
+
+    ``check_same_thread=False`` is required because database access is
+    dispatched to worker threads via :func:`_offload`. Each store owns an
+    ``asyncio.Lock`` that serializes access to its connection object, so at
+    most one thread touches a given connection at a time.
+    """
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(database_path, check_same_thread=False)
+    connection.execute("PRAGMA journal_mode=WAL").fetchone()
+    connection.execute("PRAGMA busy_timeout=5000")
+    return connection
+
+
+async def _offload[T](func: Callable[..., T], *args: Any) -> T:
+    """Run a synchronous callable in a worker thread, off the event loop."""
+    return await asyncio.to_thread(func, *args)
+
+
+async def _run_locked[T](lock: asyncio.Lock, func: Callable[[], T]) -> T:
+    """Run a synchronous closure off the loop while holding ``lock``.
+
+    The lock serializes access to a store's ``sqlite3.Connection``, and
+    ``asyncio.to_thread`` moves the synchronous database call off the event
+    loop so a slow commit cannot block unrelated MCP requests.
+    """
+    async with lock:
+        return await _offload(func)
 
 
 class ProviderLimiters:
@@ -84,9 +115,17 @@ class ProviderLimiters:
         provider: ProviderKey,
         owner: AuthContext,
     ) -> AsyncIterator[None]:
-        principal_limiter = await self.principal(owner)
-        async with self.provider(provider), principal_limiter:
-            yield
+        if owner.is_local:
+            # A local stdio principal is a single trusted caller; the
+            # per-principal semaphore would otherwise cap ALL concurrent calls
+            # across every provider at ``principal_limit``, below the
+            # per-provider limit. Bound local concurrency by provider only.
+            async with self.provider(provider):
+                yield
+        else:
+            principal_limiter = await self.principal(owner)
+            async with self.provider(provider), principal_limiter:
+                yield
 
 
 class TaskOwnershipStore(Protocol):
@@ -140,8 +179,7 @@ class SQLiteTaskOwnershipStore:
     """Small single-instance ownership database for provider task IDs."""
 
     def __init__(self, database_path: Path) -> None:
-        database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(database_path)
+        self._connection = _open_sqlite_connection(database_path)
         self._ensure_schema()
         self._connection.commit()
         self._lock = asyncio.Lock()
@@ -204,7 +242,9 @@ class SQLiteTaskOwnershipStore:
         )
 
     async def record(self, provider: str, task_id: str, owner: AuthContext) -> None:
-        async with self._lock:
+        created_at = datetime.now(UTC).isoformat()
+
+        def _run() -> None:
             self._connection.execute(
                 """
                 INSERT INTO task_ownership(
@@ -220,20 +260,27 @@ class SQLiteTaskOwnershipStore:
                     task_id,
                     owner.principal_id,
                     owner.tenant_id,
-                    datetime.now(UTC).isoformat(),
+                    created_at,
                 ),
             )
             self._connection.commit()
 
+        await _run_locked(self._lock, _run)
+
     async def require_owner(self, provider: str, task_id: str, owner: AuthContext) -> None:
-        async with self._lock:
-            row = self._connection.execute(
-                """
-                SELECT principal_id, tenant_id FROM task_ownership
-                WHERE provider = ? AND task_id = ?
-                """,
-                (provider, task_id),
-            ).fetchone()
+        def _run() -> tuple[str, str] | None:
+            return cast(
+                "tuple[str, str] | None",
+                self._connection.execute(
+                    """
+                    SELECT principal_id, tenant_id FROM task_ownership
+                    WHERE provider = ? AND task_id = ?
+                    """,
+                    (provider, task_id),
+                ).fetchone(),
+            )
+
+        row = await _run_locked(self._lock, _run)
         if row is None:
             if owner.is_local:
                 return
@@ -242,41 +289,43 @@ class SQLiteTaskOwnershipStore:
             raise PermissionError("Task is not owned by the current principal.")
 
     async def list_task_ids(self, provider: str, owner: AuthContext) -> set[str]:
-        async with self._lock:
-            rows = self._connection.execute(
+        def _run() -> list[tuple[str]]:
+            return self._connection.execute(
                 """
                 SELECT task_id FROM task_ownership
                 WHERE provider = ? AND principal_id = ? AND tenant_id = ?
                 """,
                 (provider, owner.principal_id, owner.tenant_id),
             ).fetchall()
+
+        rows = await _run_locked(self._lock, _run)
         return {str(row[0]) for row in rows}
 
     async def prune(self, max_age_days: int) -> int:
         cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()
-        async with self._lock:
+
+        def _run() -> int:
             cursor = self._connection.execute(
                 "DELETE FROM task_ownership WHERE created_at < ?",
                 (cutoff,),
             )
             self._connection.commit()
-        return cursor.rowcount if cursor.rowcount is not None else 0
+            return cursor.rowcount if cursor.rowcount is not None else 0
+
+        return await _run_locked(self._lock, _run)
 
     async def ping(self) -> None:
-        async with self._lock:
-            self._connection.execute("SELECT 1").fetchone()
+        await _run_locked(self._lock, lambda: self._connection.execute("SELECT 1").fetchone())
 
     async def close(self) -> None:
-        async with self._lock:
-            self._connection.close()
+        await _run_locked(self._lock, self._connection.close)
 
 
 class SQLiteObjectKeyOwnershipStore:
     """SQLite ownership ledger for object-storage keys (``media_upload``)."""
 
     def __init__(self, database_path: Path) -> None:
-        database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(database_path)
+        self._connection = _open_sqlite_connection(database_path)
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS object_key_ownership (
@@ -291,7 +340,9 @@ class SQLiteObjectKeyOwnershipStore:
         self._lock = asyncio.Lock()
 
     async def record(self, object_key: str, owner: AuthContext) -> None:
-        async with self._lock:
+        created_at = datetime.now(UTC).isoformat()
+
+        def _run() -> None:
             self._connection.execute(
                 """
                 INSERT INTO object_key_ownership(
@@ -307,13 +358,15 @@ class SQLiteObjectKeyOwnershipStore:
                     object_key,
                     owner.principal_id,
                     owner.tenant_id,
-                    datetime.now(UTC).isoformat(),
+                    created_at,
                 ),
             )
             self._connection.commit()
 
+        await _run_locked(self._lock, _run)
+
     async def require_owner(self, object_key: str, owner: AuthContext) -> None:
-        async with self._lock:
+        def _run() -> None:
             row = self._connection.execute(
                 """
                 SELECT principal_id, tenant_id FROM object_key_ownership
@@ -333,23 +386,26 @@ class SQLiteObjectKeyOwnershipStore:
             )
             self._connection.commit()
 
+        await _run_locked(self._lock, _run)
+
     async def prune(self, max_age_days: int) -> int:
         cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()
-        async with self._lock:
+
+        def _run() -> int:
             cursor = self._connection.execute(
                 "DELETE FROM object_key_ownership WHERE created_at < ?",
                 (cutoff,),
             )
             self._connection.commit()
-        return cursor.rowcount if cursor.rowcount is not None else 0
+            return cursor.rowcount if cursor.rowcount is not None else 0
+
+        return await _run_locked(self._lock, _run)
 
     async def ping(self) -> None:
-        async with self._lock:
-            self._connection.execute("SELECT 1").fetchone()
+        await _run_locked(self._lock, lambda: self._connection.execute("SELECT 1").fetchone())
 
     async def close(self) -> None:
-        async with self._lock:
-            self._connection.close()
+        await _run_locked(self._lock, self._connection.close)
 
 
 class SQLiteTaskArtifactCache:
@@ -362,8 +418,7 @@ class SQLiteTaskArtifactCache:
         ttl_seconds: int = 86_400,
         max_size: int = 10_000,
     ) -> None:
-        database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(database_path)
+        self._connection = _open_sqlite_connection(database_path)
         self._ensure_schema()
         self._connection.commit()
         self._lock = asyncio.Lock()
@@ -427,14 +482,19 @@ class SQLiteTaskArtifactCache:
         )
 
     async def get(self, provider: str, task_id: str) -> dict[str, ArtifactRef | None] | None:
-        async with self._lock:
-            row = self._connection.execute(
-                """
-                SELECT artifacts_json, created_at FROM task_artifacts
-                WHERE provider = ? AND task_id = ?
-                """,
-                (provider, task_id),
-            ).fetchone()
+        def _run() -> tuple[str, str] | None:
+            return cast(
+                "tuple[str, str] | None",
+                self._connection.execute(
+                    """
+                    SELECT artifacts_json, created_at FROM task_artifacts
+                    WHERE provider = ? AND task_id = ?
+                    """,
+                    (provider, task_id),
+                ).fetchone(),
+            )
+
+        row = await _run_locked(self._lock, _run)
         if row is None:
             return None
         artifacts_json, created_at_str = row
@@ -451,7 +511,8 @@ class SQLiteTaskArtifactCache:
     ) -> None:
         artifacts_json = self._serialize(artifacts)
         now = datetime.now(UTC).isoformat()
-        async with self._lock:
+
+        def _run() -> None:
             self._connection.execute(
                 """
                 INSERT INTO task_artifacts(provider, task_id, artifacts_json, created_at)
@@ -477,21 +538,29 @@ class SQLiteTaskArtifactCache:
                 )
                 self._connection.commit()
 
+        await _run_locked(self._lock, _run)
+
     async def pop(self, provider: str, task_id: str) -> dict[str, ArtifactRef | None] | None:
-        async with self._lock:
-            row = self._connection.execute(
-                """
-                SELECT artifacts_json, created_at FROM task_artifacts
-                WHERE provider = ? AND task_id = ?
-                """,
-                (provider, task_id),
-            ).fetchone()
+        def _run() -> tuple[str, str] | None:
+            row = cast(
+                "tuple[str, str] | None",
+                self._connection.execute(
+                    """
+                    SELECT artifacts_json, created_at FROM task_artifacts
+                    WHERE provider = ? AND task_id = ?
+                    """,
+                    (provider, task_id),
+                ).fetchone(),
+            )
             if row is not None:
                 self._connection.execute(
                     "DELETE FROM task_artifacts WHERE provider = ? AND task_id = ?",
                     (provider, task_id),
                 )
                 self._connection.commit()
+            return row
+
+        row = await _run_locked(self._lock, _run)
         if row is None:
             return None
         created_at = datetime.fromisoformat(row[1])
@@ -500,23 +569,27 @@ class SQLiteTaskArtifactCache:
         return self._deserialize(row[0])
 
     async def clear(self) -> None:
-        async with self._lock:
+        def _run() -> None:
             self._connection.execute("DELETE FROM task_artifacts")
             self._connection.commit()
 
+        await _run_locked(self._lock, _run)
+
     async def prune_expired(self) -> int:
         cutoff = (datetime.now(UTC) - timedelta(seconds=self._ttl_seconds)).isoformat()
-        async with self._lock:
+
+        def _run() -> int:
             cursor = self._connection.execute(
                 "DELETE FROM task_artifacts WHERE created_at < ?",
                 (cutoff,),
             )
             self._connection.commit()
-        return cursor.rowcount if cursor.rowcount is not None else 0
+            return cursor.rowcount if cursor.rowcount is not None else 0
+
+        return await _run_locked(self._lock, _run)
 
     async def close(self) -> None:
-        async with self._lock:
-            self._connection.close()
+        await _run_locked(self._lock, self._connection.close)
 
     @staticmethod
     def _serialize(artifacts: dict[str, ArtifactRef | None]) -> str:
@@ -554,7 +627,7 @@ class BudgetLedger:
     """SQLite-backed daily budget reservations for one server instance."""
 
     def __init__(self, database_path: Path, *, daily_limit_usd: float | None = None) -> None:
-        self._connection = sqlite3.connect(database_path)
+        self._connection = _open_sqlite_connection(database_path)
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS budget_reservations (
@@ -578,7 +651,8 @@ class BudgetLedger:
         estimate: CostEstimate,
     ) -> BudgetReservation:
         usage_date = datetime.now(UTC).date()
-        async with self._lock:
+
+        def _run() -> int:
             row = self._connection.execute(
                 """
                 SELECT COALESCE(SUM(amount_usd), 0) FROM budget_reservations
@@ -613,7 +687,9 @@ class BudgetLedger:
             self._connection.commit()
             if cursor.lastrowid is None:
                 raise RuntimeError("Budget reservation did not return an ID.")
-            reservation_id = cursor.lastrowid
+            return cursor.lastrowid
+
+        reservation_id = await _run_locked(self._lock, _run)
         return BudgetReservation(reservation_id, owner, estimate, usage_date)
 
     async def commit(self, reservation: BudgetReservation) -> None:
@@ -627,26 +703,30 @@ class BudgetLedger:
         reservation: BudgetReservation,
         status: Literal["committed", "released"],
     ) -> None:
-        async with self._lock:
+        def _run() -> None:
             self._connection.execute(
                 "UPDATE budget_reservations SET status = ? WHERE id = ?",
                 (status, reservation.reservation_id),
             )
             self._connection.commit()
 
+        await _run_locked(self._lock, _run)
+
     async def prune(self, max_age_days: int) -> int:
         cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).date().isoformat()
-        async with self._lock:
+
+        def _run() -> int:
             cursor = self._connection.execute(
                 "DELETE FROM budget_reservations WHERE usage_date < ?",
                 (cutoff,),
             )
             self._connection.commit()
-        return cursor.rowcount if cursor.rowcount is not None else 0
+            return cursor.rowcount if cursor.rowcount is not None else 0
+
+        return await _run_locked(self._lock, _run)
 
     async def close(self) -> None:
-        async with self._lock:
-            self._connection.close()
+        await _run_locked(self._lock, self._connection.close)
 
 
 @dataclass(slots=True)

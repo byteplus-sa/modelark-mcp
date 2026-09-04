@@ -158,7 +158,7 @@ shipped in `security/`. Wired for HTTP transport only.
 
 | Env var | Default | Notes |
 |---|---|---|
-| `MCP_HTTP_MAX_BODY_BYTES` | `10_485_760` (10 MiB), `ge=1` | rejects oversized bodies |
+| `MCP_HTTP_MAX_BODY_BYTES` | `314_572_800` (300 MiB), `ge=1` | rejects oversized bodies; sized to inline the largest supported Base64 media upload (200 MiB video inflates ~4/3x) |
 
 Behavior: reads `Content-Length`; if `> max_bytes` → `413 "Request body too
 large"`; on unparseable `Content-Length` → `400`. It also wraps `receive` to

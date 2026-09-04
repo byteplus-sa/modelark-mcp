@@ -24,6 +24,10 @@ class TestSettings:
         assert settings.artifact_ttl_seconds == 604800
         assert settings.mcp_inline_media_max_bytes == 8388608
 
+    def test_http_body_limit_default_covers_video_upload(self) -> None:
+        settings = Settings(_env_file=None)
+        assert settings.mcp_http_max_body_bytes == 300 * 1024 * 1024
+
     def test_has_modelark_false_when_empty(self) -> None:
         settings = Settings(_env_file=None)
         assert not settings.has_modelark
