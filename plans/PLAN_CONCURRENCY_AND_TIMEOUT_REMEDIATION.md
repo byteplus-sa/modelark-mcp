@@ -1,9 +1,9 @@
 ---
 title: Concurrency and Timeout Remediation
 type: plan
-status: active
+status: implemented
 created: 2026-09-03
-updated: 2026-09-03
+updated: 2026-09-04
 tags:
   - concurrency
   - timeout
@@ -146,13 +146,13 @@ and out of scope here.)
 
 **Files:** `src/modelark_mcp/runtime.py`
 
-- [ ] In `ProviderLimiters.acquire`, when `owner.is_local`, acquire only the
+- [x] In `ProviderLimiters.acquire`, when `owner.is_local`, acquire only the
   provider semaphore (skip the principal semaphore).
-- [ ] Keep the per-principal semaphore for non-local principals.
-- [ ] Update `docs/runtime.md` "Concurrency limiters" section to state that the
+- [x] Keep the per-principal semaphore for non-local principals.
+- [x] Update `docs/runtime.md` "Concurrency limiters" section to state that the
   per-principal limit applies to authenticated HTTP principals only; local
   stdio is bounded solely by the provider limit.
-- [ ] Test: two concurrent local calls to the same provider up to
+- [x] Test: two concurrent local calls to the same provider up to
   `provider_limit` all proceed; a `principal_limit=1` fixture still serializes
   two distinct JWT principals.
 
@@ -163,18 +163,18 @@ ModelArk calls.
 
 **Files:** `src/modelark_mcp/runtime.py`
 
-- [ ] Add a shared helper that opens the connection with
+- [x] Add a shared helper that opens the connection with
   `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;` and a
   `check_same_thread=False` connection.
-- [ ] Replace direct `self._connection.execute(...)` calls inside `async`
+- [x] Replace direct `self._connection.execute(...)` calls inside `async`
   methods with `await asyncio.to_thread(self._execute, ...)` (or a small
   `_run_sync` wrapper) for `SQLiteTaskOwnershipStore`,
   `SQLiteObjectKeyOwnershipStore`, `SQLiteTaskArtifactCache`, and
   `BudgetLedger`.
-- [ ] Keep the per-store `asyncio.Lock` only where a logical transaction spans
+- [x] Keep the per-store `asyncio.Lock` only where a logical transaction spans
   multiple statements (e.g. `BudgetLedger.reserve`'s read-then-insert), and
   ensure the lock is held across the offloaded block, not the event loop.
-- [ ] Update `docs/runtime.md` "single-process only" note to mention WAL and
+- [x] Update `docs/runtime.md` "single-process only" note to mention WAL and
   thread-offloaded access.
 
 **Acceptance:** a micro-benchmark/test asserting SQLite methods return
@@ -186,13 +186,13 @@ completes while a commit runs).
 **Files:** `docs/troubleshooting.md`, `docs/configuration.md`,
 `.claude/skills/modelark-mcp/SKILL.md`
 
-- [ ] Add a "Client timeouts vs provider latency" section: Seedream Pro /
+- [x] Add a "Client timeouts vs provider latency" section: Seedream Pro /
   Seedance synchronous generation can exceed 60 s; a client MCP timeout does
   not mean the server failed, and the server keeps running. Prefer the async
   Seedance `create → poll` flow and `seedance_get_task` for long operations.
-- [ ] Correct `docs/troubleshooting.md:84` (currently claims the default is
+- [x] Correct `docs/troubleshooting.md:84` (currently claims the default is
   `BYTEPLUS_REQUEST_TIMEOUT_MS=300000`; actual default is `600000`).
-- [ ] Note in `docs/configuration.md` that `PRINCIPAL_MAX_CONCURRENCY` does not
+- [x] Note in `docs/configuration.md` that `PRINCIPAL_MAX_CONCURRENCY` does not
   throttle the local stdio principal after Task A.
 
 **Acceptance:** docs match shipped behavior.
@@ -202,14 +202,14 @@ completes while a commit runs).
 **Files:** `src/modelark_mcp/config/env.py`, `docs/configuration.md`,
 `.claude/skills/modelark-mcp/SKILL.md`
 
-- [ ] Raise `mcp_http_max_body_bytes` default to cover the video path
+- [x] Raise `mcp_http_max_body_bytes` default to cover the video path
   (≥ 200 MiB + JSON-RPC/Base64 overhead, e.g. `268_435_456`), or add a
   dedicated `media_upload` path that accepts a presigned PUT instead of
   inlining Base64.
-- [ ] Add a validator warning when `mcp_http_max_body_bytes` is smaller than
+- [x] Add a validator warning when `mcp_http_max_body_bytes` is smaller than
   `MediaLimits.video_max_bytes * 4 // 3` (Base64 inflation) to fail fast on
   misconfiguration.
-- [ ] Strengthen skill/docs guidance: for large video references, use
+- [x] Strengthen skill/docs guidance: for large video references, use
   `media_upload` with `file_path` (stdio) or the presign + direct-upload
   pattern; the JSON-RPC body limit bounds only inlined Base64.
 

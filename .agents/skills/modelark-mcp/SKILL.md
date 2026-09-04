@@ -1097,8 +1097,10 @@ Each server process maintains shared runtime services:
 - **Budget Ledger** — SQLite-backed per-principal daily spend tracking.
 - **Task Ownership Store** — SQLite-backed task ID to principal mapping for
   Seedance ownership enforcement.
-- **Provider Limiters** — Dual-layer concurrency control: per-provider (default
-  5) and per-principal (default 3) semaphores.
+- **Provider Limiters** — Concurrency control: a per-provider semaphore
+  (default 5) for every call, plus a per-principal semaphore (default 3) that
+  bounds authenticated JWT HTTP principals only. Local principals (stdio and
+  HTTP-local) are bounded solely by the provider limit.
 - **Safe Downloader** — SSRF-safe URL downloads with IP pinning and redirect
   validation.
 
