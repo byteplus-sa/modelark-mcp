@@ -33,9 +33,10 @@ class MediaPresignBatchInput(BaseModel):
     object_keys: list[str] = Field(
         ...,
         min_length=1,
+        max_length=100,
         description=(
             "Object keys returned by prior media_upload calls (e.g. "
-            "'references/video/<uuid>'). A fresh presigned URL is returned for each."
+            "'references/video/<uuid>'). 1-100 keys; a fresh presigned URL is returned for each."
         ),
     )
     expires_in_seconds: int | None = Field(
@@ -64,11 +65,14 @@ class MediaPresignBatchItem(BaseModel):
         None,
         description=(
             "Machine-readable error code when this key failed "
-            "(INVALID_KEY, NOT_OWNED, or a provider error code)."
+            "(INVALID_KEY, NOT_OWNED, INTERNAL, or a provider error code)."
         ),
     )
     error: str | None = Field(
         None, description="Human-readable error message when this key failed."
+    )
+    request_id: str | None = Field(
+        None, description="Provider request ID for this key's presign call, if available."
     )
 
 
@@ -107,7 +111,6 @@ async def media_presign_batch(
 
     gateway = make_object_storage_gateway(settings)
     ttl = input.expires_in_seconds or settings.presign_ttl_seconds
-    expires_at = (datetime.now(UTC) + timedelta(seconds=ttl)).isoformat()
     items: list[MediaPresignBatchItem] = []
 
     try:
@@ -129,6 +132,7 @@ async def media_presign_batch(
                     validate_object_key(key)
                     await get_runtime(ctx).object_key_ownership_store.require_owner(key, principal)
                     url = await call_with_retry(partial(_presign, key, input.expires_in_seconds))
+                    expires_at = (datetime.now(UTC) + timedelta(seconds=ttl)).isoformat()
                     items.append(
                         MediaPresignBatchItem(object_key=key, url=url, expires_at=expires_at)
                     )
@@ -146,7 +150,12 @@ async def media_presign_batch(
                             object_key=key,
                             code=exc.code,
                             error=exc.message,
+                            request_id=exc.request_id,
                         )
+                    )
+                except Exception as exc:
+                    items.append(
+                        MediaPresignBatchItem(object_key=key, code="INTERNAL", error=str(exc))
                     )
     finally:
         await gateway.close()

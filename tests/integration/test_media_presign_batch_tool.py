@@ -111,6 +111,7 @@ class TestMediaPresignBatchPartialFailure:
                         http_status=403,
                         code="AccessDenied",
                         message="Access denied",
+                        request_id="req-presign-001",
                         retryable=False,
                     )
                 )
@@ -132,7 +133,32 @@ class TestMediaPresignBatchPartialFailure:
         assert result.failed == 1
         assert result.items[0].url is None
         assert result.items[0].code == "AccessDenied"
+        assert result.items[0].request_id == "req-presign-001"
         assert result.items[1].url == "https://s3.example.com/ok-url"
+
+    async def test_unexpected_error_reported_inline_as_internal(
+        self, test_env: None, fake_ctx: FakeContext
+    ) -> None:
+        mock_gw = _mock_gateway()
+
+        async def _boom(*, key: str, **kwargs: object) -> str:
+            raise AssertionError("retry loop exited unexpectedly")
+
+        mock_gw.presign_get = _boom
+
+        with patch(
+            "modelark_mcp.tools.media_presign_batch.make_object_storage_gateway",
+            return_value=mock_gw,
+        ):
+            result = await media_presign_batch(
+                MediaPresignBatchInput(object_keys=[_VALID_KEY, _VALID_KEY_2]),
+                fake_ctx,
+            )
+
+        assert isinstance(result, MediaPresignBatchOutput)
+        assert result.succeeded == 0
+        assert result.failed == 2
+        assert all(item.code == "INTERNAL" for item in result.items)
 
 
 class TestMediaPresignBatchOwnership:
@@ -193,3 +219,7 @@ class TestMediaPresignBatchErrors:
     async def test_empty_object_keys_rejected(self, test_env: None) -> None:
         with pytest.raises(ValueError):
             MediaPresignBatchInput(object_keys=[])
+
+    async def test_too_many_object_keys_rejected(self, test_env: None) -> None:
+        with pytest.raises(ValueError):
+            MediaPresignBatchInput(object_keys=[_VALID_KEY] * 101)

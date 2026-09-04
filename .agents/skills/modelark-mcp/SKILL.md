@@ -1066,11 +1066,11 @@ rest succeed).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `object_keys` | `list[str]` | Yes | Object keys returned by prior `media_upload` calls |
+| `object_keys` | `list[str]` | Yes | Object keys returned by prior `media_upload` calls (1–100 entries) |
 | `expires_in_seconds` | `int` | No | Presigned URL validity (60–604800) applied to every key. Defaults to the configured presign TTL. |
 
 Returns `MediaPresignBatchOutput` with `items` (per-key `object_key`, `url`,
-`expires_at`, `code`, `error`), `succeeded`, and `failed`.
+`expires_at`, `code`, `error`, `request_id`), `succeeded`, and `failed`.
 
 **Example — presign a batch of references:**
 

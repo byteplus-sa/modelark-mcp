@@ -772,13 +772,13 @@ succeed.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `object_keys` | list[string] | Yes | Object keys returned by prior `media_upload` calls (1+ entries) |
+| `object_keys` | list[string] | Yes | Object keys returned by prior `media_upload` calls (1–100 entries) |
 | `expires_in_seconds` | integer | No | Presigned URL validity (60–604800) applied to every key. Defaults to the configured TTL |
 
 ### Output
 
 Returns `MediaPresignBatchOutput` with `items` (per-key `object_key`, `url`,
-`expires_at`, `code`, `error`), `succeeded`, and `failed`.
+`expires_at`, `code`, `error`, `request_id`), `succeeded`, and `failed`.
 
 ## hyper3d_create_task / hitem3d_create_task
 

@@ -1088,7 +1088,7 @@ the batch succeeds.
 
 | Field | Type | Required | Constraints |
 |---|---|---|---|
-| `object_keys` | list[string] | yes | Object keys from prior `media_upload` calls (1+ entries). Alphanumeric, `-`, `_`, `/`; first char must be alphanumeric |
+| `object_keys` | list[string] | yes | Object keys from prior `media_upload` calls (1–100 entries). Alphanumeric, `-`, `_`, `/`; first char must be alphanumeric |
 | `expires_in_seconds` | integer | no | Presigned URL validity applied to every key, 60–604800. Use a long value (e.g. 3600) for VOD inputs that are fetched asynchronously |
 
 ### Output
@@ -1106,8 +1106,9 @@ the batch succeeds.
 | `object_key` | string | Object key this entry corresponds to |
 | `url` | string \| null | Fresh presigned HTTPS GET URL (null if failed) |
 | `expires_at` | string \| null | ISO-8601 expiry timestamp (null if failed) |
-| `code` | string \| null | Machine-readable error code (`INVALID_KEY`, `NOT_OWNED`, or provider code) |
+| `code` | string \| null | Machine-readable error code (`INVALID_KEY`, `NOT_OWNED`, `INTERNAL`, or provider code) |
 | `error` | string \| null | Human-readable error message (null if succeeded) |
+| `request_id` | string \| null | Provider request ID for this key's presign call (null if no provider call or not available) |
 
 ### Example
 
