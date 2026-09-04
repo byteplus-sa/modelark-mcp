@@ -81,7 +81,7 @@ match the actual status, preventing accidental destructive actions.
 ## Timeout on Long Generations
 
 Seedream Pro and long Seed Audio generation can take 1-5 minutes. The
-default request timeout is 5 minutes (`BYTEPLUS_REQUEST_TIMEOUT_MS=300000`).
+default request timeout is 10 minutes (`BYTEPLUS_REQUEST_TIMEOUT_MS=600000`).
 
 If you experience timeouts:
 
@@ -90,6 +90,22 @@ If you experience timeouts:
 3. Note: a timeout does **not** mean the operation failed — it may have
    succeeded upstream. The error is marked `ambiguous_completion=True`.
    Do not retry blindly.
+
+## Client Timeouts vs Provider Latency
+
+A client-side MCP timeout is distinct from a server failure. Seedream Pro and
+synchronous Seedance generation can take 60–150 s (longer under cold start or
+provider queue), but many MCP clients apply a ~60 s per-tool default. In that
+case the client aborts while the server keeps running the billable call — the
+generation is not cancelled and may still succeed.
+
+- Prefer the asynchronous `seedance_create_task` → `seedance_get_task` flow
+  for long video work; creation returns immediately and polling is cheap.
+- Raise the client's tool timeout for synchronous `seedream_generate_image`
+  and `seed_audio_generate` calls, or run them over stdio where the client
+  default is typically higher.
+- On a client timeout, reconcile with the provider via the returned task ID /
+  request ID rather than resubmitting (see `ambiguous_completion`).
 
 ## Artifacts Not Persisting
 

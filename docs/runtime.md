@@ -9,10 +9,13 @@ the provider retry policy.
 
 All state lives in a single SQLite database at
 `<artifact_dir>/runtime.sqlite3` (default `artifact_dir` is `.artifacts`),
-shared by the ownership store and the budget ledger. The synchronous
-`sqlite3.Connection` behind each is guarded by a per-instance `asyncio.Lock`,
-so these stores are **single-process only** — horizontal scaling requires a
-distributed replacement.
+shared by the ownership store and the budget ledger. The database is opened in
+WAL mode (`PRAGMA journal_mode=WAL`) with a `busy_timeout`; each store's
+synchronous `sqlite3.Connection` is guarded by a per-instance `asyncio.Lock`
+and every query is dispatched to a worker thread via `asyncio.to_thread`, so
+SQLite access never blocks the event loop. These stores are still
+**single-process only** — horizontal scaling requires a distributed
+replacement.
 
 ## `RuntimeServices` fields
 
@@ -51,10 +54,19 @@ Two distinct layers, acquired together for every billable call:
 the provider bucket semaphore and the principal's semaphore for the duration
 of the call.
 
+For a **local principal** (stdio transport, or HTTP local mode), the
+per-principal semaphore is **skipped**: a single trusted local caller is
+bounded only by the provider limit. Without this, the default
+`PRINCIPAL_MAX_CONCURRENCY=3` would silently cap *all* concurrent calls across
+every provider at 3 — below the per-provider limit of 5 — making parallel
+local generation appear to "serialize under load." The per-principal bound
+applies only to authenticated (JWT) HTTP principals, where distinct tenants
+must not starve each other.
+
 | Env var | Default | Constraint | Used as |
 |---|---|---|---|
 | `PROVIDER_MAX_CONCURRENCY` | `5` | `ge=1` | per-bucket provider limit |
-| `PRINCIPAL_MAX_CONCURRENCY` | `3` | `ge=1` | per-principal limit |
+| `PRINCIPAL_MAX_CONCURRENCY` | `3` | `ge=1` | per-principal limit (JWT HTTP principals only) |
 
 The per-principal semaphore cache defaults to `maxsize=10_000` and
 `ttl=86_400` (24h); idle principal semaphores expire after 24h. A `TTLCache`

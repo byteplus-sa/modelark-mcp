@@ -345,6 +345,42 @@ async def test_principal_limit_is_shared_across_providers() -> None:
     assert maximum == 1
 
 
+async def test_local_principal_is_bounded_only_by_provider_limit() -> None:
+    limiters = ProviderLimiters(provider_limit=3, principal_limit=1)
+    owner = AuthContext()  # local stdio principal
+    active = 0
+    maximum = 0
+
+    async def worker() -> None:
+        nonlocal active, maximum
+        async with limiters.acquire("modelark", owner):
+            active += 1
+            maximum = max(maximum, active)
+            await asyncio.sleep(0)
+            active -= 1
+
+    await asyncio.gather(worker(), worker(), worker())
+    assert maximum == 3
+
+
+async def test_remote_principal_is_still_bounded_by_principal_limit() -> None:
+    limiters = ProviderLimiters(provider_limit=5, principal_limit=2)
+    owner = AuthContext(principal_id="alice", tenant_id="tenant", transport="http")
+    active = 0
+    maximum = 0
+
+    async def worker() -> None:
+        nonlocal active, maximum
+        async with limiters.acquire("modelark", owner):
+            active += 1
+            maximum = max(maximum, active)
+            await asyncio.sleep(0)
+            active -= 1
+
+    await asyncio.gather(worker(), worker(), worker())
+    assert maximum == 2
+
+
 async def test_http_principal_comes_from_verified_claims(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
