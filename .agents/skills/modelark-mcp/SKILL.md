@@ -116,6 +116,7 @@ explicitly enabled.
 
 - `media_upload`
 - `media_presign`
+- `media_presign_batch`
 
 ---
 
@@ -417,9 +418,9 @@ Instead:
 2. **Presign on demand** — before each new shot submission, call
    `media_presign` with the stored `object_key` to get a fresh presigned
    URL in seconds. No file re-upload, no duplicate storage cost.
-3. **Batch presign** — presign all needed references for a shot in one
-   parallel block, then immediately submit the Seedance task while the URLs
-   are still valid.
+3. **Batch presign** — presign all needed references for a shot in one call
+   with `media_presign_batch` (pass the list of `object_keys`), then
+   immediately submit the Seedance task while the URLs are still valid.
 
 This reduces upload time from minutes (re-uploading 9–10 files per shot)
 to seconds (presigning 9–10 keys per shot) and avoids filling object
@@ -605,9 +606,9 @@ polling.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `prompt` | `str` | No | 1–32,000 characters. BytePlus recommends staying under 1,000 words for focus; that recommendation is not a hard API limit. |
-| `images` | `list[SeedanceImageInput]` | No | Up to 9 images with roles: `first_frame`, `last_frame`, `reference_image` |
-| `videos` | `list[SeedanceVideoInput]` | No | Up to 3 videos with role: `reference_video` |
-| `audios` | `list[SeedanceAudioInput]` | No | Up to 3 audios with role: `reference_audio` |
+| `images` | `list[SeedanceImageInput]` | No | Up to 9 images with roles: `first_frame`, `last_frame`, `reference_image`. Each entry may be a plain URL string or `{"url": ...}` (coerced to `role=reference_image`) |
+| `videos` | `list[SeedanceVideoInput]` | No | Up to 3 videos with role: `reference_video`. Each entry may be a plain URL string or `{"url": ...}` |
+| `audios` | `list[SeedanceAudioInput]` | No | Up to 3 audios with role: `reference_audio`. Each entry may be a plain URL string or `{"url": ...}` |
 | `model` | `str` | No | Model ID. Default: `dreamina-seedance-2-0-260128` (Standard). Fast and Mini IDs are configured via `SEEDANCE_MODEL_BINDINGS`. |
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` \| `"4k"` | No | |
 | `ratio` | `str` | No | Aspect ratio. For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
@@ -774,9 +775,9 @@ Create an asynchronous Seedance 2.5 video generation task.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `prompt` | `str` | No | Text prompt (up to 32,000 chars). Optional when media inputs are provided. |
-| `images` | `list[SeedanceImageInput]` | No | Up to 30 images with roles: `first_frame`, `last_frame`, `reference_image` |
-| `videos` | `list[SeedanceVideoInput]` | No | Up to 10 videos with role: `reference_video` |
-| `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). |
+| `images` | `list[SeedanceImageInput]` | No | Up to 30 images with roles: `first_frame`, `last_frame`, `reference_image`. Each entry may be a plain URL string or `{"url": ...}` |
+| `videos` | `list[SeedanceVideoInput]` | No | Up to 10 videos with role: `reference_video`. Each entry may be a plain URL string or `{"url": ...}` |
+| `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). Each entry may be a plain URL string or `{"url": ...}` |
 | `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` | No | 2.5 supports 480p, 720p, and 1080p. 4k is not supported. |
 | `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit`, auto-derived from input video. For first/last-frame, locks to first image. |
@@ -991,7 +992,8 @@ and a mismatch decodes to silence or garbage. Re-submit with corrected audio.
 ### Object Storage Upload
 
 Requires object storage credentials (TOS or S3). No auth scope in stdio mode.
-In JWT mode: `media:upload` for `media_upload`, `media:presign` for `media_presign`.
+In JWT mode: `media:upload` for `media_upload`, `media:presign` for `media_presign`
+and `media_presign_batch`.
 
 #### `media_upload`
 
@@ -1048,6 +1050,37 @@ Returns `MediaPresignOutput` with `url`, `expires_at`, `object_key`.
 ```json
 {
   "object_key": "references/video/abc-123-def"
+}
+```
+
+JWT scope: `media:presign`.
+
+#### `media_presign_batch`
+
+Generate fresh presigned HTTPS GET URLs for many existing objects in a single
+call (TOS or S3). Use this when preparing multiple references for one shot —
+e.g. presigning 30 Seedance 2.5 reference images — instead of calling
+`media_presign` once per key. Failures are reported per key (malformed,
+unowned, or provider-failing keys return an inline `code`/`error` while the
+rest succeed).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `object_keys` | `list[str]` | Yes | Object keys returned by prior `media_upload` calls |
+| `expires_in_seconds` | `int` | No | Presigned URL validity (60–604800) applied to every key. Defaults to the configured presign TTL. |
+
+Returns `MediaPresignBatchOutput` with `items` (per-key `object_key`, `url`,
+`expires_at`, `code`, `error`), `succeeded`, and `failed`.
+
+**Example — presign a batch of references:**
+
+```json
+{
+  "object_keys": [
+    "references/image/char-sheet-1",
+    "references/image/char-sheet-2",
+    "references/audio/bgm-track"
+  ]
 }
 ```
 
@@ -1292,8 +1325,8 @@ Set to `0` (default) for record-only mode with no enforcement.
 | Budget rejected | Daily limit exceeded | Wait for UTC day rollover or increase budget |
 | `speech_to_text` timeout | ASR poll cap reached | Increase `SEED_SPEECH_ASR_POLL_MAX_SECONDS` or provide shorter audio |
 | `speech_to_text` error code `20000003` | Silent audio — no speech detected, or a format mismatch (e.g. non-16 kHz/16-bit/mono WAV) decoded to silence | Verify the audio contains speech and matches the declared `audio_format`; re-submit with corrected audio |
-| `media_upload` / `media_presign` not available | Missing TOS/S3 credentials | Set `TOS_*` or `S3_*` env vars and `OBJECT_STORAGE_BACKEND` |
-| Presigned URL expired | TTL elapsed (default 30 min) | Call `media_presign` with the `object_key` to generate a fresh URL |
+| `media_upload` / `media_presign` / `media_presign_batch` not available | Missing TOS/S3 credentials | Set `TOS_*` or `S3_*` env vars and `OBJECT_STORAGE_BACKEND` |
+| Presigned URL expired | TTL elapsed (default 30 min) | Call `media_presign` (single key) or `media_presign_batch` (many keys) with the `object_key` to generate a fresh URL |
 
 ---
 
@@ -1350,8 +1383,9 @@ Set to `0` (default) for record-only mode with no enforcement.
 13. **Reuse references with `media_presign` — do not re-upload.** Presigned URLs
     expire after 30 minutes by default, but the underlying object persists in TOS/S3.
     Upload each reference file once, store the `object_key`, and call
-    `media_presign` to get a fresh URL for each new shot. This avoids
-    re-uploading the same character/location/prop sheets for every scene.
+    `media_presign` (single key) or `media_presign_batch` (many keys at once)
+    to get a fresh URL for each new shot. This avoids re-uploading the same
+    character/location/prop sheets for every scene.
 
 14. **`speech_to_text` is synchronous.** It blocks until transcription completes
     or the poll cap is reached. Provide appropriately sized audio and plan for

@@ -21,7 +21,7 @@ products plus artifact access and an optional media upload helper:
 | **VOD AI MediaKit Transcode** | `vod_transcode_video`, `vod_get_transcode_task` | Submit and poll async video transcoding (codec, container, resolution, bitrate, frame rate) |
 | **VOD Audio Separation** | `vod_separate_audio`, `vod_get_audio_separation` | Submit and poll voice + background (or voice + music + sfx) audio separation via the VOD AI MediaKit (`separate-voice`) |
 | **Artifacts** | `seed_media_get_artifact` | Retrieve persisted media inline by artifact ID |
-| **Object storage** (optional) | `media_upload`, `media_presign` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL; renew expired URLs without re-uploading |
+| **Object storage** (optional) | `media_upload`, `media_presign`, `media_presign_batch` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL; renew expired URLs without re-uploading; batch-presign many keys in one call |
 
 Key features:
 

@@ -37,17 +37,29 @@ class Seedance25CreateTaskInput(BaseModel):
     images: list[SeedanceImageInput] | None = Field(
         None,
         max_length=30,
-        description="Reference images with optional roles (first_frame, last_frame, reference_image). Max 30 for Seedance 2.5.",
+        description=(
+            "Reference images with optional roles (first_frame, last_frame, reference_image). "
+            "Max 30 for Seedance 2.5. Each entry may be a plain URL string or "
+            '{"url": "https://..."}; these are coerced to role=reference_image.'
+        ),
     )
     videos: list[SeedanceVideoInput] | None = Field(
         None,
         max_length=10,
-        description="Reference videos. Max 10 for Seedance 2.5.",
+        description=(
+            "Reference videos. Max 10 for Seedance 2.5. Each entry may be a plain URL string "
+            'or {"url": "https://..."}.'
+        ),
     )
     audios: list[SeedanceAudioInput] | None = Field(
         None,
         max_length=10,
-        description="Reference audio for audio-driven generation. Max 10 for Seedance 2.5. Audio-only input is supported (unique to 2.5): a single BGM, voice, or sound-effect track can drive visual pacing, beat matching, and lip-sync.",
+        description=(
+            "Reference audio for audio-driven generation. Max 10 for Seedance 2.5. Audio-only input "
+            "is supported (unique to 2.5): a single BGM, voice, or sound-effect track can drive "
+            "visual pacing, beat matching, and lip-sync. Each entry may be a plain URL string or "
+            '{"url": "https://..."}.'
+        ),
     )
     model: str | None = Field(
         None,

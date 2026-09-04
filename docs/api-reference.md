@@ -18,25 +18,26 @@ surface.
 | 9 | `seedance_cancel_or_delete_task` | Seedance | Destructive | ModelArk |
 | 10 | `media_upload` | Object storage (optional) | Synchronous | TOS / S3 |
 | 11 | `media_presign` | Object storage (optional) | Read-only | TOS / S3 |
-| 12 | `seedream_edit_image` | Seedream | Synchronous edit | ModelArk |
-| 13 | `seed_understand` | Seed 2.1 (optional) | Synchronous | ModelArk |
-| 14 | `seedance_2_5_create_task` | Seedance 2.5 | Async task | ModelArk |
-| 15 | `seedance_2_5_create_task_variations` | Seedance 2.5 | Parallel async | ModelArk |
-| 16 | `seed_media_get_artifact` | Artifacts | Read-only | Local / JWT |
-| 17 | `speech_to_text` | Seed Speech ASR (optional) | Synchronous | Seed Speech |
-| 18 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 19 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
-| 20 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 21 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 22 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 23 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
-| 24 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
-| 25 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
-| 26 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
-| 27 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
-| 28 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
-| 29 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
-| 30 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
+| 12 | `media_presign_batch` | Object storage (optional) | Read-only | TOS / S3 |
+| 13 | `seedream_edit_image` | Seedream | Synchronous edit | ModelArk |
+| 14 | `seed_understand` | Seed 2.1 (optional) | Synchronous | ModelArk |
+| 15 | `seedance_2_5_create_task` | Seedance 2.5 | Async task | ModelArk |
+| 16 | `seedance_2_5_create_task_variations` | Seedance 2.5 | Parallel async | ModelArk |
+| 17 | `seed_media_get_artifact` | Artifacts | Read-only | Local / JWT |
+| 18 | `speech_to_text` | Seed Speech ASR (optional) | Synchronous | Seed Speech |
+| 19 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 20 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
+| 21 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 22 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 23 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 24 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
+| 25 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
+| 26 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
+| 27 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
+| 28 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
+| 29 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
+| 30 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
+| 31 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
 
 ## Tool Annotations
 
@@ -53,6 +54,7 @@ surface.
 | `seedance_cancel_or_delete_task` | false | true | false | true |
 | `media_upload` | false | false | false | true |
 | `media_presign` | true | false | true | false |
+| `media_presign_batch` | true | false | true | false |
 | `seedream_edit_image` | false | false | false | true |
 | `seed_understand` | true | false | false | true |
 | `seedance_2_5_create_task` | false | false | false | true |
@@ -1073,7 +1075,74 @@ transferred — only a new URL is minted.
 
 ---
 
-## 12. seedream_edit_image
+## 12. media_presign_batch
+
+Generate fresh presigned HTTPS GET URLs for many existing objects in storage
+(TOS or S3) in a single round-trip. Accepts a list of object keys from prior
+`media_upload` calls and returns a presigned URL for each. No data is
+transferred — only new URLs are minted. A malformed, unowned, or
+provider-failing key is reported inline as a per-key error while the rest of
+the batch succeeds.
+
+### Input
+
+| Field | Type | Required | Constraints |
+|---|---|---|---|
+| `object_keys` | list[string] | yes | Object keys from prior `media_upload` calls (1+ entries). Alphanumeric, `-`, `_`, `/`; first char must be alphanumeric |
+| `expires_in_seconds` | integer | no | Presigned URL validity applied to every key, 60–604800. Use a long value (e.g. 3600) for VOD inputs that are fetched asynchronously |
+
+### Output
+
+| Field | Type | Description |
+|---|---|---|
+| `items` | list[MediaPresignBatchItem] | Per-key results, in input order |
+| `succeeded` | integer | Number of keys that produced a presigned URL |
+| `failed` | integer | Number of keys that failed |
+
+**MediaPresignBatchItem:**
+
+| Field | Type | Description |
+|---|---|---|
+| `object_key` | string | Object key this entry corresponds to |
+| `url` | string \| null | Fresh presigned HTTPS GET URL (null if failed) |
+| `expires_at` | string \| null | ISO-8601 expiry timestamp (null if failed) |
+| `code` | string \| null | Machine-readable error code (`INVALID_KEY`, `NOT_OWNED`, or provider code) |
+| `error` | string \| null | Human-readable error message (null if succeeded) |
+
+### Example
+
+```json
+// Input
+{
+  "object_keys": ["references/video/abc-123-def", "references/image/def-456-ghi"]
+}
+
+// Output
+{
+  "items": [
+    {
+      "object_key": "references/video/abc-123-def",
+      "url": "https://test-bucket.tos-ap-southeast-1.bytepluses.com/references/video/abc-123-def?X-Tos-Signature=...",
+      "expires_at": "2026-07-24T07:30:00+00:00",
+      "code": null,
+      "error": null
+    },
+    {
+      "object_key": "references/image/def-456-ghi",
+      "url": null,
+      "expires_at": null,
+      "code": "NOT_OWNED",
+      "error": "Object key is not owned by the current principal."
+    }
+  ],
+  "succeeded": 1,
+  "failed": 1
+}
+```
+
+---
+
+## 13. seedream_edit_image
 
 Edit an image interactively through ModelArk Seedream with point-based or
 bounding-box targeting. The handler constructs `<point>` / `<bbox>` coordinate
@@ -1123,7 +1192,7 @@ one reference image and one coordinate (point or bbox) are required.
 
 ---
 
-## 13. seed_understand
+## 14. seed_understand
 
 Understand images and videos, or reason about a task, through the Seed 2.1
 multimodal model. Supports deep-thinking (chain-of-thought) reasoning when
@@ -1180,7 +1249,7 @@ Base64 is not supported by the chat endpoint — upload local videos via
 
 ---
 
-## 14. seedance_2_5_create_task
+## 15. seedance_2_5_create_task
 
 Create an asynchronous Seedance 2.5 video generation task. Supports up to
 30-second video generation, 50 multimodal references (30 images, 10 videos,
@@ -1234,7 +1303,7 @@ Create an asynchronous Seedance 2.5 video generation task. Supports up to
 
 ---
 
-## 15. seedance_2_5_create_task_variations
+## 16. seedance_2_5_create_task_variations
 
 Create N independent Seedance 2.5 video generation tasks in parallel. Each
 variation creates a separate task; poll each task ID via `seedance_get_task`.
@@ -1261,7 +1330,7 @@ Inherits all fields from `seedance_2_5_create_task`, plus:
 
 ---
 
-## 16. seed_media_get_artifact
+## 17. seed_media_get_artifact
 
 Retrieve persisted media by artifact ID. Returns the raw media bytes
 (Base64-encoded) with MIME type, SHA-256 hash, and byte count. Use this to
@@ -1305,7 +1374,7 @@ Always registered; requires `artifacts:read` in JWT mode.
 
 ---
 
-## 17. speech_to_text
+## 18. speech_to_text
 
 Transcribe audio to text via Seed Speech ASR in a single synchronous call.
 Submits audio over HTTP and polls until complete; returns the full

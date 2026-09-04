@@ -106,6 +106,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             MediaPresignOutput,
             media_presign,
         )
+        from modelark_mcp.tools.media_presign_batch import (
+            TOOL_ANNOTATIONS as presign_batch_annotations,
+        )
+        from modelark_mcp.tools.media_presign_batch import (
+            MediaPresignBatchOutput,
+            media_presign_batch,
+        )
         from modelark_mcp.tools.media_upload import (
             TOOL_ANNOTATIONS as upload_annotations,
         )
@@ -126,6 +133,12 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             output_schema=MediaPresignOutput.model_json_schema(),
             auth=component_auth(settings, "media:presign"),
         )(media_presign)
+        server.tool(
+            name="media_presign_batch",
+            annotations={**presign_batch_annotations},
+            output_schema=MediaPresignBatchOutput.model_json_schema(),
+            auth=component_auth(settings, "media:presign"),
+        )(media_presign_batch)
 
     if settings.has_stt:
         from modelark_mcp.tools.speech_to_text import (

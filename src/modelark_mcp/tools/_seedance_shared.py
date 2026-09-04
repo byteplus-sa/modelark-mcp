@@ -26,6 +26,16 @@ from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
 
+_IMAGE_INPUT_EXAMPLE = (
+    'Expected each image reference to be a URL string ("https://..."), '
+    '{"url": "https://..."}, or {"kind": "url", "url": "https://...", '
+    '"role": "reference_image"}.'
+)
+_AUDIO_INPUT_EXAMPLE = (
+    'Expected each audio reference to be a URL string ("https://..."), '
+    '{"url": "https://..."}, or {"kind": "url", "url": "https://..."}.'
+)
+
 
 class SeedanceImageInput(MediaSource):
     """Image input with an optional role for Seedance."""
@@ -35,6 +45,24 @@ class SeedanceImageInput(MediaSource):
         None,
         description="Role of this image: first_frame, last_frame, or reference_image. If omitted, provider default applies.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_image_reference(cls, data: object) -> object:
+        """Accept a plain URL string or ``{"url": ...}`` shorthand.
+
+        A bare string is coerced to ``kind="url"`` with the default
+        ``reference_image`` role. A dict with a URL but no explicit ``kind``
+        is normalized the same way. Unrecognized dicts raise a tailored error
+        that shows the expected shape without echoing the caller's input.
+        """
+        if isinstance(data, str):
+            return {"kind": "url", "url": data, "role": "reference_image"}
+        if isinstance(data, dict) and "kind" not in data and "url" in data:
+            return {"kind": "url", **data, "role": data.get("role", "reference_image")}
+        if isinstance(data, dict) and "kind" not in data:
+            raise ValueError(_IMAGE_INPUT_EXAMPLE)
+        return data
 
 
 class SeedanceVideoInput(BaseModel):
@@ -49,6 +77,14 @@ class SeedanceVideoInput(BaseModel):
         "reference_video",
         description="Role of this input. Always 'reference_video'.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_video_reference(cls, data: object) -> object:
+        """Accept a plain URL string for a video reference."""
+        if isinstance(data, str):
+            return {"url": data}
+        return data
 
     @model_validator(mode="after")
     def validate_video_url(self) -> SeedanceVideoInput:
@@ -68,6 +104,18 @@ class SeedanceAudioInput(MediaSource):
         "reference_audio",
         description="Role of this input. Always 'reference_audio'.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_audio_reference(cls, data: object) -> object:
+        """Accept a plain URL string or ``{"url": ...}`` shorthand."""
+        if isinstance(data, str):
+            return {"kind": "url", "url": data, "role": "reference_audio"}
+        if isinstance(data, dict) and "kind" not in data and "url" in data:
+            return {"kind": "url", **data}
+        if isinstance(data, dict) and "kind" not in data:
+            raise ValueError(_AUDIO_INPUT_EXAMPLE)
+        return data
 
 
 _EXTENSION_TASK_TYPE = "extend_video"
