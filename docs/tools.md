@@ -573,7 +573,10 @@ captured per variation.
 ## seed_understand
 
 Understand images and videos, or reason about a task, through the Seed 2.1
-multimodal model.
+multimodal model. Supports deep-thinking (chain-of-thought) reasoning when
+`thinking=true`. The default model is `dola-seed-evolving` (Seed 2.1 Pro
+equivalent — always maps to the latest Seed-series understanding model);
+Turbo models are available via `SEED_UNDERSTANDING_MODEL_BINDINGS`.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`

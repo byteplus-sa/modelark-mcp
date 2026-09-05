@@ -822,11 +822,15 @@ Create multiple Seedance 2.5 video tasks in parallel. Inherits all parameters fr
 
 Requires `BYTEPLUS_MODELARK_API_KEY`. Auth scope: `understanding:read`.
 
+The default model is `dola-seed-evolving` (Seed 2.1 Pro equivalent — always
+maps to the latest Seed-series understanding model). Turbo models are available
+via `SEED_UNDERSTANDING_MODEL_BINDINGS`.
+
 #### `seed_understand`
 
 Understand images and videos, or reason about a task, through the Seed 2.1
 multimodal model via ModelArk Chat Completions. Supports deep-thinking
-(chain-of-thought) reasoning. Use this for:
+(chain-of-thought) reasoning when `thinking=true`. Use this for:
 
 - **Video understanding** — describe, summarize, or answer questions about video content
 - **Image understanding / OCR** — extract text, describe scenes, analyze visual content

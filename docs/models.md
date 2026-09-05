@@ -128,7 +128,10 @@ from the model ID string):
    `SEEDANCE_MODEL_FAMILY`) is non-empty, a single binding is synthesized
    from the default model ID + that family.
 3. If both are empty and the default model ID equals the built-in default,
-   the built-in default family is used (`PRO` / `STANDARD`).
+   the built-in default family is used (Seedream `PRO`, Seedance `STANDARD`,
+   Seed understanding `PRO` for `dola-seed-evolving`). The legacy Seed
+   understanding default `dola-seed-2-1-turbo-260628` still resolves to
+   `TURBO` for backward compatibility.
 4. Otherwise (custom default model, no family, no bindings) → startup fails
    with `ValueError`.
 

@@ -17,6 +17,11 @@ from modelark_mcp.providers.modelark.understanding import SeedUnderstandingServi
 
 MODELARK_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3"
 
+# The model strings below are arbitrary adapter inputs passed straight to
+# SeedUnderstandingService.build_request/generate. They deliberately do not
+# track SEED_UNDERSTANDING_DEFAULT_MODEL, which lives in the settings layer.
+TEST_MODEL = "dola-seed-2-1-turbo-260628"
+
 
 @pytest.fixture
 def service() -> SeedUnderstandingService:
@@ -35,10 +40,10 @@ class TestUnderstandingRequestBuilding:
 
     def test_text_only_prompt(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="What is 2+2?",
         )
-        assert request.model == "dola-seed-2-1-turbo-260628"
+        assert request.model == TEST_MODEL
         assert len(request.messages) == 1
         assert request.messages[0].role == "user"
         assert isinstance(request.messages[0].content, list)
@@ -49,7 +54,7 @@ class TestUnderstandingRequestBuilding:
 
     def test_image_url_part(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="Describe this image",
             image_parts=[{"kind": "url", "url": "https://cdn.example.com/img.png"}],
         )
@@ -61,7 +66,7 @@ class TestUnderstandingRequestBuilding:
 
     def test_image_base64_part(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="Describe this image",
             image_parts=[
                 {"kind": "base64", "data": "aV9hbV9hbl9pbWFnZQ==", "mime_type": "image/png"}
@@ -74,7 +79,7 @@ class TestUnderstandingRequestBuilding:
 
     def test_video_url_part(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="What happens in this video?",
             video_parts=[{"kind": "url", "url": "https://cdn.example.com/video.mp4"}],
         )
@@ -86,14 +91,14 @@ class TestUnderstandingRequestBuilding:
     def test_video_base64_rejected(self) -> None:
         with pytest.raises(ValueError, match="Video Base64 is not supported"):
             SeedUnderstandingService.build_request(
-                model="dola-seed-2-1-turbo-260628",
+                model=TEST_MODEL,
                 prompt="describe video",
                 video_parts=[{"kind": "base64", "data": "dGVzdA=="}],
             )
 
     def test_system_message_prepended(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="Hello",
             system="You are a helpful assistant.",
         )
@@ -104,7 +109,7 @@ class TestUnderstandingRequestBuilding:
 
     def test_thinking_enabled(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="Solve this puzzle",
             thinking=True,
         )
@@ -113,14 +118,14 @@ class TestUnderstandingRequestBuilding:
 
     def test_thinking_disabled_by_default(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="Hello",
         )
         assert request.thinking is None
 
     def test_reasoning_effort_only_with_thinking(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="Solve this",
             thinking=True,
             reasoning_effort="medium",
@@ -129,7 +134,7 @@ class TestUnderstandingRequestBuilding:
 
     def test_reasoning_effort_none_without_thinking(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="Hello",
             thinking=False,
             reasoning_effort="high",
@@ -138,7 +143,7 @@ class TestUnderstandingRequestBuilding:
 
     def test_combined_images_and_videos(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="Compare the image and the video",
             image_parts=[{"kind": "url", "url": "https://cdn.example.com/img.png"}],
             video_parts=[{"kind": "url", "url": "https://cdn.example.com/vid.mp4"}],
@@ -152,7 +157,7 @@ class TestUnderstandingRequestBuilding:
 
     def test_generation_params_propagated(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="Hello",
             temperature=0.5,
             max_tokens=2048,
@@ -166,7 +171,7 @@ class TestUnderstandingRequestBuilding:
 
     def test_stream_always_false(self) -> None:
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628",
+            model=TEST_MODEL,
             prompt="test",
         )
         assert request.stream is False
@@ -182,7 +187,7 @@ class TestUnderstandingResponseParsing:
                 200,
                 json={
                     "id": "chatcmpl-123",
-                    "model": "dola-seed-2-1-turbo-260628",
+                    "model": TEST_MODEL,
                     "choices": [
                         {
                             "index": 0,
@@ -198,9 +203,7 @@ class TestUnderstandingResponseParsing:
                 headers={"X-Request-Id": "req-1"},
             )
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="describe"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="describe")
         response, request_id = await service.generate(request)
         assert request_id == "req-1"
         assert response.id == "chatcmpl-123"
@@ -231,7 +234,7 @@ class TestUnderstandingResponseParsing:
             )
         )
         request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="What is 2+2?", thinking=True
+            model=TEST_MODEL, prompt="What is 2+2?", thinking=True
         )
         response, _ = await service.generate(request)
         assert response.choices[0].message.reasoning_content == "First, I observe that 2+2..."
@@ -256,9 +259,7 @@ class TestUnderstandingResponseParsing:
                 },
             )
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="Hi"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="Hi")
         response, _ = await service.generate(request)
         assert response.choices[0].message.reasoning_content is None
 
@@ -280,9 +281,7 @@ class TestUnderstandingResponseParsing:
                 },
             )
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         response, _ = await service.generate(request)
         usage = SeedUnderstandingService.extract_usage(response)
         assert usage.prompt_tokens == 100
@@ -307,9 +306,7 @@ class TestUnderstandingResponseParsing:
                 },
             )
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         response, _ = await service.generate(request)
         assert SeedUnderstandingService.extract_completion_id(response) == "chatcmpl-trace-123"
 
@@ -340,9 +337,7 @@ class TestUnderstandingErrorPropagation:
                 json={"error": {"code": "INTERNAL", "message": "server error"}},
             )
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         with pytest.raises(ProviderError) as exc_info:
             await service.generate(request)
         assert exc_info.value.http_status == 500
@@ -357,9 +352,7 @@ class TestUnderstandingErrorPropagation:
                 json={"error": {"code": "UNAUTHORIZED", "message": "bad key"}},
             )
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         with pytest.raises(ProviderError) as exc_info:
             await service.generate(request)
         assert exc_info.value.http_status == 401
@@ -370,9 +363,7 @@ class TestUnderstandingErrorPropagation:
         respx.post(f"{MODELARK_BASE}/chat/completions").mock(
             side_effect=httpx.TimeoutException("timed out")
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         with pytest.raises(ProviderError) as exc_info:
             await service.generate(request)
         assert exc_info.value.code == "TIMEOUT"
@@ -383,9 +374,7 @@ class TestUnderstandingErrorPropagation:
         respx.post(f"{MODELARK_BASE}/chat/completions").mock(
             side_effect=httpx.ConnectError("refused")
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         with pytest.raises(ProviderError) as exc_info:
             await service.generate(request)
         assert exc_info.value.code == "CONNECTION_ERROR"
@@ -397,9 +386,7 @@ class TestUnderstandingErrorPropagation:
         respx.post(f"{MODELARK_BASE}/chat/completions").mock(
             return_value=httpx.Response(200, content=b"")
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         with pytest.raises(ProviderError) as exc_info:
             await service.generate(request)
         assert exc_info.value.code == "INVALID_RESPONSE"
@@ -410,9 +397,7 @@ class TestUnderstandingErrorPropagation:
         respx.post(f"{MODELARK_BASE}/chat/completions").mock(
             side_effect=httpx.ReadError("read failed")
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         with pytest.raises(ProviderError) as exc_info:
             await service.generate(request)
         assert exc_info.value.code == "TRANSPORT_ERROR"
@@ -436,9 +421,7 @@ class TestUnderstandingErrorPropagation:
                 },
             )
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         response, _ = await service.generate(request)
         usage = SeedUnderstandingService.extract_usage(response)
         assert usage.prompt_tokens == 0
@@ -457,8 +440,6 @@ class TestUnderstandingErrorPropagation:
                 },
             )
         )
-        request = SeedUnderstandingService.build_request(
-            model="dola-seed-2-1-turbo-260628", prompt="test"
-        )
+        request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         response, _ = await service.generate(request)
         assert len(response.choices) == 0
