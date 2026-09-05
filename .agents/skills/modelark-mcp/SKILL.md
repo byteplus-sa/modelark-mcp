@@ -1200,6 +1200,30 @@ default model for that product is used.
 > `seedance_list_tasks`, and `seedance_cancel_or_delete_task` work with
 > task IDs from either version.
 
+### Seed 3D Async Workflow
+
+1. Ensure `BYTEPLUS_MODELARK_3D_ENABLED=true` is set, along with
+   `BYTEPLUS_MODELARK_API_KEY`.
+2. Call `hyper3d_create_task` (text-to-3D or image-to-3D) or
+   `hitem3d_create_task` (image-to-3D only) to create a task.
+3. Persist the returned `task_id` before polling.
+4. Poll `hyper3d_get_task` or `hitem3d_get_task` with the `task_id` until the
+   status is terminal (`succeeded`, `failed`, `cancelled`, `expired`).
+   Respect the `recommended_poll_after_ms` (5000ms) from creation.
+5. On success, the 3D file (zip package) is automatically persisted to the
+   artifact store with a 24-hour source URL backup. The durable artifact
+   survives provider URL expiry.
+6. Call `hyper3d_list_tasks` or `hitem3d_list_tasks` to browse recent tasks.
+7. Call `hyper3d_cancel_or_delete_task` or `hitem3d_cancel_or_delete_task`
+   only when cleanup is explicitly wanted.
+
+> **Choosing Hyper3D vs Hitem3d:** Use `hyper3d_create_task` for text-to-3D
+> or when you need seeds, PBR materials, or custom mesh modes. Use
+> `hitem3d_create_task` for image-to-3D with multi-view inputs and resolution
+> control. The get/list/cancel tools are family-specific — use the
+> `hyper3d_*` tools for Hyper3D task IDs and `hitem3d_*` tools for Hitem3d
+> task IDs.
+
 ### URL-only Video References
 
 1. If the user has Base64 video or a local video file, call `media_upload`.
@@ -1304,6 +1328,10 @@ Resume `seedance_get_task` with the existing task ID. Only create a new task
 after the previous task reaches a terminal state and the user requests another
 take.
 
+For Seed 3D task polling, the same principle applies — resume
+`hyper3d_get_task` or `hitem3d_get_task` with the existing task ID after a
+local timeout. Do not submit a replacement task.
+
 For `speech_to_text`, the synchronous call blocks until transcription completes
 or the `SEED_SPEECH_ASR_POLL_MAX_SECONDS` cap is reached. A timeout does not
 produce a partial result.
@@ -1327,6 +1355,8 @@ Set to `0` (default) for record-only mode with no enforcement.
 | `speech_to_text` error code `20000003` | Silent audio — no speech detected, or a format mismatch (e.g. non-16 kHz/16-bit/mono WAV) decoded to silence | Verify the audio contains speech and matches the declared `audio_format`; re-submit with corrected audio |
 | `media_upload` / `media_presign` / `media_presign_batch` not available | Missing TOS/S3 credentials | Set `TOS_*` or `S3_*` env vars and `OBJECT_STORAGE_BACKEND` |
 | Presigned URL expired | TTL elapsed (default 30 min) | Call `media_presign` (single key) or `media_presign_batch` (many keys) with the `object_key` to generate a fresh URL |
+| 3D tools not appearing | `BYTEPLUS_MODELARK_3D_ENABLED` not set or ModelArk key missing | Set `BYTEPLUS_MODELARK_3D_ENABLED=true` and ensure `BYTEPLUS_MODELARK_API_KEY` is configured |
+| 3D task failed with `AbilityProcessingError` | Transient provider error | Re-submit the same task; do not treat the input as invalid |
 
 ---
 
@@ -1416,13 +1446,26 @@ Set to `0` (default) for record-only mode with no enforcement.
     `container_format` to target a specific output. Do not retry the POST after
     an ambiguous timeout — re-poll the task ID instead.
 
+19. **Choose the right 3D model.** Use `hyper3d_create_task` for text-to-3D or
+    when you need seeds, PBR materials, custom mesh modes, or HD textures. Use
+    `hitem3d_create_task` for image-to-3D with multi-view inputs (front/back/
+    left/right) and resolution control (1536/1536pro). The get/list/cancel tools
+    are family-specific — use `hyper3d_*` for Hyper3D task IDs and `hitem3d_*`
+    for Hitem3d task IDs.
+
+20. **3D output is a zip package.** The provider returns a 24-hour file URL
+    containing a zip of the 3D file. On first successful poll with
+    `persist_output=true` (default), the file is copied to the artifact store.
+    Use the returned `ArtifactRef.uri` for durable access after the provider
+    URL expires.
+
 ---
 
 ## Environment Essentials
 
 ### Provider Credentials
 
-- `BYTEPLUS_MODELARK_API_KEY` — enables Seedream and Seedance
+- `BYTEPLUS_MODELARK_API_KEY` — enables Seedream, Seedance, Seed 3D (with flag), and Seed 2.1 Understanding
 - `BYTEPLUS_SEED_SPEECH_API_KEY` — enables Seed Audio (TTS) and Speech-to-Text (ASR)
 - `BYTEPLUS_VOD_MEDIAKIT_API_KEY` — enables VOD AI MediaKit enhancement, video transcoding, and audio separation
 - `BYTEPLUS_MODELARK_BASE_URL` — override ModelArk data-plane host
@@ -1432,6 +1475,13 @@ Set to `0` (default) for record-only mode with no enforcement.
 - `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` — seconds between ASR query polls (default 3)
 - `SEED_SPEECH_ASR_POLL_MAX_SECONDS` — maximum total seconds to wait for ASR result (default 600)
 
+### 3D Generation
+
+- `BYTEPLUS_MODELARK_3D_ENABLED` — feature flag for Hyper3D + Hitem3d tools (default `false`; reuses ModelArk key)
+- `HYPER3D_DEFAULT_MODEL` — default Hyper3D model ID (default `hyper3d-gen2-260112`)
+- `HITEM3D_DEFAULT_MODEL` — default Hitem3d model ID (default `hitem3d-2-0-251223`)
+- `SEED3D_MODEL_BINDINGS` — JSON array of 3D model bindings
+
 ### Model Selection
 
 - `SEEDREAM_DEFAULT_MODEL`
@@ -1440,6 +1490,9 @@ Set to `0` (default) for record-only mode with no enforcement.
 - `SEEDANCE_MODEL_FAMILY`
 - `SEEDREAM_MODEL_BINDINGS`
 - `SEEDANCE_MODEL_BINDINGS`
+- `SEED_UNDERSTANDING_DEFAULT_MODEL`
+- `SEED_UNDERSTANDING_MODEL_FAMILY`
+- `SEED_UNDERSTANDING_MODEL_BINDINGS`
 
 Use bindings when a custom model ID is not one of the built-in defaults.
 
@@ -1448,22 +1501,41 @@ Use bindings when a custom model ID is not one of the built-in defaults.
 - `MCP_TRANSPORT` or `FASTMCP_TRANSPORT`
 - `MCP_HOST` or `FASTMCP_HOST`
 - `MCP_PORT` or `FASTMCP_PORT`
+- `MCP_ALLOWED_ORIGINS`
+- `MCP_ALLOWED_HOSTS`
 - `MCP_AUTH_MODE`
 - `MCP_JWT_JWKS_URI`
 - `MCP_JWT_ISSUER`
 - `MCP_JWT_AUDIENCE`
 - `MCP_TENANT_CLAIM`
+- `MCP_JWT_CLOCK_SKEW_SECONDS`
+- `MCP_JWT_PROVIDE_DISCOVERY`
+- `MCP_PUBLIC_BASE_URL`
+- `MCP_JWT_SCOPES_SUPPORTED`
+
+### HTTP Rate Limiting and Readiness
+
+- `RATE_LIMIT_RPM`
+- `RATE_LIMIT_BURST`
+- `RATE_LIMIT_TRUST_PROXY_HEADERS`
+- `READINESS_CHECK_PROVIDERS`
+- `READINESS_PROVIDER_TIMEOUT_SECONDS`
 
 ### Persistence and Runtime
 
 - `ARTIFACT_BACKEND`
 - `ARTIFACT_DIR`
 - `ARTIFACT_TTL_SECONDS`
+- `STATE_BACKEND`
+- `ARTIFACT_SWEEP_INTERVAL_SECONDS`
+- `STATE_PRUNE_MAX_AGE_DAYS`
 - `MCP_INLINE_MEDIA_MAX_BYTES`
 - `MCP_HTTP_MAX_BODY_BYTES`
 - `PROVIDER_MAX_CONCURRENCY`
 - `PRINCIPAL_MAX_CONCURRENCY`
 - `DAILY_BUDGET_USD`
+- `PERSISTENCE_CACHE_MAX_SIZE`
+- `PERSISTENCE_CACHE_TTL_SECONDS`
 - `MODELARK_LOG_LEVEL`
 
 ### Object Storage
