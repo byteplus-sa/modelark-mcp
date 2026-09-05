@@ -98,7 +98,7 @@ tool → scope mapping is wired in `server.py::register_tools`:
 | `vod:read` | `vod_get_transcode_task`, `vod_get_audio_separation` |
 | `vod:extract` | `vod_separate_audio` |
 | `media:upload` | `media_upload` |
-| `media:presign` | `media_presign` |
+| `media:presign` | `media_presign`, `media_presign_batch` |
 | `artifacts:read` | MCP resource `seed-media://artifacts/{artifact_id}` |
 
 The `seed-health://status` resource and the `/health`, `/ready`, `/metrics`
@@ -108,8 +108,9 @@ is set; Seedream/Seedance tools only when `BYTEPLUS_MODELARK_API_KEY` is set;
 `vod_enhance_video`,
 `vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, and
 `vod_get_audio_separation` only when
-`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. The `media_upload` and `media_presign`
-tools are registered only when object storage credentials are set (TOS:
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. The `media_upload`, `media_presign`,
+and `media_presign_batch` tools are registered only when object storage
+credentials are set (TOS:
 `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `TOS_BUCKET`, or S3:
 `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` with
 `OBJECT_STORAGE_BACKEND=s3`).
@@ -126,15 +127,16 @@ and `/`. File-path input is restricted to the `stdio` transport to prevent
 remote file reads over HTTP.
 
 Uploaded object keys are recorded in the SQLite `object_key_ownership`
-ledger keyed by `(principal_id, tenant_id)`. `media_presign` verifies the
-caller owns the key before minting a read URL; a remote principal cannot
-re-presign another tenant's object. In `LOCAL` mode, unrecorded keys remain
-presignable by the single local principal. A successful `record` or
-`require_owner` refreshes the row's `created_at` timestamp, so regularly
-presigned keys are not expired by the state sweeper. Rows are pruned by the
-background state sweeper after `STATE_PRUNE_MAX_AGE_DAYS` (default `30`) of
-inactivity; a long-lived key that has not been presigned within that window
-must be re-uploaded before it can be presigned again by a remote principal.
+ledger keyed by `(principal_id, tenant_id)`. `media_presign` and
+`media_presign_batch` verify the caller owns each key before minting a read
+URL; a remote principal cannot re-presign another tenant's object. In `LOCAL`
+mode, unrecorded keys remain presignable by the single local principal. A
+successful `record` or `require_owner` refreshes the row's `created_at`
+timestamp, so regularly presigned keys are not expired by the state sweeper.
+Rows are pruned by the background state sweeper after
+`STATE_PRUNE_MAX_AGE_DAYS` (default `30`) of inactivity; a long-lived key
+that has not been presigned within that window must be re-uploaded before it
+can be presigned again by a remote principal.
 
 ## Host / Origin protection
 

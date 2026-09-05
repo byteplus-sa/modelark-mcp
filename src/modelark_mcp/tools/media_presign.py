@@ -26,6 +26,23 @@ from modelark_mcp.tools._errors import provider_error_result
 _OBJECT_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-_/]*$")
 
 
+def validate_object_key(v: str) -> str:
+    """Validate an object key for presign/upload reuse.
+
+    Keys must contain only alphanumeric characters, ``-``, ``_``, and ``/``;
+    must not start with ``/`` or ``-``; and must not contain empty path
+    segments (``//`` or a trailing ``/``).
+    """
+    if not v or not _OBJECT_KEY_PATTERN.match(v):
+        raise ValueError(
+            "object_key must contain only alphanumeric characters, '-', '_', and '/', "
+            "and must not start with '/' or '-'."
+        )
+    if "//" in v or v.endswith("/"):
+        raise ValueError("object_key must not contain empty path segments.")
+    return v
+
+
 class MediaPresignInput(BaseModel):
     """Input model for ``media_presign``."""
 
@@ -49,14 +66,7 @@ class MediaPresignInput(BaseModel):
     @field_validator("object_key")
     @classmethod
     def _validate_object_key(cls, v: str) -> str:
-        if not v or not _OBJECT_KEY_PATTERN.match(v):
-            raise ValueError(
-                "object_key must contain only alphanumeric characters, '-', '_', and '/', "
-                "and must not start with '/' or '-'."
-            )
-        if "//" in v or v.endswith("/"):
-            raise ValueError("object_key must not contain empty path segments.")
-        return v
+        return validate_object_key(v)
 
 
 class MediaPresignOutput(BaseModel):

@@ -2,11 +2,11 @@
 
 The server exposes a conditional set of typed tools. `seed_media_get_artifact`
 is always available, provider tools are registered only when their credentials
-are configured, and `media_upload` and `media_presign` are registered when
-object storage credentials (TOS or S3) are present. Each tool accepts a
-Pydantic input model and returns a Pydantic output model as structured
-content. All tools accept a `ctx: Context` parameter for progress reporting
-and logging.
+are configured, and `media_upload`, `media_presign`, and `media_presign_batch`
+are registered when object storage credentials (TOS or S3) are present. Each
+tool accepts a Pydantic input model and returns a Pydantic output model as
+structured content. All tools accept a `ctx: Context` parameter for progress
+reporting and logging.
 
 ## Tool Contract for MCP Clients
 
@@ -334,9 +334,9 @@ Create an asynchronous Seedance video generation task.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `prompt` | string | No | Text prompt (1-32,000 chars) |
-| `images` | list[SeedanceImageInput] | No | Image inputs with roles |
-| `videos` | list[SeedanceVideoInput] | No | Reference videos (max 3) |
-| `audios` | list[SeedanceAudioInput] | No | Reference audio (max 3) |
+| `images` | list[SeedanceImageInput] | No | Image inputs with roles. Each entry may be a plain URL string or `{"url": ...}` (coerced to `role=reference_image`) |
+| `videos` | list[SeedanceVideoInput] | No | Reference videos (max 3). Each entry may be a plain URL string or `{"url": ...}` |
+| `audios` | list[SeedanceAudioInput] | No | Reference audio (max 3). Each entry may be a plain URL string or `{"url": ...}` |
 | `model` | string | No | Override configured model ID |
 | `resolution` | "480p" \| "720p" \| "1080p" \| "4k" | No | Output resolution |
 | `ratio` | string | No | Aspect ratio. For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
@@ -385,9 +385,9 @@ Create an asynchronous Seedance 2.5 video generation task. Supports up to
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `prompt` | string | No | Text prompt (1-32,000 chars) |
-| `images` | list[SeedanceImageInput] | No | Reference images (max 30; roles `first_frame`, `last_frame`, `reference_image`) |
-| `videos` | list[SeedanceVideoInput] | No | Reference videos (max 10; URL-only) |
-| `audios` | list[SeedanceAudioInput] | No | Reference audio (max 10; audio-only input is supported) |
+| `images` | list[SeedanceImageInput] | No | Reference images (max 30; roles `first_frame`, `last_frame`, `reference_image`). Each entry may be a plain URL string or `{"url": ...}` |
+| `videos` | list[SeedanceVideoInput] | No | Reference videos (max 10; URL-only). Each entry may be a plain URL string or `{"url": ...}` |
+| `audios` | list[SeedanceAudioInput] | No | Reference audio (max 10; audio-only input is supported). Each entry may be a plain URL string or `{"url": ...}` |
 | `model` | string | No | Model ID (defaults to `dreamina-seedance-2-5-260628`) |
 | `resolution` | "480p" \| "720p" \| "1080p" | No | Output resolution (4k not supported) |
 | `ratio` | string | No | Aspect ratio. Stripped for `extend_video`; auto-derived for `edit_video`/first-frame |
@@ -756,6 +756,29 @@ presigned URL has expired or is about to expire.
 
 Returns `MediaPresignOutput` with presigned `url`, `expires_at`, and
 `object_key`.
+
+## media_presign_batch
+
+Generate fresh presigned HTTPS GET URLs for many existing objects in storage
+in a single call, without re-uploading. Accepts a list of object keys from
+prior `media_upload` calls. Failures are reported per key — a malformed,
+unowned, or provider-failing key returns an inline error while the rest
+succeed.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `object_keys` | list[string] | Yes | Object keys returned by prior `media_upload` calls (1–100 entries) |
+| `expires_in_seconds` | integer | No | Presigned URL validity (60–604800) applied to every key. Defaults to the configured TTL |
+
+### Output
+
+Returns `MediaPresignBatchOutput` with `items` (per-key `object_key`, `url`,
+`expires_at`, `code`, `error`, `request_id`), `succeeded`, and `failed`.
 
 ## hyper3d_create_task / hitem3d_create_task
 

@@ -116,6 +116,7 @@ class TestToolDiscovery:
                 "speech_to_text",
                 "media_upload",
                 "media_presign",
+                "media_presign_batch",
                 "vod_enhance_video",
                 "vod_transcode_video",
                 "vod_get_transcode_task",

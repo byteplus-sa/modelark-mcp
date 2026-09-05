@@ -42,12 +42,24 @@ class SeedanceCreateTaskInput(BaseModel):
     )
     images: list[SeedanceImageInput] | None = Field(
         None,
-        description="Reference images with optional roles (first_frame, last_frame, reference_image). Max 9.",
+        description=(
+            "Reference images with optional roles (first_frame, last_frame, reference_image). "
+            'Max 9. Each entry may be a plain URL string or {"url": "https://..."}; '
+            "these are coerced to role=reference_image."
+        ),
     )
-    videos: list[SeedanceVideoInput] | None = Field(None, description="Reference videos. Max 3.")
+    videos: list[SeedanceVideoInput] | None = Field(
+        None,
+        description=(
+            'Reference videos. Max 3. Each entry may be a plain URL string or {"url": "https://..."}.'
+        ),
+    )
     audios: list[SeedanceAudioInput] | None = Field(
         None,
-        description="Reference audio for audio-driven generation. Max 3. Cannot be the sole media input.",
+        description=(
+            "Reference audio for audio-driven generation. Max 3. Cannot be the sole media input. "
+            'Each entry may be a plain URL string or {"url": "https://..."}.'
+        ),
     )
     model: str | None = Field(
         None,
