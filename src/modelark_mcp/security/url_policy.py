@@ -129,7 +129,7 @@ def resolve_public_addresses(
         try:
             raw_addresses = tuple((resolver or system_resolver)(hostname, port))
         except (OSError, socket.gaierror) as exc:
-            log_warning("url_resolution_failed", reason="dns_error", error=str(exc))
+            log_warning("url_resolution_failed", reason="dns_error")
             raise UrlValidationError(f"Failed to resolve hostname '{hostname}': {exc}") from exc
 
     if not raw_addresses:

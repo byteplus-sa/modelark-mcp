@@ -105,7 +105,6 @@ class SafeDownloader:
                     "download_url_validation_failed",
                     code=code,
                     redirect_count=redirect_count,
-                    error=str(exc),
                 )
                 raise SafeDownloadError(code, message, retryable=False) from exc
             if not trusted_hosts(validated.hostname):
@@ -127,14 +126,14 @@ class SafeDownloader:
             except SafeDownloadError:
                 raise
             except httpx.TimeoutException as exc:
-                log_warning("download_timeout", error=str(exc))
+                log_warning("download_timeout", error=type(exc).__name__)
                 raise SafeDownloadError(
                     "network_error",
                     "Provider output download timed out.",
                     retryable=True,
                 ) from exc
             except httpx.TransportError as exc:
-                log_warning("download_transport_error", error=str(exc))
+                log_warning("download_transport_error", error=type(exc).__name__)
                 raise SafeDownloadError(
                     "network_error",
                     "Provider output download failed due to a network error.",
