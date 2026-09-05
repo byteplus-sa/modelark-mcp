@@ -574,9 +574,13 @@ captured per variation.
 
 Understand images and videos, or reason about a task, through the Seed 2.1
 multimodal model. Supports deep-thinking (chain-of-thought) reasoning when
-`thinking=true`. The default model is `dola-seed-evolving` (Seed 2.1 Pro
-equivalent — always maps to the latest Seed-series understanding model);
-Turbo models are available via `SEED_UNDERSTANDING_MODEL_BINDINGS`.
+`thinking=true` (deep-thinking is opt-in, not default-on). The default model
+is `dola-seed-2-1-turbo-260628` (Seed 2.1 Turbo); `dola-seed-evolving` (the
+latest Seed-series Pro-tier model) is also supported as a recognized built-in
+ID — set `SEED_UNDERSTANDING_DEFAULT_MODEL=dola-seed-evolving` to opt in; its
+family auto-resolves to `pro` so no explicit `SEED_UNDERSTANDING_MODEL_FAMILY`
+is required. Other custom model IDs can be registered via
+`SEED_UNDERSTANDING_MODEL_BINDINGS`.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`

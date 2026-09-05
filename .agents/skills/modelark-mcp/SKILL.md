@@ -822,9 +822,12 @@ Create multiple Seedance 2.5 video tasks in parallel. Inherits all parameters fr
 
 Requires `BYTEPLUS_MODELARK_API_KEY`. Auth scope: `understanding:read`.
 
-The default model is `dola-seed-evolving` (Seed 2.1 Pro equivalent — always
-maps to the latest Seed-series understanding model). Turbo models are available
-via `SEED_UNDERSTANDING_MODEL_BINDINGS`.
+The default model is `dola-seed-2-1-turbo-260628` (Seed 2.1 Turbo).
+`dola-seed-evolving` (the latest Seed-series Pro-tier model) is also a
+recognized built-in ID — set `SEED_UNDERSTANDING_DEFAULT_MODEL=dola-seed-evolving`
+to opt in; its family auto-resolves to `pro` so no explicit
+`SEED_UNDERSTANDING_MODEL_FAMILY` is required. Other custom model IDs can be
+registered via `SEED_UNDERSTANDING_MODEL_BINDINGS`.
 
 #### `seed_understand`
 
@@ -1122,8 +1125,8 @@ quota. Nine model families, with these default model IDs:
 | **Seedance 2 Standard** | `dreamina-seedance-2-0-260128` | 9 imgs / 3 vids / 3 audios, 480p–4K, 0–15s |
 | **Seedance 2 Fast** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
 | **Seedance 2 Mini** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
-| **Seed 2.1 Pro** | `dola-seed-evolving` | 256K context, images + videos, deep-thinking |
-| **Seed 2.1 Turbo** | *(configured via `SEED_UNDERSTANDING_MODEL_BINDINGS`)* | 256K context, images + videos, deep-thinking |
+| **Seed 2.1 Turbo** | `dola-seed-2-1-turbo-260628` (default) | 256K context, images + videos, deep-thinking |
+| **Seed 2.1 Pro** | `dola-seed-evolving` (recognized built-in; opt-in via `SEED_UNDERSTANDING_DEFAULT_MODEL`) | 256K context, images + videos, deep-thinking |
 
 Custom model IDs must be explicitly bound via `SEEDREAM_MODEL_BINDINGS` or
 `SEEDANCE_MODEL_BINDINGS` JSON. When a client omits the `model` parameter, the

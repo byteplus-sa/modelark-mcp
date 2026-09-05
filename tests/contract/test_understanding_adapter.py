@@ -443,3 +443,48 @@ class TestUnderstandingErrorPropagation:
         request = SeedUnderstandingService.build_request(model=TEST_MODEL, prompt="test")
         response, _ = await service.generate(request)
         assert len(response.choices) == 0
+
+
+class TestUnderstandingModelFamilyAutoDetection:
+    """Settings-layer tests verifying default-model family auto-detection.
+
+    The code default for ``seed_understanding_default_model`` must resolve to
+    TURBO, and the recognized Pro-tier built-in ID ``dola-seed-evolving`` must
+    resolve to PRO without requiring an explicit
+    ``SEED_UNDERSTANDING_MODEL_FAMILY``. Any other custom ID must raise
+    ``ValueError`` when neither family nor bindings are supplied.
+    """
+
+    def test_default_model_resolves_to_turbo(self) -> None:
+        from modelark_mcp.config.env import Settings
+
+        settings = Settings(_env_file=None)
+        assert settings.seed_understanding_default_model == "dola-seed-2-1-turbo-260628"
+        assert len(settings.seed_understanding_model_bindings) == 1
+        binding = settings.seed_understanding_model_bindings[0]
+        assert binding.model_id == "dola-seed-2-1-turbo-260628"
+        assert binding.family.value == "turbo"
+
+    def test_dola_seed_evolving_auto_resolves_to_pro(self) -> None:
+        from modelark_mcp.config.env import Settings
+
+        settings = Settings(
+            _env_file=None,
+            SEED_UNDERSTANDING_DEFAULT_MODEL="dola-seed-evolving",
+        )
+        assert settings.seed_understanding_default_model == "dola-seed-evolving"
+        assert len(settings.seed_understanding_model_bindings) == 1
+        binding = settings.seed_understanding_model_bindings[0]
+        assert binding.model_id == "dola-seed-evolving"
+        assert binding.family.value == "pro"
+
+    def test_unknown_custom_id_without_family_raises(self) -> None:
+        from pydantic import ValidationError
+
+        from modelark_mcp.config.env import Settings
+
+        with pytest.raises((ValueError, ValidationError)):
+            Settings(
+                _env_file=None,
+                SEED_UNDERSTANDING_DEFAULT_MODEL="my-custom-model",
+            )
