@@ -1118,8 +1118,8 @@ quota. Nine model families, with these default model IDs:
 | **Seedance 2 Standard** | `dreamina-seedance-2-0-260128` | 9 imgs / 3 vids / 3 audios, 480p–4K, 0–15s |
 | **Seedance 2 Fast** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
 | **Seedance 2 Mini** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
-| **Seed 2.1 Pro** | *(configured via `SEED_UNDERSTANDING_MODEL_BINDINGS`)* | 256K context, images + videos, deep-thinking |
-| **Seed 2.1 Turbo** | `dola-seed-2-1-turbo-260628` | 256K context, images + videos, deep-thinking |
+| **Seed 2.1 Pro** | `dola-seed-evolving` | 256K context, images + videos, deep-thinking |
+| **Seed 2.1 Turbo** | *(configured via `SEED_UNDERSTANDING_MODEL_BINDINGS`)* | 256K context, images + videos, deep-thinking |
 
 Custom model IDs must be explicitly bound via `SEEDREAM_MODEL_BINDINGS` or
 `SEEDANCE_MODEL_BINDINGS` JSON. When a client omits the `model` parameter, the
