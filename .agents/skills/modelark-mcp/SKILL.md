@@ -1,6 +1,6 @@
 ---
 name: modelark-mcp
-description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video (including Seedance 2.5, BytePlus VOD AI MediaKit enhancement, video transcoding, and voice/background audio separation), understand images and videos through Seed 2.1, transcribe speech to text, manage Seedance tasks, upload reference media, and fetch persisted artifacts.
+description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, video, and 3D models (including Seedance 2.5, Hyper3D, Hitem3d, BytePlus VOD AI MediaKit enhancement, video transcoding, and voice/background audio separation), understand images and videos through Seed 2.1, transcribe speech to text, manage Seedance and 3D tasks, upload reference media, and fetch persisted artifacts.
 ---
 
 # ModelArk Seed Multimodal MCP Server
@@ -17,6 +17,10 @@ behind one server:
   (create, poll, list, cancel/delete). Supports two model generations: 2.5
   (default, 30s, 30/10/10 refs, 480p/720p/1080p) and 2.0 (legacy, 15s, 9/3/3
   refs, 480p–4K, Fast/Mini variants).
+- **Seed 3D** — asynchronous 3D model generation through ModelArk. Hyper3D
+  (text-to-3D and image-to-3D, up to 5 images, GLB/OBJ/USDZ/FBX/STL output)
+  and Hitem3d (image-to-3D only, 1–4 images, OBJ/GLB/STL/FBX/USDZ output).
+  Gated by `BYTEPLUS_MODELARK_3D_ENABLED`; disabled by default.
 - **Seed 2.1 Understanding** — multimodal video/image understanding and
   reasoning through ModelArk Chat Completions; supports deep-thinking mode.
   Use for OCR, scene analysis, content review, and as a visual reasoning
@@ -34,7 +38,7 @@ behind one server:
 The server is built on FastMCP v3 and runs locally via `stdio` or as a
 deployable Streamable HTTP service. Generated media is persisted to a local
 artifact store with stable `seed-media://` resource URIs that survive provider
-URL expiry (2 hours for audio, 24 hours for ModelArk image/video). MediaKit's
+URL expiry (2 hours for audio, 24 hours for ModelArk image/video/3D). MediaKit's
 source URL lifetime is unconfirmed and its durable copy is best-effort.
 
 ## When To Use
@@ -819,6 +823,160 @@ Create multiple Seedance 2.5 video tasks in parallel. Inherits all parameters fr
 
 ---
 
+### Seed 3D (Hyper3D + Hitem3d) Tools
+
+Requires `BYTEPLUS_MODELARK_3D_ENABLED=true` (and `BYTEPLUS_MODELARK_API_KEY`).
+Auth scopes: `hyper3d:create`, `hyper3d:read`, `hyper3d:delete`, `hitem3d:create`,
+`hitem3d:read`, `hitem3d:delete`.
+
+3D generation is **asynchronous**. You create a task, then poll for completion.
+Tasks use the same lifecycle states as Seedance:
+`queued → running → succeeded | failed | cancelled | expired`.
+
+Two model families are supported:
+
+- **Hyper3D** (`hyper3d-gen2-260112`) — text-to-3D and image-to-3D. Accepts a
+  text prompt and/or up to 5 reference images. Supports seeds, PBR/Shaded/All/None
+  materials, Raw/Quad mesh modes, custom polygon counts, HD textures, bounding-box
+  conditioning, T-Pose, and subdivision levels. Output formats: GLB, OBJ, USDZ,
+  FBX, STL.
+- **Hitem3d** (`hitem3d-2-0-251223`) — image-to-3D only. Requires 1–4 reference
+  images. Supports resolution selection (1536/1536pro), custom face counts
+  (100K–2M), geometry-only or geometry+texture modes, and multi-view bitmap
+  marking. Output formats: OBJ, GLB, STL, FBX, USDZ.
+
+#### `hyper3d_create_task`
+
+Create an asynchronous Hyper3D 3D generation task. Supports text-to-3D (prompt
+required) and image-to-3D (1–5 images).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | `str` | No* | Text prompt (English, max 400 chars). *Required for text-to-3D when no images are provided. |
+| `images` | `list[Seed3DImageInput]` | No | Reference images for image-to-3D. Max 5. |
+| `model` | `str` | No | Model ID. Omit for the configured Hyper3D default. |
+| `seed` | `int` | No | Random seed for reproducible generation (0–65535). |
+| `callback_url` | `str` | No | Optional callback URL notified on status changes. |
+| `material` | `"PBR"` \| `"Shaded"` \| `"All"` \| `"None"` | No | Material type. PBR (default). |
+| `mesh_mode` | `"Raw"` \| `"Quad"` | No | Mesh shape. Raw (triangles) or Quad (default). |
+| `quality_override` | `int` | No | Custom polygon count (Raw: 500–1M, Quad: 1000–200K). |
+| `addons` | `"HighPack"` | No | Texture enhancement. HighPack provides 4K textures. |
+| `use_original_alpha` | `bool` | No | Preserve transparent areas of the input image. |
+| `bbox_condition` | `list[int]` | No | Bounding box `[width, height, length]` (3 ints). |
+| `ta_pose` | `bool` | No | Force T-Pose/A-Pose for humanoid models. |
+| `subdivision_level` | `"high"` \| `"medium"` \| `"low"` | No | Polygon count level. Ignored when `quality_override` is set. |
+| `file_format` | `"glb"` \| `"obj"` \| `"usdz"` \| `"fbx"` \| `"stl"` | No | Output 3D file format. Defaults to `glb`. |
+| `hd_texture` | `bool` | No | Enable HD textures. |
+
+Returns `Seed3DCreateTaskOutput` with `task_id`, `status="queued"`, and
+`recommended_poll_after_ms` (5000ms).
+
+**Example — text-to-3D:**
+
+```json
+{
+  "prompt": "A medieval castle with tall towers and a drawbridge",
+  "file_format": "glb",
+  "material": "PBR"
+}
+```
+
+**Example — image-to-3D with PBR materials:**
+
+```json
+{
+  "images": [
+    { "kind": "url", "url": "https://cdn.example.com/character.png" }
+  ],
+  "material": "PBR",
+  "mesh_mode": "Quad",
+  "file_format": "glb"
+}
+```
+
+#### `hitem3d_create_task`
+
+Create an asynchronous Hitem3d 3D generation task. Image-to-3D only; requires
+1–4 reference images.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `images` | `list[Seed3DImageInput]` | Yes | Reference images for image-to-3D. 1–4 required. |
+| `model` | `str` | No | Model ID. Omit for the configured Hitem3d default. |
+| `callback_url` | `str` | No | Optional callback URL notified on status changes. |
+| `resolution` | `"1536"` \| `"1536pro"` | No | Model resolution. 1536 (default) or 1536pro. |
+| `face` | `int` | No | Custom model face count (100000–2000000). |
+| `file_format` | `"obj"` \| `"glb"` \| `"stl"` \| `"fbx"` \| `"usdz"` | No | Output 3D file format. Defaults to `obj`. |
+| `request_type` | `1` \| `3` | No | 1 = geometry only, 3 = geometry + texture (default). |
+| `multi_images_bit` | `str` | No | Bitmap marking which views are present, in order front/back/left/right (e.g. `"1010"` = front + left). Max 4 chars. |
+
+Returns `Seed3DCreateTaskOutput` with `task_id`, `status="queued"`, and
+`recommended_poll_after_ms` (5000ms).
+
+**Example — image-to-3D with multiple views:**
+
+```json
+{
+  "images": [
+    { "kind": "url", "url": "https://cdn.example.com/front.png" },
+    { "kind": "url", "url": "https://cdn.example.com/left.png" }
+  ],
+  "multi_images_bit": "1010",
+  "resolution": "1536pro",
+  "file_format": "glb"
+}
+```
+
+#### `hyper3d_get_task` / `hitem3d_get_task`
+
+Retrieve the status and output of a 3D generation task. On first successful
+retrieval with `persist_output=true` (default), copies the provider's 24-hour
+file URL (zip package of the 3D file) into durable artifact storage so the
+`seed-media://` resource remains available after expiry.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | `str` | Yes | Task ID from the create tool |
+| `persist_output` | `bool` | No (default `true`) | Persist the 3D file to artifact store on first success |
+
+Returns `Seed3DTaskOutput` with `task_id`, `model`, `created_at`, `updated_at`,
+`status`, optional `error`, optional `file: ArtifactRef` (on success), and
+optional `usage`.
+
+#### `hyper3d_list_tasks` / `hitem3d_list_tasks`
+
+List recent 3D generation tasks (previous 7 days, provider limitation). Supports
+filtering by status, task IDs, and model.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `page` | `int` | No | 1–500 |
+| `page_size` | `int` | No | 1–100 |
+| `status` | `Seed3DTaskStatus` | No | Filter by status |
+| `task_ids` | `list[str]` | No | Filter by specific task IDs |
+| `model` | `str` | No | Filter by model ID |
+
+Returns `Seed3DTaskPage` with paginated task summaries.
+
+#### `hyper3d_cancel_or_delete_task` / `hitem3d_cancel_or_delete_task`
+
+Cancel a queued task or delete a terminal task. **Destructive** — requires
+explicit confirmation.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | `str` | Yes | Task to act on |
+| `mode` | `"cancel"` \| `"delete"` | Yes | Action to perform |
+| `expected_status` | `Seed3DTaskStatus` | Yes | Must match current status |
+| `confirm` | `Literal[true]` | Yes | Must be `true` |
+
+- `mode=cancel` + `expected_status=queued`: Cancel a pending task.
+- `mode=delete` + `expected_status=succeeded|failed|expired`: Delete a completed task.
+
+Returns `Seed3DCancelOrDeleteOutput`.
+
+---
+
 ### Seed 2.1 Multimodal Understanding
 
 Requires `BYTEPLUS_MODELARK_API_KEY`. Auth scope: `understanding:read`.
@@ -1060,9 +1218,9 @@ JWT scope: `media:presign`.
 Generate fresh presigned HTTPS GET URLs for many existing objects in a single
 call (TOS or S3). Use this when preparing multiple references for one shot —
 e.g. presigning 30 Seedance 2.5 reference images — instead of calling
-`media_presign` once per key. Failures are reported per key (malformed,
-unowned, or provider-failing keys return an inline `code`/`error` while the
-rest succeed).
+`media_presign` once per key. Failures are reported per key: each failing key
+returns `code` (`INVALID_KEY`, `NOT_OWNED`, `INTERNAL`, or a provider error
+code) and `error` while the rest succeed.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -1098,7 +1256,7 @@ Retrieves a persisted media artifact by its UUID. Requires `artifacts:read`
 scope in JWT mode. Returns the media content with the correct MIME type.
 
 Artifacts are the durable, locally-persisted copies of generated media. Known
-provider URLs expire (2h for audio, 24h for ModelArk image/video), but
+provider URLs expire (2h for audio, 24h for ModelArk image/video/3D), but
 artifacts survive for 7
 days (configurable via `ARTIFACT_TTL_SECONDS`). Always use `persist=true` (the
 default) and reference the returned `ArtifactRef.uri` for long-lived access.
@@ -1106,7 +1264,7 @@ default) and reference the returned `ArtifactRef.uri` for long-lived access.
 ### `seed-health://status`
 
 Returns a health summary with no authentication required. Lists which products
-are configured (ModelArk, Seed Audio, Seed Speech ASR, VOD AI MediaKit,
+are configured (ModelArk, Seed 3D, Seed Audio, Seed Speech ASR, VOD AI MediaKit,
 object storage), the
 artifact backend, and the active transport.
 
@@ -1116,17 +1274,19 @@ artifact backend, and the active transport.
 
 ### Four-Provider Design
 
-The server normalizes five distinct BytePlus API surfaces:
+The server normalizes four distinct BytePlus API surfaces:
 
 | Provider | Auth | Base URL | Products |
 |---|---|---|---|
-| **ModelArk** | `Authorization: Bearer <key>` | `https://ark.ap-southeast.bytepluses.com/api/v3` | Seedream, Seedance |
+| **ModelArk** | `Authorization: Bearer <key>` | `https://ark.ap-southeast.bytepluses.com/api/v3` | Seedream, Seedance, Seed 3D (Hyper3D + Hitem3d), Seed 2.1 Understanding |
 | **Seed Speech** | `X-Api-Key: <key>` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Audio, Speech-to-Text |
 | **VOD AI MediaKit** | `Authorization: Bearer <key>` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | Video enhancement, video transcoding, voice + background audio separation |
 
 One Seed Speech key covers both Seed Audio and ASR — the provider distinguishes
 them by `X-Api-Resource-Id`, not by the key. ModelArk uses a separate Bearer
-key. Tools for a product are only registered when its provider API key is set.
+key that covers Seedream, Seedance, Seed 3D, and Seed 2.1 Understanding (3D
+requires an additional feature flag). VOD AI MediaKit uses a third Bearer key.
+Tools for a product are only registered when its provider API key is set.
 
 ### Runtime Services
 
@@ -1136,7 +1296,7 @@ Each server process maintains shared runtime services:
   ownership metadata and TTL-based cleanup.
 - **Budget Ledger** — SQLite-backed per-principal daily spend tracking.
 - **Task Ownership Store** — SQLite-backed task ID to principal mapping for
-  Seedance ownership enforcement.
+  Seedance and Seed 3D ownership enforcement.
 - **Provider Limiters** — Concurrency control: a per-provider semaphore
   (default 5) for every call, plus a per-principal semaphore (default 3) that
   bounds authenticated JWT HTTP principals only. Local principals (stdio and
@@ -1147,7 +1307,7 @@ Each server process maintains shared runtime services:
 ### Model Capability Registry
 
 The server validates inputs against known model capabilities before spending
-quota. Nine model families, with these default model IDs:
+quota. Eleven model families, with these default model IDs:
 
 | Family | Default Model ID | Key Traits |
 |---|---|---|
@@ -1160,9 +1320,12 @@ quota. Nine model families, with these default model IDs:
 | **Seedance 2 Mini** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
 | **Seed 2.1 Turbo** | `dola-seed-2-1-turbo-260628` (default) | 256K context, images + videos, deep-thinking |
 | **Seed 2.1 Pro** | `dola-seed-evolving` (recognized built-in; opt-in via `SEED_UNDERSTANDING_DEFAULT_MODEL`) | 256K context, images + videos, deep-thinking |
+| **Hyper3D** | `hyper3d-gen2-260112` | Text-to-3D + image-to-3D (5 imgs), GLB/OBJ/USDZ/FBX/STL, seeds, PBR materials |
+| **Hitem3d** | `hitem3d-2-0-251223` | Image-to-3D only (1–4 imgs), OBJ/GLB/STL/FBX/USDZ, resolution + face control |
 
-Custom model IDs must be explicitly bound via `SEEDREAM_MODEL_BINDINGS` or
-`SEEDANCE_MODEL_BINDINGS` JSON. When a client omits the `model` parameter, the
+Custom model IDs must be explicitly bound via `SEEDREAM_MODEL_BINDINGS`,
+`SEEDANCE_MODEL_BINDINGS`, `SEED_UNDERSTANDING_MODEL_BINDINGS`, or
+`SEED3D_MODEL_BINDINGS` JSON. When a client omits the `model` parameter, the
 default model for that product is used.
 
 ---
