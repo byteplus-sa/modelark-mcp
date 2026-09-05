@@ -1272,9 +1272,9 @@ artifact backend, and the active transport.
 
 ## Architecture
 
-### Four-Provider Design
+### Three-Provider Design
 
-The server normalizes four distinct BytePlus API surfaces:
+The server normalizes three distinct BytePlus API surfaces:
 
 | Provider | Auth | Base URL | Products |
 |---|---|---|---|
