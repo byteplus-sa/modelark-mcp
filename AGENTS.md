@@ -9,16 +9,29 @@ surface:
 - **Seed Audio** — full-scene audio generation through Seed Speech.
 - **Seedream** — image generation and editing through ModelArk.
 - **Seedance** — asynchronous video generation and task management through
-  ModelArk.
+  ModelArk. Supports two model generations: 2.0 (legacy, 15s, 4K) and 2.5
+  (default, 30s, 1080p, structured editing, native extension).
+- **Seed 3D** — asynchronous 3D model generation through ModelArk (Hyper3D
+  text-to-3D and Hitem3d image-to-3D). Gated by `BYTEPLUS_MODELARK_3D_ENABLED`;
+  disabled by default.
+- **Seed 2.1 Understanding** — multimodal video/image understanding and
+  reasoning through ModelArk Chat Completions; supports deep-thinking mode.
+- **Speech-to-Text** — synchronous audio transcription through Seed Speech ASR.
+- **VOD AI MediaKit** — asynchronous video enhancement, video transcoding,
+  and voice/background audio separation through the BytePlus VOD AI MediaKit.
+- **Object storage upload** — presigned URL generation for URL-only media
+  workflows (TOS or S3 backend).
 - **Durable artifacts** — MCP resources for generated media whose provider URLs
-  expire (2h for audio, 24h for image/video).
+  expire (2h for audio, 24h for image/video/3D).
 - **Transports** — local `stdio` first, with protected Streamable HTTP as a
   deployable option (both natively supported by FastMCP).
 
-Seedance and Seedream share the ModelArk data-plane host and Bearer
-authentication, while Seed Audio is hosted by Seed Speech and uses `X-Api-Key`.
-The server uses two provider gateways behind one normalized domain layer. See
-`plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md` for the full design.
+Seedance, Seedream, Seed 3D, and Seed 2.1 Understanding share the ModelArk
+data-plane host and Bearer authentication. Seed Audio and Speech-to-Text are
+hosted by Seed Speech and use `X-Api-Key`. VOD AI MediaKit uses a separate
+Bearer key. The server uses three provider gateways behind one normalized
+domain layer. See `plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md` for the full
+design.
 
 ## Repository Layout
 
