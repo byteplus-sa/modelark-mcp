@@ -15,6 +15,7 @@ from pydantic import AnyUrl, BaseModel, Field, UrlConstraints
 from modelark_mcp.artifacts.store import ArtifactPersistenceError
 from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.domain.errors import ProviderError
+from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
 from modelark_mcp.providers.vod_mediakit.schemas import VodMediaKitEnhancementRequest
@@ -220,6 +221,12 @@ async def vod_enhance_video(
             await ctx.warning("VOD output persistence failed due to an internal storage error.")
 
     await ctx.report_progress(progress=100, total=100)
+    log_info(
+        "vod_enhance_video_complete",
+        status=submission.status,
+        task_id=submission.task_id,
+        persistence=persistence,
+    )
     return VodEnhanceVideoOutput(
         status="succeeded",
         request_id=submission.request_id,

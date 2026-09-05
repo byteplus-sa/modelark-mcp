@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from modelark_mcp.observability.logger import debug as log_debug
 from modelark_mcp.providers.modelark.client import ModelArkGateway
 from modelark_mcp.providers.modelark.schemas import (
     ChatCompletionProviderRequest,
@@ -38,6 +39,7 @@ class SeedUnderstandingService:
         Returns the parsed provider response and the ModelArk request ID.
         Raises ``ProviderError`` on non-2xx responses or timeouts.
         """
+        log_debug("chat_completion", model=request.model, stream=request.stream)
         try:
             response = await self._gateway.post(
                 "/chat/completions", request.model_dump(exclude_none=True)
@@ -55,7 +57,15 @@ class SeedUnderstandingService:
             raise ModelArkGateway.normalize_error(response, "chat_completion")
 
         body = _parse_success_body(response, "chat_completion")
-        return ChatCompletionProviderResponse.model_validate(body), request_id
+        parsed = ChatCompletionProviderResponse.model_validate(body)
+        log_debug(
+            "chat_completion_complete",
+            model=request.model,
+            status_code=response.status_code,
+            request_id=request_id,
+            completion_id=parsed.id,
+        )
+        return parsed, request_id
 
     @staticmethod
     def build_request(

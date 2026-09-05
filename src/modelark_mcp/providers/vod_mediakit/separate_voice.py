@@ -8,6 +8,7 @@ import httpx
 from pydantic import ValidationError
 
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from modelark_mcp.observability.logger import debug as log_debug
 from modelark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
 from modelark_mcp.providers.vod_mediakit.schemas import (
     SeparateVoiceSubmission,
@@ -35,6 +36,7 @@ class VodMediaKitSeparateVoiceService:
 
     async def submit(self, request: VodMediaKitSeparateVoiceRequest) -> SeparateVoiceSubmission:
         """Submit one separate-voice task; never retries an ambiguous mutation."""
+        log_debug("vod_separate_voice_submit")
         try:
             response = await self._gateway.post(
                 _SEPARATE_VOICE_PATH,
@@ -108,6 +110,7 @@ class VodMediaKitSeparateVoiceService:
 
     async def get(self, task_id: str) -> SeparateVoiceTask:
         """Poll one separate-voice task and normalize its state."""
+        log_debug("vod_separate_voice_get", task_id=task_id)
         try:
             response = await self._gateway.get(f"{_TASKS_PATH}/{task_id}")
         except httpx.TimeoutException:
@@ -168,6 +171,13 @@ class VodMediaKitSeparateVoiceService:
                         ambiguous_completion=False,
                     )
                 )
+            log_debug(
+                "vod_separate_voice_get_complete",
+                task_id=parsed.task_id,
+                status="succeeded",
+                status_code=response.status_code,
+                request_id=request_id,
+            )
             return SeparateVoiceTask(
                 task_id=parsed.task_id,
                 status="succeeded",
@@ -187,6 +197,14 @@ class VodMediaKitSeparateVoiceService:
             code, message = _sanitize_task_error(
                 parsed.error, "MediaKit reported the separate-voice task failed."
             )
+            log_debug(
+                "vod_separate_voice_get_complete",
+                task_id=parsed.task_id,
+                status="failed",
+                status_code=response.status_code,
+                request_id=request_id,
+                failure_code=code,
+            )
             return SeparateVoiceTask(
                 task_id=parsed.task_id,
                 status="failed",
@@ -199,6 +217,13 @@ class VodMediaKitSeparateVoiceService:
             )
 
         if parsed.status == "running":
+            log_debug(
+                "vod_separate_voice_get_complete",
+                task_id=parsed.task_id,
+                status="processing",
+                status_code=response.status_code,
+                request_id=request_id,
+            )
             return SeparateVoiceTask(
                 task_id=parsed.task_id,
                 status="processing",

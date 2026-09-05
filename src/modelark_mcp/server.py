@@ -706,6 +706,19 @@ def create_server(
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     register_tools(server, resolved_settings)
+    log_info(
+        "server_ready",
+        transport=resolved_settings.mcp_transport,
+        auth_mode=resolved_settings.mcp_auth_mode.value,
+        modelark_configured=resolved_settings.has_modelark,
+        seed_audio_configured=resolved_settings.has_seed_audio,
+        seed3d_configured=resolved_settings.has_seed3d,
+        stt_configured=resolved_settings.has_stt,
+        vod_mediakit_configured=resolved_settings.has_vod_mediakit,
+        object_storage_backend=resolved_settings.object_storage_backend,
+        artifact_backend=resolved_settings.artifact_backend,
+        log_level=resolved_settings.log_level,
+    )
     return server
 
 

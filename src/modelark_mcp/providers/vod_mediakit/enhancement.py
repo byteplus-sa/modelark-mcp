@@ -8,6 +8,7 @@ import httpx
 from pydantic import ValidationError
 
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from modelark_mcp.observability.logger import debug as log_debug
 from modelark_mcp.providers.vod_mediakit.client import (
     VodMediaKitGateway,
     sanitize_provider_message,
@@ -31,6 +32,7 @@ class VodMediaKitEnhancementService:
 
     async def enhance(self, request: VodMediaKitEnhancementRequest) -> EnhancementSubmission:
         """Submit one enhancement request without automatic mutation retries."""
+        log_debug("vod_enhance_video_submit")
         try:
             response = await self._gateway.post(
                 _ENHANCE_PATH,
@@ -70,6 +72,13 @@ class VodMediaKitEnhancementService:
                 }.intersection(body)
             ):
                 accepted = VodMediaKitAcceptedResponse.model_validate(body)
+                log_debug(
+                    "vod_enhance_video_complete",
+                    status="accepted",
+                    status_code=response.status_code,
+                    task_id=accepted.task_id,
+                    request_id=header_request_id,
+                )
                 return EnhancementSubmission(
                     status="accepted",
                     request_id=accepted.request_id,
@@ -96,6 +105,13 @@ class VodMediaKitEnhancementService:
 
         result = provider_response.result
         detail = result.error
+        log_debug(
+            "vod_enhance_video_complete",
+            status="succeeded",
+            status_code=response.status_code,
+            task_id=result.task_id,
+            request_id=header_request_id,
+        )
         return EnhancementSubmission(
             status="succeeded",
             request_id=provider_response.request_id or result.request_id,

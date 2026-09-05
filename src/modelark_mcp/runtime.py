@@ -667,6 +667,14 @@ class BudgetLedger:
                 and current + estimate.amount_usd > self._daily_limit_usd
             ):
                 BUDGET_REJECTIONS.labels(product=estimate.product).inc()
+                log_warning(
+                    "budget_rejected",
+                    product=estimate.product,
+                    amount_usd=round(estimate.amount_usd, 6),
+                    current_usd=round(current, 6),
+                    daily_limit_usd=self._daily_limit_usd,
+                    principal_id=owner.principal_id,
+                )
                 raise BudgetExceededError(
                     f"Daily budget of ${self._daily_limit_usd:.2f} would be exceeded."
                 )

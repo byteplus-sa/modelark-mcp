@@ -13,6 +13,8 @@ from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from modelark_mcp.domain.models import VariationError, VariationResult, VariationSummary
+from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.tools._cost import DEFAULT_MAX_CONCURRENT
 
 
@@ -95,6 +97,7 @@ async def run_variation_batch(
     variation_results: list[VariationResult] = []
     for i, result in enumerate(results):
         if isinstance(result, asyncio.TimeoutError):
+            log_warning("variation_timeout", index=i)
             variation_results.append(
                 VariationResult(
                     index=i,
@@ -102,6 +105,7 @@ async def run_variation_batch(
                 )
             )
         elif isinstance(result, Exception):
+            log_warning("variation_error", index=i, error=str(result))
             variation_results.append(
                 VariationResult(
                     index=i,
@@ -114,6 +118,12 @@ async def run_variation_batch(
     succeeded = sum(1 for r in variation_results if r.artifact is not None or r.task_id is not None)
     failed = count - succeeded
 
+    log_info(
+        "variation_batch_complete",
+        total=count,
+        succeeded=succeeded,
+        failed=failed,
+    )
     return VariationSummary(
         total=count,
         succeeded=succeeded,

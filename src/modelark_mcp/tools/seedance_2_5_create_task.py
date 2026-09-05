@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import ModelFamily, get_capability_registry
+from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.tools._seedance_shared import (
     SeedanceAudioInput,
     SeedanceImageInput,
@@ -232,6 +233,11 @@ async def seedance_2_5_create_task(
     if isinstance(result, ToolResult):
         return result
     task_id, _ = result
+    log_info(
+        "seedance_2_5_create_task_complete",
+        task_id=task_id,
+        model=caps.model_id,
+    )
     return Seedance25CreateTaskOutput(
         task_id=task_id,
         status="queued",

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from modelark_mcp.observability.logger import info as log_info
+
 if TYPE_CHECKING:
     from modelark_mcp.config.env import Settings
 
@@ -77,6 +79,7 @@ def make_object_storage_gateway(settings: Settings | None = None) -> ObjectStora
             )
         from modelark_mcp.providers.s3.client import S3Gateway
 
+        log_info("object_storage_backend", backend="s3")
         return S3Gateway()
     if not settings.has_tos:
         raise ValueError(
@@ -85,4 +88,5 @@ def make_object_storage_gateway(settings: Settings | None = None) -> ObjectStora
         )
     from modelark_mcp.providers.tos.client import TosGateway
 
+    log_info("object_storage_backend", backend="tos")
     return TosGateway()

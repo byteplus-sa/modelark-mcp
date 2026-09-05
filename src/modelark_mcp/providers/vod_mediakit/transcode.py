@@ -10,6 +10,7 @@ import httpx
 from pydantic import ValidationError
 
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from modelark_mcp.observability.logger import debug as log_debug
 from modelark_mcp.providers.vod_mediakit.client import (
     VodMediaKitGateway,
     sanitize_provider_message,
@@ -69,6 +70,7 @@ class VodMediaKitTranscodeService:
 
     async def submit(self, request: VodMediaKitTranscodeRequest) -> TranscodeSubmission:
         """Submit one transcode task; never retries an ambiguous mutation."""
+        log_debug("vod_transcode_submit")
         try:
             response = await self._gateway.post(
                 _TRANSCODE_PATH,
@@ -141,6 +143,7 @@ class VodMediaKitTranscodeService:
 
     async def get(self, task_id: str) -> TranscodeTask:
         """Poll one transcode task and normalize its state."""
+        log_debug("vod_transcode_get", task_id=task_id)
         try:
             response = await self._gateway.get(f"{_TASKS_PATH}/{task_id}")
         except httpx.TimeoutException:
@@ -195,6 +198,13 @@ class VodMediaKitTranscodeService:
                         ambiguous_completion=False,
                     )
                 )
+            log_debug(
+                "vod_transcode_get_complete",
+                task_id=task_id,
+                status="succeeded",
+                status_code=response.status_code,
+                request_id=request_id,
+            )
             return TranscodeTask(
                 task_id=task_id,
                 status="succeeded",
@@ -213,6 +223,14 @@ class VodMediaKitTranscodeService:
             code, message = _sanitize_task_error(
                 parsed.error, "MediaKit reported the transcode task failed."
             )
+            log_debug(
+                "vod_transcode_get_complete",
+                task_id=task_id,
+                status="failed",
+                status_code=response.status_code,
+                request_id=request_id,
+                failure_code=code,
+            )
             return TranscodeTask(
                 task_id=task_id,
                 status="failed",
@@ -225,6 +243,13 @@ class VodMediaKitTranscodeService:
             )
 
         if parsed.status == "running":
+            log_debug(
+                "vod_transcode_get_complete",
+                task_id=task_id,
+                status="processing",
+                status_code=response.status_code,
+                request_id=request_id,
+            )
             return TranscodeTask(
                 task_id=task_id,
                 status="processing",

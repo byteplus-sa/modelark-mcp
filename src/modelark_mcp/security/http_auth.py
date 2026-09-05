@@ -16,6 +16,8 @@ from fastmcp.server.auth import (
 from pydantic import AnyHttpUrl
 
 from modelark_mcp.config.env import AuthMode, Settings
+from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.observability.logger import warning as log_warning
 
 
 class StrictJWTVerifier(JWTVerifier):
@@ -33,13 +35,17 @@ class StrictJWTVerifier(JWTVerifier):
     async def verify_token(self, token: str) -> AccessToken | None:
         verified = await super().verify_token(token)
         if verified is None:
+            log_warning("jwt_verification_failed", reason="invalid_token")
             return None
         claims = verified.claims or {}
         if claims.get("exp") is None:
+            log_warning("jwt_verification_failed", reason="missing_exp")
             return None
         nbf = claims.get("nbf")
         if isinstance(nbf, (int, float)) and nbf > time.time() + self._clock_skew_seconds:
+            log_warning("jwt_verification_failed", reason="token_not_yet_valid")
             return None
+        log_info("jwt_verified", subject=verified.subject, client_id=verified.client_id)
         return verified
 
 
@@ -53,7 +59,13 @@ def build_auth_provider(settings: Settings) -> AuthProvider | None:
     spec-compliant MCP clients can discover the authorization server.
     """
     if settings.mcp_auth_mode is AuthMode.LOCAL:
+        log_info("auth_mode", mode="local")
         return None
+    log_info(
+        "auth_mode",
+        mode="jwt",
+        provide_discovery=settings.mcp_jwt_provide_discovery,
+    )
     verifier = StrictJWTVerifier(
         jwks_uri=settings.mcp_jwt_jwks_uri,
         issuer=settings.mcp_jwt_issuer,

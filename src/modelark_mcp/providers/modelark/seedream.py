@@ -13,6 +13,7 @@ from typing import Any, cast
 import httpx
 
 from modelark_mcp.domain.models import SeedreamItemError, SeedreamUsage
+from modelark_mcp.observability.logger import debug as log_debug
 from modelark_mcp.providers.modelark.client import ModelArkGateway
 from modelark_mcp.providers.modelark.schemas import (
     SeedreamProviderRequest,
@@ -46,6 +47,7 @@ class SeedreamService:
         Returns the parsed provider response and the ModelArk request ID.
         Raises ``NormalizedProviderError`` on non-2xx responses or timeouts.
         """
+        log_debug("seedream_generate", model=request.model, stream=request.stream)
         try:
             response = await self._gateway.post(
                 "/images/generations", request.model_dump(exclude_none=True)
@@ -63,7 +65,15 @@ class SeedreamService:
             raise ModelArkGateway.normalize_error(response, "generate_image")
 
         body = _parse_success_body(response, "generate_image")
-        return SeedreamProviderResponse.model_validate(body), request_id
+        parsed = SeedreamProviderResponse.model_validate(body)
+        log_debug(
+            "seedream_generate_complete",
+            model=request.model,
+            status_code=response.status_code,
+            request_id=request_id,
+            items=len(parsed.data) if parsed.data else 0,
+        )
+        return parsed, request_id
 
     @staticmethod
     def build_request(
