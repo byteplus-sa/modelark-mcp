@@ -105,7 +105,7 @@ async def run_variation_batch(
                 )
             )
         elif isinstance(result, Exception):
-            log_warning("variation_error", index=i, error=str(result))
+            log_warning("variation_error", index=i, error=type(result).__name__)
             variation_results.append(
                 VariationResult(
                     index=i,
