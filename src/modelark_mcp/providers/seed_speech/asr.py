@@ -21,6 +21,9 @@ from modelark_mcp.domain.transcription import (
     TranscriptionUtterance,
     TranscriptionWord,
 )
+from modelark_mcp.observability.logger import debug as log_debug
+from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.providers.seed_speech.asr_http import SeedSpeechAsrHttpGateway
 
 
@@ -76,6 +79,13 @@ class SeedSpeechAsrService:
             gateway = SeedSpeechAsrHttpGateway()
             self._gateway = gateway
 
+        log_info(
+            "asr_transcribe_start",
+            task_id=task_id,
+            language=language,
+            has_url=audio_url is not None,
+        )
+
         try:
             await self._submit(
                 gateway,
@@ -104,9 +114,16 @@ class SeedSpeechAsrService:
                 raise
             sequence += 1
             if response is not None:
+                log_info(
+                    "asr_transcribe_complete",
+                    task_id=task_id,
+                    polls=sequence,
+                )
                 return self._map_result(response), None
+            log_debug("asr_poll_pending", task_id=task_id, poll=sequence)
             delay = min(delay * 2, 10.0)
 
+        log_warning("asr_transcribe_timeout", task_id=task_id, polls=sequence, poll_max=poll_max)
         raise ProviderError(
             NormalizedProviderError(
                 provider="seed-speech",

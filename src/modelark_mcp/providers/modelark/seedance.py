@@ -19,6 +19,7 @@ from modelark_mcp.domain.models import (
     SeedanceTaskSummary,
     SeedanceTaskUsage,
 )
+from modelark_mcp.observability.logger import debug as log_debug
 from modelark_mcp.providers.modelark.client import ModelArkGateway
 from modelark_mcp.providers.modelark.schemas import (
     SeedanceContentItem,
@@ -60,6 +61,7 @@ class SeedanceService:
         Returns ``(task_id, request_id)``.
         Raises ``NormalizedProviderError`` on failure.
         """
+        log_debug("seedance_create_task", model=request.model)
         try:
             response = await self._gateway.post(
                 "/contents/generations/tasks",
@@ -79,6 +81,12 @@ class SeedanceService:
 
         body = _parse_success_body(response, "create_task")
         parsed = SeedanceCreateProviderResponse.model_validate(body)
+        log_debug(
+            "seedance_create_task_complete",
+            task_id=parsed.id,
+            status_code=response.status_code,
+            request_id=request_id,
+        )
         return parsed.id, request_id
 
     async def get_task(self, task_id: str) -> tuple[SeedanceTaskResponse, str | None]:
@@ -86,6 +94,7 @@ class SeedanceService:
 
         Returns ``(task, request_id)``.
         """
+        log_debug("seedance_get_task", task_id=task_id)
         try:
             response = await self._gateway.get(f"/contents/generations/tasks/{task_id}")
         except httpx.TimeoutException:
@@ -101,7 +110,15 @@ class SeedanceService:
             raise ModelArkGateway.normalize_error(response, "get_task")
 
         body = _parse_success_body(response, "get_task")
-        return SeedanceTaskResponse.model_validate(body), request_id
+        parsed = SeedanceTaskResponse.model_validate(body)
+        log_debug(
+            "seedance_get_task_complete",
+            task_id=task_id,
+            status=parsed.status,
+            status_code=response.status_code,
+            request_id=request_id,
+        )
+        return parsed, request_id
 
     async def list_tasks(
         self,
@@ -130,6 +147,7 @@ class SeedanceService:
         if service_tier:
             params["filter.service_tier"] = service_tier
 
+        log_debug("seedance_list_tasks", page=page, page_size=page_size)
         try:
             response = await self._gateway.get("/contents/generations/tasks", params=params)
         except httpx.TimeoutException:
@@ -145,13 +163,22 @@ class SeedanceService:
             raise ModelArkGateway.normalize_error(response, "list_tasks")
 
         body = _parse_success_body(response, "list_tasks")
-        return SeedanceTaskListResponse.model_validate(body), request_id
+        parsed = SeedanceTaskListResponse.model_validate(body)
+        log_debug(
+            "seedance_list_tasks_complete",
+            page=page,
+            total=len(parsed.data) if parsed.data else 0,
+            status_code=response.status_code,
+            request_id=request_id,
+        )
+        return parsed, request_id
 
     async def delete_task(self, task_id: str) -> str | None:
         """Call ``DELETE /contents/generations/tasks/{id}``.
 
         Returns the request ID.
         """
+        log_debug("seedance_delete_task", task_id=task_id)
         try:
             response = await self._gateway.delete(f"/contents/generations/tasks/{task_id}")
         except httpx.TimeoutException:
@@ -166,6 +193,12 @@ class SeedanceService:
         if response.status_code >= 400:
             raise ModelArkGateway.normalize_error(response, "delete_task")
 
+        log_debug(
+            "seedance_delete_task_complete",
+            task_id=task_id,
+            status_code=response.status_code,
+            request_id=request_id,
+        )
         return request_id
 
     @staticmethod

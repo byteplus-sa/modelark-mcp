@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import PlainTextResponse
 
+from modelark_mcp.observability.logger import warning as log_warning
+
 if TYPE_CHECKING:
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -34,9 +36,19 @@ class RequestBodyLimitMiddleware:
         if content_length is not None:
             try:
                 if int(content_length) > self.max_bytes:
+                    log_warning(
+                        "request_body_too_large",
+                        content_length=int(content_length),
+                        max_bytes=self.max_bytes,
+                        path=scope.get("path", ""),
+                    )
                     await self._reject(scope, receive, send)
                     return
             except ValueError:
+                log_warning(
+                    "request_body_invalid_content_length",
+                    path=scope.get("path", ""),
+                )
                 await PlainTextResponse("Invalid Content-Length", status_code=400)(
                     scope, receive, send
                 )
@@ -65,6 +77,12 @@ class RequestBodyLimitMiddleware:
         except RequestBodyTooLarge:
             if response_started:
                 raise
+            log_warning(
+                "request_body_too_large_streamed",
+                received=received,
+                max_bytes=self.max_bytes,
+                path=scope.get("path", ""),
+            )
             await self._reject(scope, receive, send)
 
     @staticmethod
@@ -104,6 +122,13 @@ class RateLimitMiddleware:
         retry_after = await self._consume(ip)
         if retry_after > 0:
             reset = math.ceil(retry_after)
+            log_warning(
+                "rate_limit_exceeded",
+                client_ip=ip,
+                retry_after_seconds=reset,
+                capacity=self.capacity,
+                path=scope.get("path", ""),
+            )
             response = PlainTextResponse(
                 "Rate limit exceeded",
                 status_code=429,

@@ -17,6 +17,7 @@ from pydantic import AnyUrl, BaseModel, Field, UrlConstraints, model_validator
 from modelark_mcp.artifacts.store import ArtifactPersistenceError
 from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.domain.errors import ProviderError
+from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.providers.vod_mediakit.separate_voice import (
     VodMediaKitSeparateVoiceService,
@@ -283,6 +284,11 @@ async def vod_get_audio_separation(
                 persistence=persistence,
                 persistence_issue=issue,
             )
+        log_info(
+            "vod_get_audio_separation_complete",
+            task_id=task.task_id,
+            status="succeeded",
+        )
         return VodAudioSeparationTaskOutput(
             provider="byteplus-vod-mediakit",
             task_id=task.task_id,
@@ -299,6 +305,12 @@ async def vod_get_audio_separation(
         )
 
     if task.status == "failed":
+        log_info(
+            "vod_get_audio_separation_complete",
+            task_id=task.task_id,
+            status="failed",
+            failure_code=task.failure_code,
+        )
         return VodAudioSeparationTaskOutput(
             provider="byteplus-vod-mediakit",
             task_id=task.task_id,
@@ -313,6 +325,11 @@ async def vod_get_audio_separation(
             ),
         )
 
+    log_info(
+        "vod_get_audio_separation_complete",
+        task_id=task.task_id,
+        status="processing",
+    )
     return VodAudioSeparationTaskOutput(
         provider="byteplus-vod-mediakit",
         task_id=task.task_id,

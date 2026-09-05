@@ -23,6 +23,7 @@ from modelark_mcp.domain.models import (
     Seed3DTaskSummary,
     Seed3DTaskUsage,
 )
+from modelark_mcp.observability.logger import debug as log_debug
 from modelark_mcp.providers.modelark.client import ModelArkGateway
 from modelark_mcp.providers.modelark.schemas import (
     Seed3DContentItem,
@@ -73,6 +74,7 @@ class Seed3DService:
         Returns ``(task_id, request_id)``.
         Raises ``NormalizedProviderError`` on failure.
         """
+        log_debug("seed3d_create_task", model=request.model)
         try:
             response = await self._gateway.post(
                 "/contents/generations/tasks",
@@ -92,6 +94,12 @@ class Seed3DService:
 
         body = _parse_success_body(response, "create_task")
         parsed = Seed3DCreateProviderResponse.model_validate(body)
+        log_debug(
+            "seed3d_create_task_complete",
+            task_id=parsed.id,
+            status_code=response.status_code,
+            request_id=request_id,
+        )
         return parsed.id, request_id
 
     async def get_task(self, task_id: str) -> tuple[Seed3DTaskResponse, str | None]:
@@ -99,6 +107,7 @@ class Seed3DService:
 
         Returns ``(task, request_id)``.
         """
+        log_debug("seed3d_get_task", task_id=task_id)
         try:
             response = await self._gateway.get(f"/contents/generations/tasks/{task_id}")
         except httpx.TimeoutException:
@@ -114,7 +123,15 @@ class Seed3DService:
             raise ModelArkGateway.normalize_error(response, "get_task")
 
         body = _parse_success_body(response, "get_task")
-        return Seed3DTaskResponse.model_validate(body), request_id
+        parsed = Seed3DTaskResponse.model_validate(body)
+        log_debug(
+            "seed3d_get_task_complete",
+            task_id=task_id,
+            status=parsed.status,
+            status_code=response.status_code,
+            request_id=request_id,
+        )
+        return parsed, request_id
 
     async def list_tasks(
         self,
@@ -140,6 +157,7 @@ class Seed3DService:
         if model:
             params["filter.model"] = model
 
+        log_debug("seed3d_list_tasks", page=page, page_size=page_size)
         try:
             response = await self._gateway.get("/contents/generations/tasks", params=params)
         except httpx.TimeoutException:
@@ -155,13 +173,22 @@ class Seed3DService:
             raise ModelArkGateway.normalize_error(response, "list_tasks")
 
         body = _parse_success_body(response, "list_tasks")
-        return Seed3DTaskListResponse.model_validate(body), request_id
+        parsed = Seed3DTaskListResponse.model_validate(body)
+        log_debug(
+            "seed3d_list_tasks_complete",
+            page=page,
+            total=len(parsed.items) if parsed.items else 0,
+            status_code=response.status_code,
+            request_id=request_id,
+        )
+        return parsed, request_id
 
     async def delete_task(self, task_id: str) -> str | None:
         """Call ``DELETE /contents/generations/tasks/{id}``.
 
         Returns the request ID.
         """
+        log_debug("seed3d_delete_task", task_id=task_id)
         try:
             response = await self._gateway.delete(f"/contents/generations/tasks/{task_id}")
         except httpx.TimeoutException:
@@ -176,6 +203,12 @@ class Seed3DService:
         if response.status_code >= 400:
             raise ModelArkGateway.normalize_error(response, "delete_task")
 
+        log_debug(
+            "seed3d_delete_task_complete",
+            task_id=task_id,
+            status_code=response.status_code,
+            request_id=request_id,
+        )
         return request_id
 
     @staticmethod

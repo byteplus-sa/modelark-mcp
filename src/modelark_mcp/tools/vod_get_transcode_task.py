@@ -16,6 +16,7 @@ from pydantic import AnyUrl, BaseModel, Field, UrlConstraints, model_validator
 from modelark_mcp.artifacts.store import ArtifactPersistenceError
 from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.domain.errors import ProviderError
+from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.providers.vod_mediakit.schemas import TranscodeTask
 from modelark_mcp.providers.vod_mediakit.transcode import VodMediaKitTranscodeService
@@ -220,6 +221,12 @@ async def vod_get_transcode_task(
         video_ref, issue, persistence = await _persist_output(
             ctx, owner, input.task_id, task, input.persist_output
         )
+        log_info(
+            "vod_get_transcode_task_complete",
+            task_id=task.task_id,
+            status="succeeded",
+            persistence=persistence,
+        )
         return VodTranscodeTaskOutput(
             provider="byteplus-vod-mediakit",
             task_id=task.task_id,
@@ -239,6 +246,12 @@ async def vod_get_transcode_task(
         )
 
     if task.status == "failed":
+        log_info(
+            "vod_get_transcode_task_complete",
+            task_id=task.task_id,
+            status="failed",
+            failure_code=task.failure_code,
+        )
         return VodTranscodeTaskOutput(
             provider="byteplus-vod-mediakit",
             task_id=task.task_id,
@@ -254,6 +267,11 @@ async def vod_get_transcode_task(
             ),
         )
 
+    log_info(
+        "vod_get_transcode_task_complete",
+        task_id=task.task_id,
+        status="processing",
+    )
     return VodTranscodeTaskOutput(
         provider="byteplus-vod-mediakit",
         task_id=task.task_id,

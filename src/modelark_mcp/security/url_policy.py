@@ -15,6 +15,8 @@ from urllib.parse import SplitResult, urlsplit
 
 import httpx
 
+from modelark_mcp.observability.logger import warning as log_warning
+
 
 class UrlValidationError(ValueError):
     """Raised when a URL fails security validation.
@@ -127,9 +129,11 @@ def resolve_public_addresses(
         try:
             raw_addresses = tuple((resolver or system_resolver)(hostname, port))
         except (OSError, socket.gaierror) as exc:
+            log_warning("url_resolution_failed", reason="dns_error")
             raise UrlValidationError(f"Failed to resolve hostname '{hostname}': {exc}") from exc
 
     if not raw_addresses:
+        log_warning("url_resolution_failed", reason="no_addresses")
         raise UrlValidationError(f"Hostname '{hostname}' did not resolve to an address.")
 
     addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
@@ -141,6 +145,7 @@ def resolve_public_addresses(
                 f"Resolver returned invalid IP address '{raw_address}' for '{hostname}'."
             ) from exc
         if _is_blocked_address(address):
+            log_warning("url_blocked", reason="private_or_reserved_ip")
             raise UrlValidationError(f"Hostname '{hostname}' resolves to blocked IP '{address}'.")
         addresses.append(address)
     return tuple(dict.fromkeys(addresses))

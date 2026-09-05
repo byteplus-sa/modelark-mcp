@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import ModelFamily, get_capability_registry
+from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.tools._seed3d_shared import (
     Seed3DCreateTaskOutput,
     Seed3DImageInput,
@@ -131,6 +132,11 @@ async def hitem3d_create_task(
         return result
 
     task_id, _request_id = result
+    log_info(
+        "hitem3d_create_task_complete",
+        task_id=task_id,
+        model=caps.model_id,
+    )
     return Seed3DCreateTaskOutput(
         task_id=task_id,
         status="queued",

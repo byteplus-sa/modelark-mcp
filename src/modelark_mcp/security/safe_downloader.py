@@ -15,6 +15,8 @@ from urllib.parse import urljoin, urlunsplit
 import httpx
 from pydantic import BaseModel
 
+from modelark_mcp.observability.logger import info as log_info
+from modelark_mcp.observability.logger import warning as log_warning
 from modelark_mcp.security.url_policy import AddressResolver, ValidatedUrl, validate_url
 
 HostPolicy = Callable[[str], bool]
@@ -99,6 +101,11 @@ class SafeDownloader:
                     if redirect_count == 0
                     else "Provider output redirect failed safety validation."
                 )
+                log_warning(
+                    "download_url_validation_failed",
+                    code=code,
+                    redirect_count=redirect_count,
+                )
                 raise SafeDownloadError(code, message, retryable=False) from exc
             if not trusted_hosts(validated.hostname):
                 code = "untrusted_host" if redirect_count == 0 else "redirect_rejected"
@@ -107,6 +114,11 @@ class SafeDownloader:
                     if redirect_count == 0
                     else "Provider output redirected to an untrusted host."
                 )
+                log_warning(
+                    "download_untrusted_host",
+                    code=code,
+                    redirect_count=redirect_count,
+                )
                 raise SafeDownloadError(code, message, retryable=False)
 
             try:
@@ -114,12 +126,14 @@ class SafeDownloader:
             except SafeDownloadError:
                 raise
             except httpx.TimeoutException as exc:
+                log_warning("download_timeout", error=type(exc).__name__)
                 raise SafeDownloadError(
                     "network_error",
                     "Provider output download timed out.",
                     retryable=True,
                 ) from exc
             except httpx.TransportError as exc:
+                log_warning("download_transport_error", error=type(exc).__name__)
                 raise SafeDownloadError(
                     "network_error",
                     "Provider output download failed due to a network error.",
@@ -127,6 +141,7 @@ class SafeDownloader:
                 ) from exc
             if not response.is_redirect:
                 if response.status_code in {404, 410}:
+                    log_warning("download_source_expired", status_code=response.status_code)
                     raise SafeDownloadError(
                         "source_expired",
                         "Provider output is no longer available.",
@@ -134,11 +149,22 @@ class SafeDownloader:
                     )
                 if response.is_error:
                     retryable = response.status_code in {408, 429} or response.status_code >= 500
+                    log_warning(
+                        "download_http_error",
+                        status_code=response.status_code,
+                        retryable=retryable,
+                    )
                     raise SafeDownloadError(
                         "http_error",
                         f"Provider output download returned HTTP {response.status_code}.",
                         retryable=retryable,
                     )
+                log_info(
+                    "download_complete",
+                    bytes=len(response.content),
+                    content_type=_content_type(response),
+                    redirects=redirect_count,
+                )
                 return DownloadedMedia(
                     body=response.content,
                     content_type=_content_type(response),
@@ -147,12 +173,18 @@ class SafeDownloader:
 
             location = response.headers.get("location")
             if not location:
+                log_warning("download_redirect_missing_location", redirect_count=redirect_count)
                 raise SafeDownloadError(
                     "redirect_rejected",
                     "Provider output redirect is missing a destination.",
                     retryable=False,
                 )
             if redirect_count == max_redirects:
+                log_warning(
+                    "download_redirect_limit_exceeded",
+                    redirect_count=redirect_count,
+                    max_redirects=max_redirects,
+                )
                 raise SafeDownloadError(
                     "redirect_rejected",
                     "Provider output exceeded the redirect limit.",
