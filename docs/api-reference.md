@@ -1126,7 +1126,10 @@ one reference image and one coordinate (point or bbox) are required.
 ## 13. seed_understand
 
 Understand images and videos, or reason about a task, through the Seed 2.1
-multimodal model. Supports deep-thinking (chain-of-thought) reasoning. Video
+multimodal model. Supports deep-thinking (chain-of-thought) reasoning when
+`thinking=true`. The default model is `dola-seed-evolving` (Seed 2.1 Pro
+equivalent — always maps to the latest Seed-series understanding model);
+Turbo models are available via `SEED_UNDERSTANDING_MODEL_BINDINGS`. Video
 Base64 is not supported by the chat endpoint — upload local videos via
 `media_upload` first to obtain an HTTPS URL.
 

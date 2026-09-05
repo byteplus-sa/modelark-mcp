@@ -93,7 +93,7 @@ are tunable via `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` and
 |---|---|---|---|
 | `seedream_default_model` | `SEEDREAM_DEFAULT_MODEL` | `dola-seedream-5-0-pro-260628` | `PRO` |
 | `seedance_default_model` | `SEEDANCE_DEFAULT_MODEL` | `dreamina-seedance-2-0-260128` | `STANDARD` |
-| `seed_understanding_default_model` | `SEED_UNDERSTANDING_DEFAULT_MODEL` | `dola-seed-2-1-turbo-260628` | `TURBO` |
+| `seed_understanding_default_model` | `SEED_UNDERSTANDING_DEFAULT_MODEL` | `dola-seed-evolving` | `PRO` |
 
 The "implied family" defaults are hard-coded in `Settings.validate_model_bindings`
 and apply only when the default model ID equals the built-in default.
@@ -128,7 +128,10 @@ from the model ID string):
    `SEEDANCE_MODEL_FAMILY`) is non-empty, a single binding is synthesized
    from the default model ID + that family.
 3. If both are empty and the default model ID equals the built-in default,
-   the built-in default family is used (`PRO` / `STANDARD`).
+   the built-in default family is used (Seedream `PRO`, Seedance `STANDARD`,
+   Seed understanding `PRO` for `dola-seed-evolving`). The legacy Seed
+   understanding default `dola-seed-2-1-turbo-260628` still resolves to
+   `TURBO` for backward compatibility.
 4. Otherwise (custom default model, no family, no bindings) → startup fails
    with `ValueError`.
 

@@ -204,7 +204,7 @@ class Settings(BaseSettings):
         validation_alias="SEEDANCE_MODEL_BINDINGS",
     )
     seed_understanding_default_model: str = Field(
-        default="dola-seed-2-1-turbo-260628",
+        default="dola-seed-evolving",
         validation_alias="SEED_UNDERSTANDING_DEFAULT_MODEL",
     )
     seed_understanding_model_family: str = Field(
@@ -618,7 +618,9 @@ class Settings(BaseSettings):
         if not self.seed_understanding_model_bindings:
             family = self.seed_understanding_model_family.strip().lower()
             if not family:
-                if self.seed_understanding_default_model == "dola-seed-2-1-turbo-260628":
+                if self.seed_understanding_default_model == "dola-seed-evolving":
+                    family = SeedUnderstandingFamily.PRO
+                elif self.seed_understanding_default_model == "dola-seed-2-1-turbo-260628":
                     family = SeedUnderstandingFamily.TURBO
                 else:
                     raise ValueError(

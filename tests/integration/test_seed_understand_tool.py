@@ -50,7 +50,7 @@ class TestSeedUnderstandTool:
             monkeypatch,
             {
                 "id": "chatcmpl-001",
-                "model": "dola-seed-2-1-turbo-260628",
+                "model": "dola-seed-evolving",
                 "choices": [
                     {
                         "index": 0,
@@ -66,7 +66,7 @@ class TestSeedUnderstandTool:
 
         assert isinstance(result, SeedUnderstandOutput)
         assert result.provider == "byteplus-modelark"
-        assert result.model == "dola-seed-2-1-turbo-260628"
+        assert result.model == "dola-seed-evolving"
         assert result.completion_id == "chatcmpl-001"
         assert result.request_id == "req-test-789"
         assert len(result.choices) == 1
