@@ -3,7 +3,7 @@ title: BytePlus VOD AI MediaKit Provider Contract
 status: proposed
 horizon: current
 created: 2026-08-12
-updated: 2026-08-14
+updated: 2026-09-08
 tags:
   - byteplus-vod
   - ai-mediakit
@@ -28,7 +28,8 @@ related:
 This specification governs the Bearer-authenticated convenience endpoints supplied
 for MCP integration on the AI MediaKit data plane:
 
-- `POST /api/v1/tools/enhance-video` (video enhancement, `vod_enhance_video`);
+- `POST /api/v1/tools/enhance-video` + `GET /api/v1/tasks/{task_id}` (video
+  enhancement, `vod_enhance_video` / `vod_get_enhancement_task`);
 - `POST /api/v1/tools/transcode-video` + `GET /api/v1/tasks/{task_id}` (video
   transcoding, `vod_transcode_video` / `vod_get_transcode_task`);
 - `POST /api/v1/tools/separate-voice` + `GET /api/v1/tasks/{task_id}` (voice
@@ -41,17 +42,21 @@ longer used by this server; its former contract is retained in the deprecated
 
 ### Video enhancement surface
 
-Verification is **partial** as of 2026-08-12:
+Verification is **complete for submission and task retrieval** as of 2026-09-08:
 
 - the endpoint route, method, request body, Bearer authentication, unauthenticated
   error envelope, and `x-tt-logid` response header are directly verified;
-- two approved credentialed probes directly verified that successful submission
-  is asynchronous and returns top-level `task_id` and `request_id` fields;
-- the polling/result endpoint, output URL lifetime/host chain, MIME, size metadata,
-  retry guarantees, and idempotency are not publicly documented;
-- the MCP implementation therefore exposes only the exact supplied request profile,
-  does not add polling, does not retry ambiguous POST failures, and rejects unknown
-  successful response shapes rather than guessing.
+- approved credentialed probes directly verified that successful submission is
+  asynchronous and returns top-level `task_id` and `request_id` fields;
+- a read-only credentialed probe on 2026-09-08 confirmed that the generic
+  `GET /api/v1/tasks/{task_id}` route accepts an enhancement task ID and returns
+  `task_type="enhance-video"`, lifecycle status, result metadata, and a 24-hour
+  output URL on completion;
+- the completed output used the already trusted `*.byteplusvod.com` hostname and
+  was persisted through the existing SSRF-safe artifact path;
+- the MCP exposes the exact supplied request profile and a dedicated poll tool,
+  does not retry ambiguous POST failures, and rejects unknown task types, states,
+  and success shapes.
 
 ### Video transcoding surface
 
@@ -155,11 +160,42 @@ provider-scoped ownership key `vod-mediakit`, and sets persistence to
 `not_applicable`. The body `request_id` and header `x-tt-logid` are preserved
 separately as `request_id` and `provider_log_id`.
 
-This acceptance shape is specific to the enhancement surface. No polling/result
-route was found in official documentation for the enhancement Bearer surface. The
-documented AK/SK-signed VOD direct-edit progress/result APIs are a different
-contract and must not be assumed compatible. (The transcode surface *does* have a
-documented polling route — see [Video Transcoding Task Contract](#video-transcoding-task-contract).)
+This acceptance shape is specific to the enhancement surface. The generic
+Bearer-authenticated AI MediaKit task endpoint is now live-confirmed for
+enhancement; the documented AK/SK-signed VOD direct-edit progress/result APIs
+remain a different contract and must not be substituted.
+
+## Video Enhancement Task Contract
+
+`GET /api/v1/tasks/{task_id}` with Bearer auth polls an enhancement task. A
+sanitized completed response directly observed on 2026-09-08 had this shape:
+
+```json
+{
+  "success": true,
+  "task_id": "amk-tool-enhance-video-sanitized",
+  "task_type": "enhance-video",
+  "status": "completed",
+  "result": {
+    "tool_version": "professional",
+    "video_url": "https://sanitized.vod.ap-southeast-1.byteplusvod.com/output.mp4",
+    "duration": 30.917,
+    "fps": 24,
+    "resolution": "4k"
+  },
+  "expires_at": 1788962055,
+  "created_at": 1788874787,
+  "finished_at": 1788875656,
+  "request_id": "sanitized",
+  "queue_id": "default"
+}
+```
+
+The adapter requires `task_type="enhance-video"`, maps `running` to
+`processing`, `completed` to `succeeded`, and `failed` to `failed`, and fails
+closed for unknown values. A completed task must include `result.video_url`.
+Epoch timestamps are normalized to ISO-8601 UTC. The output URL expires 24 hours
+after completion in the observed contract.
 
 ## Provisional Completed-Result Compatibility Boundary
 
@@ -186,9 +222,9 @@ boundary and updates fixtures before broadening behavior.
 
 ## Execution and Retry Semantics (video enhancement)
 
-- Submission is verified asynchronous. No polling, result, cancellation, list,
-  or callback endpoint is verified for enhancement; only
-  `vod_enhance_video` is registered for that surface.
+- Submission is verified asynchronous. Task polling is verified through
+  `vod_get_enhancement_task`; cancellation, list, and callback endpoints remain
+  unverified and are not exposed.
 - POST timeout, connection loss after dispatch, and HTTP 5xx are treated as
   ambiguous completion. They are not retried automatically.
 - HTTP 429 is retryable only as provider guidance for a new user-initiated attempt;
@@ -197,14 +233,15 @@ boundary and updates fixtures before broadening behavior.
 
 ## Output and Persistence Contract (video enhancement)
 
-- An accepted response returns its task ID with `persistence="not_applicable"`.
+- An accepted response returns its task ID with `persistence="not_applicable"`;
+  the task ID is then passed to `vod_get_enhancement_task`.
 - A parsed completed response always returns its provider `source_url` to the
   authorized caller, even if local persistence is skipped or fails.
 - The URL path/query is never logged. `source_expires_at` is returned only when the
   provider supplies it; the server does not invent a lifetime.
 - Every initial output hostname and redirect hop must pass URL/IP validation and the
-  repository's trusted-host policy. No output or redirect host has yet been verified
-  beyond the API hostname.
+  repository's trusted-host policy. The observed output used the verified
+  `*.byteplusvod.com` suffix.
 - Durable video persistence is best-effort and capped at 209,715,200 bytes by the
   current artifact policy. A larger result remains a provider success with
   `persistence="failed"` and `output_too_large`.
@@ -426,12 +463,11 @@ the MCP returns no cost estimate while that mapping is unverified.
 Before declaring this contract accepted or production-ready, obtain provider
 documentation or sanitized evidence for:
 
-- the Bearer-surface polling/result endpoint and lifecycle states (transcode:
-  confirmed; enhancement: still missing);
-- output URL hostname plus every redirect hostname (transcode: confirmed
-  `*.byteplusvod.com` on 2026-08-14; enhancement: still missing);
-- URL lifetime, MIME, size metadata, and maximum output size (transcode lifetime:
-  24h confirmed);
+- enhancement cancellation, list, callback, and idempotency behavior;
+- redirect hostnames not exercised by the live enhancement result (the initial
+  output host used confirmed `*.byteplusvod.com` and returned no redirect);
+- provider-reported MIME, size metadata, and maximum output size (enhancement
+  URL lifetime is confirmed at 24 hours by the live result);
 - validation, quota, 429, and 5xx error envelopes;
 - idempotency/reconciliation guarantees and pricing mapping (transcode idempotency:
   `client_token` + 24h default key confirmed);

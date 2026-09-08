@@ -19,6 +19,7 @@ from modelark_mcp.providers.vod_mediakit.schemas import VodMediaKitEnhancementRe
 
 BASE_URL = "https://mediakit.ap-southeast-1.bytepluses.com/api/v1"
 ENDPOINT = f"{BASE_URL}/tools/enhance-video"
+TASK_ENDPOINT = f"{BASE_URL}/tasks/amk-tool-enhance-video-1"
 
 
 @pytest.fixture
@@ -231,6 +232,140 @@ class TestVodMediaKitSuccessContract:
         respx.post(ENDPOINT).mock(return_value=httpx.Response(200, text="not-json"))
         with pytest.raises(ProviderError) as exc_info:
             await service.enhance(request())
+        assert exc_info.value.code == "INVALID_RESPONSE"
+
+
+class TestVodMediaKitEnhancementTaskContract:
+    """Verify the live-confirmed enhancement task response contract."""
+
+    @respx.mock
+    async def test_completed_task_maps_output_and_metadata(
+        self, service: VodMediaKitEnhancementService
+    ) -> None:
+        respx.get(TASK_ENDPOINT).mock(
+            return_value=httpx.Response(
+                200,
+                headers={"x-tt-logid": "log-get"},
+                json={
+                    "success": True,
+                    "task_id": "amk-tool-enhance-video-1",
+                    "task_type": "enhance-video",
+                    "status": "completed",
+                    "result": {
+                        "tool_version": "professional",
+                        "video_url": "https://output.example.com/enhanced.mp4",
+                        "duration": 30.917,
+                        "fps": 24,
+                        "resolution": "4k",
+                    },
+                    "expires_at": 1788962055,
+                    "created_at": 1788874787,
+                    "finished_at": 1788875656,
+                    "request_id": "req-get",
+                    "queue_id": "default",
+                },
+            )
+        )
+
+        result = await service.get("amk-tool-enhance-video-1")
+
+        assert result.status == "succeeded"
+        assert result.task_id == "amk-tool-enhance-video-1"
+        assert result.provider_status == "completed"
+        assert result.request_id == "req-get"
+        assert str(result.output_url) == "https://output.example.com/enhanced.mp4"
+        assert result.duration_seconds == 30.917
+        assert result.fps == 24
+        assert result.resolution == "4k"
+        assert result.tool_version == "professional"
+        assert result.created_at == "2026-09-08T13:39:47+00:00"
+        assert result.finished_at == "2026-09-08T13:54:16+00:00"
+        assert result.source_expires_at == "2026-09-09T13:54:15+00:00"
+
+    @respx.mock
+    async def test_running_task_maps_to_processing(
+        self, service: VodMediaKitEnhancementService
+    ) -> None:
+        respx.get(TASK_ENDPOINT).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "task_id": "amk-tool-enhance-video-1",
+                    "task_type": "enhance-video",
+                    "status": "running",
+                },
+            )
+        )
+
+        result = await service.get("amk-tool-enhance-video-1")
+
+        assert result.status == "processing"
+        assert result.output_url is None
+
+    @respx.mock
+    async def test_failed_task_sanitizes_provider_error(
+        self, service: VodMediaKitEnhancementService
+    ) -> None:
+        respx.get(TASK_ENDPOINT).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "task_id": "amk-tool-enhance-video-1",
+                    "task_type": "enhance-video",
+                    "status": "failed",
+                    "error": {
+                        "code": "DownloadFailed",
+                        "message": "Failed to fetch https://private.example.com/source.mp4?token=x",
+                    },
+                },
+            )
+        )
+
+        result = await service.get("amk-tool-enhance-video-1")
+
+        assert result.status == "failed"
+        assert result.failure_code == "DownloadFailed"
+        assert "private.example.com" not in (result.failure_message or "")
+        assert "token=x" not in (result.failure_message or "")
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {
+                "success": True,
+                "task_id": "amk-tool-enhance-video-1",
+                "task_type": "transcode-video",
+                "status": "completed",
+                "result": {"video_url": "https://output.example.com/out.mp4"},
+            },
+            {
+                "success": True,
+                "task_id": "amk-tool-enhance-video-1",
+                "task_type": "enhance-video",
+                "status": "completed",
+                "result": {},
+            },
+            {
+                "success": True,
+                "task_id": "amk-tool-enhance-video-1",
+                "task_type": "enhance-video",
+                "status": "expired",
+            },
+        ],
+    )
+    @respx.mock
+    async def test_unrecognized_task_response_fails_closed(
+        self,
+        service: VodMediaKitEnhancementService,
+        body: dict[str, object],
+    ) -> None:
+        respx.get(TASK_ENDPOINT).mock(return_value=httpx.Response(200, json=body))
+
+        with pytest.raises(ProviderError) as exc_info:
+            await service.get("amk-tool-enhance-video-1")
+
         assert exc_info.value.code == "INVALID_RESPONSE"
 
 

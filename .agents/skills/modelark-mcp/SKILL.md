@@ -26,8 +26,9 @@ behind one server:
   Use for OCR, scene analysis, content review, and as a visual reasoning
   sub-agent.
 - **Speech-to-Text** — synchronous audio transcription via Seed Speech ASR.
-- **VOD AI MediaKit** — asynchronous video-enhancement submission using the exact
-  common/professional/4K/high/24-fps profile, asynchronous video transcoding
+- **VOD AI MediaKit** — asynchronous video enhancement using the exact
+  common/professional/4K/high/24-fps profile with task polling and download,
+  asynchronous video transcoding
   (codec, container, resolution, bitrate, frame rate) via a submit-then-poll
   tool pair, and voice + background (or voice + music + sfx) audio separation
   via a submit-then-poll tool pair.
@@ -38,8 +39,8 @@ behind one server:
 The server is built on FastMCP v3 and runs locally via `stdio` or as a
 deployable Streamable HTTP service. Generated media is persisted to a local
 artifact store with stable `seed-media://` resource URIs that survive provider
-URL expiry (2 hours for audio, 24 hours for ModelArk image/video/3D). MediaKit's
-source URL lifetime is unconfirmed and its durable copy is best-effort.
+URL expiry (2 hours for audio, 24 hours for ModelArk image/video/3D and MediaKit
+outputs). MediaKit durable copies are best-effort.
 
 ## When To Use
 
@@ -82,6 +83,7 @@ gracefully degrades to whatever is configured.
 ### Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY`
 
 - `vod_enhance_video`
+- `vod_get_enhancement_task`
 - `vod_transcode_video`
 - `vod_get_transcode_task`
 - `vod_separate_audio`
@@ -202,7 +204,7 @@ Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY`. Auth scopes: `vod:enhance`,
 Enhance a public HTTPS video using the exact currently supported profile. The
 operation is asynchronous, mutating, non-idempotent, and open-world. Do
 not retry it automatically: a timeout may be ambiguous after provider work has
-started, and there is no MediaKit polling tool in the current integration.
+started. Save the returned task ID and poll it with `vod_get_enhancement_task`.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -216,13 +218,23 @@ started, and there is no MediaKit polling tool in the current integration.
 | `input_duration_seconds` | number | No | Reserved; no price estimate is currently produced |
 | `persist` | boolean | No | Best-effort durable artifact copy; default `true` |
 
-The verified response is `status="accepted"` with a task ID. No Bearer-surface
-polling route is verified for enhancement, so do not substitute the transcode or
-audio-separation tools (which do have polling routes) for enhancement results.
+The verified response is `status="accepted"` with a task ID. Poll that exact ID
+with `vod_get_enhancement_task`; do not substitute the transcode or
+audio-separation poll tools for enhancement results.
 If a completed response supplies `source_url`, retain it even when the best-effort
 copy fails. `persistence` is `not_applicable`, `persisted`, `failed`, or `not_requested`; durable
 video copies are capped at 200 MiB. `estimated_cost_usd` remains null until
 convenience-endpoint pricing and billing-unit mapping are confirmed.
+
+#### `vod_get_enhancement_task`
+
+Read-only poll of an enhancement task (`vod:read`). Requires the `task_id`
+returned by `vod_enhance_video`. Maps provider `running`→`processing`,
+`completed`→`succeeded`, and `failed`→`failed`, while requiring
+`task_type="enhance-video"`. On success, returns the 24-hour `source_url`,
+duration, resolution, frame rate, enhancement tier, and normalized timestamps.
+With `persist_output=true` (default), the output is copied once into the durable
+artifact store under the 200 MiB limit and cached by task ID.
 
 #### `vod_transcode_video`
 
@@ -1482,8 +1494,9 @@ The server retries only explicitly retryable, non-ambiguous errors:
 
 Exception: `vod_enhance_video`, `vod_transcode_video`, and `vod_separate_audio`
 are never automatically retried. Their POSTs are non-idempotent and a transport
-failure may have ambiguous completion. `vod_get_transcode_task` and
-`vod_get_audio_separation` (read-only GET polls) ARE retried on provider-marked
+failure may have ambiguous completion. `vod_get_enhancement_task`,
+`vod_get_transcode_task`, and `vod_get_audio_separation` (read-only GET polls)
+ARE retried on provider-marked
 retryable errors such as HTTP 429.
 
 For Seedance task polling, a local watcher timeout is not a generation failure.
@@ -1595,28 +1608,33 @@ Set to `0` (default) for record-only mode with no enforcement.
     multi-round extension. The get/list/cancel tools are shared.
 
 17. **Treat MediaKit persistence separately from the provider result.** Keep the
-    returned `source_url` whenever `vod_enhance_video` or
+    returned `source_url` whenever `vod_enhance_video`, `vod_get_enhancement_task`, or
     `vod_get_transcode_task` reports success. Prefer `persist=true`, but inspect
     `persistence` and `persistence_issue`: the 200 MiB limit or a
     safe-download/storage failure can prevent the durable copy without
     invalidating the provider result. Do not resubmit after an ambiguous
     timeout, and do not present `estimated_cost_usd` as available.
 
-18. **Transcode is submit-then-poll.** Call `vod_transcode_video`, capture the
+18. **Enhancement is submit-then-poll.** Call `vod_enhance_video`, capture the
+    returned `task_id`, then poll with `vod_get_enhancement_task` until the
+    status is `succeeded` or `failed`. Persist the result before its 24-hour
+    source URL expires.
+
+19. **Transcode is submit-then-poll.** Call `vod_transcode_video`, capture the
     returned `task_id`, then poll with `vod_get_transcode_task` until the
     status is `succeeded` or `failed`. The default profile is portrait-to-720x720
     letterbox; set `video.codec`, `scale_*`, `bitrate_*`, `fps`, and
     `container_format` to target a specific output. Do not retry the POST after
     an ambiguous timeout — re-poll the task ID instead.
 
-19. **Choose the right 3D model.** Use `hyper3d_create_task` for text-to-3D or
+20. **Choose the right 3D model.** Use `hyper3d_create_task` for text-to-3D or
     when you need seeds, PBR materials, custom mesh modes, or HD textures. Use
     `hitem3d_create_task` for image-to-3D with multi-view inputs (front/back/
     left/right) and resolution control (1536/1536pro). The get/list/cancel tools
     are family-specific — use `hyper3d_*` for Hyper3D task IDs and `hitem3d_*`
     for Hitem3d task IDs.
 
-20. **3D output is a zip package.** The provider returns a 24-hour file URL
+21. **3D output is a zip package.** The provider returns a 24-hour file URL
     containing a zip of the 3D file. On first successful poll with
     `persist_output=true` (default), the file is copied to the artifact store.
     Use the returned `ArtifactRef.uri` for durable access after the provider

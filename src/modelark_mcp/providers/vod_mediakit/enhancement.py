@@ -15,13 +15,21 @@ from modelark_mcp.providers.vod_mediakit.client import (
 )
 from modelark_mcp.providers.vod_mediakit.schemas import (
     EnhancementSubmission,
+    EnhancementTask,
     VodMediaKitAcceptedResponse,
     VodMediaKitEnhancementRequest,
+    VodMediaKitEnhancementTaskResponse,
     VodMediaKitProviderResponse,
+)
+from modelark_mcp.providers.vod_mediakit.transcode import (
+    _normalize_timestamp,
+    _sanitize_task_error,
 )
 
 _ENHANCE_PATH = "/tools/enhance-video"
-_OPERATION = "enhance_video"
+_TASKS_PATH = "/tasks"
+_OPERATION_SUBMIT = "enhance_video"
+_OPERATION_GET = "get_enhancement_task"
 
 
 class VodMediaKitEnhancementService:
@@ -40,7 +48,7 @@ class VodMediaKitEnhancementService:
             )
         except httpx.TimeoutException:
             raise VodMediaKitGateway.normalize_ambiguous_transport_error(
-                _OPERATION,
+                _OPERATION_SUBMIT,
                 code="TIMEOUT",
                 message=(
                     "MediaKit enhancement timed out after dispatch and may have completed. "
@@ -49,7 +57,7 @@ class VodMediaKitEnhancementService:
             ) from None
         except httpx.TransportError:
             raise VodMediaKitGateway.normalize_ambiguous_transport_error(
-                _OPERATION,
+                _OPERATION_SUBMIT,
                 code="TRANSPORT_ERROR",
                 message=(
                     "MediaKit transport failed after dispatch and completion is unknown. "
@@ -59,7 +67,7 @@ class VodMediaKitEnhancementService:
 
         header_request_id = VodMediaKitGateway.extract_request_id(response)
         if not 200 <= response.status_code < 300:
-            raise VodMediaKitGateway.normalize_error(response, _OPERATION)
+            raise VodMediaKitGateway.normalize_error(response, _OPERATION_SUBMIT)
 
         try:
             body = response.json()
@@ -90,7 +98,7 @@ class VodMediaKitEnhancementService:
             raise ProviderError(
                 NormalizedProviderError(
                     provider="byteplus-vod-mediakit",
-                    operation=_OPERATION,
+                    operation=_OPERATION_SUBMIT,
                     http_status=response.status_code,
                     code="INVALID_RESPONSE",
                     message=(
@@ -128,6 +136,116 @@ class VodMediaKitEnhancementService:
                 if detail and detail.message
                 else None
             ),
+        )
+
+    async def get(self, task_id: str) -> EnhancementTask:
+        """Poll one enhancement task and normalize its state."""
+        log_debug("vod_enhancement_get", task_id=task_id)
+        try:
+            response = await self._gateway.get(f"{_TASKS_PATH}/{task_id}")
+        except httpx.TimeoutException:
+            raise VodMediaKitGateway.normalize_ambiguous_transport_error(
+                _OPERATION_GET,
+                code="TIMEOUT",
+                message="MediaKit enhancement task poll timed out.",
+            ) from None
+        except httpx.TransportError:
+            raise VodMediaKitGateway.normalize_ambiguous_transport_error(
+                _OPERATION_GET,
+                code="TRANSPORT_ERROR",
+                message="MediaKit enhancement task poll failed to connect.",
+            ) from None
+
+        header_request_id = VodMediaKitGateway.extract_request_id(response)
+        if not 200 <= response.status_code < 300:
+            raise VodMediaKitGateway.normalize_error(response, _OPERATION_GET)
+
+        try:
+            parsed = VodMediaKitEnhancementTaskResponse.model_validate(response.json())
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise ProviderError(
+                NormalizedProviderError(
+                    provider="byteplus-vod-mediakit",
+                    operation=_OPERATION_GET,
+                    http_status=response.status_code,
+                    code="INVALID_RESPONSE",
+                    message="MediaKit returned an unsupported enhancement task response.",
+                    request_id=header_request_id,
+                    retryable=False,
+                    ambiguous_completion=False,
+                )
+            ) from exc
+
+        request_id = parsed.request_id or header_request_id
+        result = parsed.result
+
+        if parsed.status == "completed":
+            if result is None:
+                raise ProviderError(
+                    NormalizedProviderError(
+                        provider="byteplus-vod-mediakit",
+                        operation=_OPERATION_GET,
+                        http_status=response.status_code,
+                        code="INVALID_RESPONSE",
+                        message="MediaKit reported a completed enhancement task without an output URL.",
+                        request_id=request_id,
+                        retryable=False,
+                        ambiguous_completion=False,
+                    )
+                )
+            return EnhancementTask(
+                task_id=parsed.task_id,
+                status="succeeded",
+                provider_status=parsed.status,
+                request_id=request_id,
+                output_url=result.video_url,
+                duration_seconds=result.duration,
+                fps=result.fps,
+                resolution=result.resolution,
+                tool_version=result.tool_version,
+                created_at=_normalize_timestamp(parsed.created_at),
+                finished_at=_normalize_timestamp(parsed.finished_at),
+                source_expires_at=_normalize_timestamp(parsed.expires_at),
+            )
+
+        if parsed.status == "failed":
+            code, message = _sanitize_task_error(
+                parsed.error, "MediaKit reported the enhancement task failed."
+            )
+            return EnhancementTask(
+                task_id=parsed.task_id,
+                status="failed",
+                provider_status=parsed.status,
+                request_id=request_id,
+                failure_code=code,
+                failure_message=message,
+                created_at=_normalize_timestamp(parsed.created_at),
+                finished_at=_normalize_timestamp(parsed.finished_at),
+            )
+
+        if parsed.status == "running":
+            return EnhancementTask(
+                task_id=parsed.task_id,
+                status="processing",
+                provider_status=parsed.status,
+                request_id=request_id,
+                created_at=_normalize_timestamp(parsed.created_at),
+            )
+
+        raise ProviderError(
+            NormalizedProviderError(
+                provider="byteplus-vod-mediakit",
+                operation=_OPERATION_GET,
+                http_status=response.status_code,
+                code="INVALID_RESPONSE",
+                message=(
+                    f"MediaKit returned an unrecognized enhancement status '{parsed.status}'. "
+                    "The status contract must be verified before it can be accepted."
+                ),
+                request_id=request_id,
+                retryable=False,
+                ambiguous_completion=False,
+            )
         )
 
     async def close(self) -> None:

@@ -85,7 +85,7 @@ class VodEnhanceVideoOutput(BaseModel):
     )
     task_id: str | None = Field(
         default=None,
-        description="Provider task identifier for an accepted asynchronous enhancement.",
+        description="Provider task identifier to poll with vod_get_enhancement_task.",
     )
     provider_status: str | None = Field(
         default=None,
@@ -124,9 +124,10 @@ async def vod_enhance_video(
 
     Submits the exact common/professional/4K/high/24-fps profile. The mutation
     is never retried automatically because completion can be ambiguous after a
-    timeout. An accepted response contains a task ID without an output URL. If
-    MediaKit directly returns a completed output, its provider URL is preserved
-    and durable persistence is best-effort under the 200 MiB video policy.
+    timeout. An accepted response contains a task ID without an output URL; poll
+    it with vod_get_enhancement_task. If MediaKit directly returns a completed
+    output, its provider URL is preserved and durable persistence is best-effort
+    under the 200 MiB video policy.
     """
     runtime = get_runtime(ctx)
     settings = runtime.settings

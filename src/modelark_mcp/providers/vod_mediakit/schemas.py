@@ -146,6 +146,74 @@ class EnhancementSubmission(BaseModel):
         return value
 
 
+class VodMediaKitEnhancementTaskResult(BaseModel):
+    """Live-confirmed result object for a completed enhancement task."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    video_url: HttpsUrl
+    duration: float | None = Field(default=None, ge=0)
+    fps: int | None = Field(default=None, ge=1)
+    resolution: str | None = None
+    tool_version: str | None = None
+
+
+class VodMediaKitEnhancementTaskResponse(BaseModel):
+    """Live-confirmed response from ``GET /tasks/{task_id}`` for enhancement."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    success: Literal[True]
+    task_id: str = Field(min_length=1)
+    task_type: Literal["enhance-video"]
+    status: str = Field(min_length=1)
+    result: VodMediaKitEnhancementTaskResult | None = None
+    error: VodMediaKitProviderErrorDetail | None = None
+    request_id: str | None = None
+    queue_id: str | None = None
+    expires_at: str | int | None = None
+    created_at: str | int | None = None
+    finished_at: str | int | None = None
+
+
+class EnhancementTask(BaseModel):
+    """Normalized enhancement task state for the tool layer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str = Field(min_length=1)
+    status: Literal["processing", "succeeded", "failed"]
+    provider_status: str | None = None
+    request_id: str | None = None
+    output_url: HttpsUrl | None = None
+    duration_seconds: float | None = Field(default=None, ge=0)
+    fps: int | None = Field(default=None, ge=1)
+    resolution: str | None = None
+    tool_version: str | None = None
+    created_at: str | None = None
+    finished_at: str | None = None
+    source_expires_at: str | None = None
+    failure_code: str | None = None
+    failure_message: str | None = None
+
+    @model_validator(mode="after")
+    def validate_state(self) -> EnhancementTask:
+        """Require output metadata only for successful tasks and errors only for failures."""
+        if self.status == "succeeded":
+            if self.output_url is None:
+                raise ValueError("succeeded enhancement task requires output_url")
+            if self.failure_code is not None or self.failure_message is not None:
+                raise ValueError("succeeded enhancement task must not carry a failure")
+        elif self.status == "processing":
+            if self.output_url is not None:
+                raise ValueError("processing enhancement task must not carry output_url")
+            if self.failure_code is not None or self.failure_message is not None:
+                raise ValueError("processing enhancement task must not carry a failure")
+        elif self.output_url is not None:
+            raise ValueError("failed enhancement task must not carry output_url")
+        return self
+
+
 class VodMediaKitProviderErrorResponse(BaseModel):
     """Verified MediaKit error response envelope."""
 

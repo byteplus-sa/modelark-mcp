@@ -72,7 +72,7 @@ flowchart LR
 - **Seed Speech gateway** (`providers/seed_speech.py`) — serves Seed Audio.
   Uses `X-Api-Key` and base URL `https://voice.ap-southeast-1.bytepluses.com`.
 - **VOD AI MediaKit gateway** (`providers/vod_mediakit/`) — serves the
-  asynchronous `vod_enhance_video` submission endpoint, the
+  `vod_enhance_video` / `vod_get_enhancement_task` submit-then-poll pair, the
   `vod_transcode_video` / `vod_get_transcode_task` submit-then-poll pair, and
   the `vod_separate_audio` / `vod_get_audio_separation` submit-then-poll pair
   (`POST /tools/separate-voice` + `GET /tasks/{task_id}`). It uses Bearer auth
@@ -86,10 +86,9 @@ flowchart LR
 
 MediaKit enhancement, transcode, and separation submission are non-idempotent
 mutations and bypass the automatic retry helper: a timeout can be ambiguous after
-the provider has begun work. Enhancement accepts asynchronous task submission
-with no verified polling route for that surface. Transcoding and separation, by
-contrast, have a verified task-status endpoint (`GET /tasks/{task_id}`), so
-`vod_get_transcode_task` and `vod_get_audio_separation` poll it and reuse the
+the provider has begun work. All three operations use the verified task-status
+endpoint (`GET /tasks/{task_id}`), so `vod_get_enhancement_task`,
+`vod_get_transcode_task`, and `vod_get_audio_separation` poll it and reuse the
 shared ownership store and task-artifact cache under the `vod-mediakit` provider
 key. For all three surfaces, a completed provider URL is preserved and
 persistence is attempted separately as a best-effort operation (under the

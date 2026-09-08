@@ -9,7 +9,7 @@ tool set.
 |---|---|---|---|
 | ModelArk | `BYTEPLUS_MODELARK_API_KEY` | `Authorization: Bearer <key>` | Seedream (image), Seedance (video) |
 | Seed Speech | `BYTEPLUS_SEED_SPEECH_API_KEY` | `X-Api-Key: <key>` | Seed Audio (speech generation), Speech-to-Text (ASR) |
-| VOD AI MediaKit | `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | `Authorization: Bearer <key>` | `vod_enhance_video`, `vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, `vod_get_audio_separation` |
+| VOD AI MediaKit | `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | `Authorization: Bearer <key>` | `vod_enhance_video`, `vod_get_enhancement_task`, `vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, `vod_get_audio_separation` |
 | TOS | `TOS_ACCESS_KEY` + `TOS_SECRET_KEY` + `TOS_BUCKET` | AK/SK signing | `media_upload`, `media_presign`, `media_presign_batch` |
 | S3 | `S3_ACCESS_KEY` + `S3_SECRET_KEY` + `S3_BUCKET` | AK/SK signing | `media_upload`, `media_presign`, `media_presign_batch` |
 
@@ -110,7 +110,7 @@ not the credential.
 
 BytePlus VOD AI MediaKit is a single Bearer-authenticated convenience surface
 that powers video enhancement, video transcoding, and voice + background audio
-separation. All five tools share the same API key.
+separation. All six tools share the same API key.
 
 **Env vars:**
 

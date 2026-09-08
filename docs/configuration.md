@@ -9,7 +9,7 @@ Settings. Copy `.env.example` to `.env`. Empty values are ignored.
 |---|---|---|
 | `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream, Seedance, and Seed 2.1 understanding; sent as Bearer auth |
 | `BYTEPLUS_SEED_SPEECH_API_KEY` | empty | Enables Seed Audio and speech-to-text; sent as `X-Api-Key` |
-| `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | Enables `vod_enhance_video`, `vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, and `vod_get_audio_separation`; sent as Bearer auth |
+| `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | Enables `vod_enhance_video`, `vod_get_enhancement_task`, `vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, and `vod_get_audio_separation`; sent as Bearer auth |
 | `BYTEPLUS_MODELARK_BASE_URL` | AP Southeast ModelArk URL | HTTPS data-plane base URL |
 | `BYTEPLUS_SEED_AUDIO_BASE_URL` | AP Southeast Seed Speech URL | HTTPS service base URL |
 | `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | HTTPS VOD AI MediaKit convenience-endpoint base URL |
@@ -112,8 +112,10 @@ JWT tool scope for speech-to-text:
 set. The initial tool intentionally exposes only the exact
 `common`/`professional`/`4k`/`high`/24-fps profile and serializes the project
 label upstream as case-sensitive `Project`. Submission returns an asynchronous
-task ID; there is no verified polling tool or automatic POST retry. Convenience-endpoint
-pricing is not yet confirmed, so the tool does not emit a cost estimate.
+task ID for `vod_get_enhancement_task`; the poll tool returns and best-effort
+persists completed outputs. The submit POST is not retried automatically.
+Convenience-endpoint pricing is not yet confirmed, so the tool does not emit a
+cost estimate.
 
 `vod_transcode_video` and `vod_get_transcode_task` are also registered when
 `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. `vod_transcode_video` submits an async

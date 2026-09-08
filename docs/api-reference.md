@@ -26,18 +26,19 @@ surface.
 | 17 | `seed_media_get_artifact` | Artifacts | Read-only | Local / JWT |
 | 18 | `speech_to_text` | Seed Speech ASR (optional) | Synchronous | Seed Speech |
 | 19 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 20 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
-| 21 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 22 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 23 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 24 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
-| 25 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
-| 26 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
-| 27 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
-| 28 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
-| 29 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
-| 30 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
-| 31 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
+| 20 | `vod_get_enhancement_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 21 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
+| 22 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 23 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 24 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 25 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
+| 26 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
+| 27 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
+| 28 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
+| 29 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
+| 30 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
+| 31 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
+| 32 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
 
 ## Tool Annotations
 
@@ -62,6 +63,7 @@ surface.
 | `seed_media_get_artifact` | true | false | true | false |
 | `speech_to_text` | true | false | true | false |
 | `vod_enhance_video` | false | false | false | true |
+| `vod_get_enhancement_task` | true | false | true | false |
 | `vod_transcode_video` | false | false | false | true |
 | `vod_get_transcode_task` | true | false | true | false |
 | `vod_separate_audio` | false | false | false | true |
@@ -85,9 +87,10 @@ MediaKit convenience endpoint. The tool is registered only when
 scope in JWT mode.
 
 The verified contract returns an accepted asynchronous task and deliberately fixes the
-provider profile to `common` / `professional` / `4k` / `high` / 24 fps. It
-does not expose polling. The POST is non-idempotent and is never retried
-automatically because a timeout may occur after the provider began processing.
+provider profile to `common` / `professional` / `4k` / `high` / 24 fps. Poll
+the returned task ID with `vod_get_enhancement_task`. The POST is non-idempotent
+and is never retried automatically because a timeout may occur after the provider
+began processing.
 
 ### Input
 
@@ -118,8 +121,8 @@ a failure without exposing the URL or credential. `video` contains the durable
 `null` until the convenience endpoint's pricing and billing-unit mapping are
 confirmed.
 
-The asynchronous acceptance shape is verified by a sanitized live probe. The
-completed-output shape remains provisional; unknown shapes fail closed.
+The asynchronous acceptance and completed task shapes are verified by sanitized
+live probes. Unknown shapes fail closed.
 
 ### Example
 
@@ -134,6 +137,36 @@ completed-output shape remains provisional; unknown shapes fail closed.
   "project": "default",
   "persist": true
 }
+```
+
+---
+
+## vod_get_enhancement_task
+
+Poll the status and retrieve the output of a BytePlus VOD AI MediaKit enhancement
+task. Registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is configured;
+requires the `vod:read` scope in JWT mode.
+
+### Input
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `task_id` | string | Yes | — |
+| `persist_output` | boolean | No | `true` |
+
+### Output
+
+Returns `VodEnhancementTaskOutput` with normalized `processing`, `succeeded`, or
+`failed` status. On success it includes the provider `source_url`, its 24-hour
+expiry, duration, resolution, frame rate, enhancement tier, and task timestamps.
+With persistence enabled, the first successful poll copies the output into the
+artifact store and caches the `ArtifactRef`; later polls reuse the cached artifact.
+Persistence failures are reported separately without changing provider success.
+
+### Example
+
+```json
+{ "task_id": "amk-tool-enhance-video-628409042449" }
 ```
 
 ---

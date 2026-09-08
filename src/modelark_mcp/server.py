@@ -171,6 +171,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             VodAudioSeparationTaskOutput,
             vod_get_audio_separation,
         )
+        from modelark_mcp.tools.vod_get_enhancement_task import (
+            TOOL_ANNOTATIONS as vod_get_enhancement_annotations,
+        )
+        from modelark_mcp.tools.vod_get_enhancement_task import (
+            VodEnhancementTaskOutput,
+            vod_get_enhancement_task,
+        )
         from modelark_mcp.tools.vod_get_transcode_task import (
             TOOL_ANNOTATIONS as vod_get_transcode_annotations,
         )
@@ -199,6 +206,12 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             output_schema=VodEnhanceVideoOutput.model_json_schema(),
             auth=component_auth(settings, "vod:enhance"),
         )(vod_enhance_video)
+        server.tool(
+            name="vod_get_enhancement_task",
+            annotations={**vod_get_enhancement_annotations},
+            output_schema=VodEnhancementTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_enhancement_task)
         server.tool(
             name="vod_transcode_video",
             annotations={**vod_transcode_annotations},

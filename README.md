@@ -17,7 +17,7 @@ products plus artifact access and an optional media upload helper:
 | **Hyper3D / Hitem3d** | `hyper3d_*`, `hitem3d_*` task tools | Async 3D model generation through ModelArk (gated by `BYTEPLUS_MODELARK_3D_ENABLED`, disabled by default) |
 | **Seed 2.1 Understanding** | `seed_understand` | Multimodal video/image understanding and reasoning through ModelArk Chat Completions |
 | **Speech-to-Text** | `speech_to_text` | Synchronous audio transcription through Seed Speech ASR (HTTP) |
-| **VOD AI MediaKit** | `vod_enhance_video` | Submit asynchronous AI enhancement for the exact common/professional/4K/high/24-fps profile |
+| **VOD AI MediaKit** | `vod_enhance_video`, `vod_get_enhancement_task` | Submit and poll asynchronous AI enhancement for the exact common/professional/4K/high/24-fps profile |
 | **VOD AI MediaKit Transcode** | `vod_transcode_video`, `vod_get_transcode_task` | Submit and poll async video transcoding (codec, container, resolution, bitrate, frame rate) |
 | **VOD Audio Separation** | `vod_separate_audio`, `vod_get_audio_separation` | Submit and poll voice + background (or voice + music + sfx) audio separation via the VOD AI MediaKit (`separate-voice`) |
 | **Artifacts** | `seed_media_get_artifact` | Retrieve persisted media inline by artifact ID |
@@ -28,7 +28,7 @@ Key features:
 - **Durable artifacts** — generated media is persisted locally so MCP
   resources remain usable after known provider URL lifetimes (2h audio, 24h
   ModelArk image/video); VOD MediaKit persistence is best-effort and capped at
-  200 MiB while its source URL lifetime remains unconfirmed
+  200 MiB, and completed enhancement URLs have a confirmed 24-hour lifetime
 - **Parallel variations** — generate N independent variations in a single
   call with `asyncio.gather`, partial failures captured per variation
 - **Per-variation seeds** — Seedream supports reproducible generation with
@@ -191,7 +191,7 @@ tools. `seed_media_get_artifact` is always available, provider tools appear only
 when their credentials are configured, `media_upload` and `media_presign` appear
 only when object storage credentials (TOS or S3) are configured, and
 `speech_to_text` appears only when `BYTEPLUS_SEED_SPEECH_API_KEY` is set.
-`vod_enhance_video`, `vod_transcode_video`, `vod_get_transcode_task`,
+`vod_enhance_video`, `vod_get_enhancement_task`, `vod_transcode_video`, `vod_get_transcode_task`,
 `vod_separate_audio`, and `vod_get_audio_separation` appear only when
 `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set.
 
