@@ -159,14 +159,15 @@ requires the `vod:read` scope in JWT mode.
 Returns `VodEnhancementTaskOutput` with normalized `processing`, `succeeded`, or
 `failed` status. On success it includes the provider `source_url`, its 24-hour
 expiry, duration, resolution, frame rate, enhancement tier, and task timestamps.
-With persistence enabled, the first successful poll copies the output into the
-artifact store and caches the `ArtifactRef`; later polls reuse the cached artifact.
-Persistence failures are reported separately without changing provider success.
+With persistence enabled, concurrent first polls share one artifact copy and
+the `ArtifactRef` is cached for later reuse. Cache failures emit safe warnings
+without discarding a created artifact. Artifact-copy failures are reported
+separately without changing provider success.
 
 ### Example
 
 ```json
-{ "task_id": "amk-tool-enhance-video-628409042449" }
+{ "task_id": "amk-tool-enhance-video-example" }
 ```
 
 ---

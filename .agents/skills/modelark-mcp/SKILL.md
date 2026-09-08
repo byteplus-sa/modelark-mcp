@@ -233,8 +233,9 @@ returned by `vod_enhance_video`. Maps provider `running`→`processing`,
 `completed`→`succeeded`, and `failed`→`failed`, while requiring
 `task_type="enhance-video"`. On success, returns the 24-hour `source_url`,
 duration, resolution, frame rate, enhancement tier, and normalized timestamps.
-With `persist_output=true` (default), the output is copied once into the durable
-artifact store under the 200 MiB limit and cached by task ID.
+With `persist_output=true` (default), concurrent first polls share one durable
+artifact copy under the 200 MiB limit and cache it by task ID. Cache failures
+emit safe warnings without discarding an artifact that was already created.
 
 #### `vod_transcode_video`
 

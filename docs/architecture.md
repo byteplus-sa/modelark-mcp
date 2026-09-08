@@ -13,10 +13,10 @@ Server as shipped today. For the original design rationale, see
   `X-Api-Key`; VOD AI MediaKit uses its own Bearer-authenticated convenience
   endpoint for enhancement, transcoding, and audio separation. The differences
   are hidden behind normalized adapters.
-- **Durable artifacts** — known provider media URLs expire (2h audio, 24h
-  ModelArk image/video), so outputs are persisted to a local store and
-  re-exposed as stable `seed-media://artifacts/{id}` MCP resources. MediaKit
-  source lifetime is unconfirmed and its persistence is best-effort.
+- **Durable artifacts** — known provider media URLs expire (2h Seed Audio; 24h
+  ModelArk image/video and observed MediaKit outputs), so outputs are persisted
+  to a local store and re-exposed as stable `seed-media://artifacts/{id}` MCP
+  resources. MediaKit persistence is best-effort.
 - **Safe by default** — local `stdio` requires no auth; remote HTTP requires
   JWT verification, Host/Origin protection, and body limits.
 - **Observable and budget-aware** — structured logs, Prometheus metrics, and a
@@ -114,10 +114,10 @@ sequenceDiagram
     R-->>T: services
     T->>T: billed_provider_slot(...)
     M->>L: shutdown
-    L->>R: close_runtime_services (artifact_store, ownership_store, budget_ledger, task_artifact_cache)
+    L->>R: close_runtime_services (artifact, ownership, object-key, budget, cache stores)
 ```
 
-`RuntimeServices` holds seven components (see [runtime.md](runtime.md) for
+`RuntimeServices` holds nine components (see [runtime.md](runtime.md) for
 full detail):
 
 | Field | Purpose |
@@ -125,13 +125,17 @@ full detail):
 | `settings` | resolved `Settings` |
 | `artifact_store` | `FilesystemArtifactStore` — durable media |
 | `safe_downloader` | SSRF-safe HTTP downloader |
-| `ownership_store` | `SQLiteTaskOwnershipStore` — Seedance task ownership |
+| `ownership_store` | `SQLiteTaskOwnershipStore` — provider task ownership |
+| `object_key_ownership_store` | `SQLiteObjectKeyOwnershipStore` — uploaded-object ownership |
 | `budget_ledger` | `BudgetLedger` — per-principal UTC daily budget |
 | `provider_limiters` | `ProviderLimiters` — provider + principal concurrency |
 | `task_artifact_cache` | `SQLiteTaskArtifactCache` — provider task → artifact ref cache |
+| `task_artifact_locks` | `TaskArtifactPersistenceLocks` — process-local per-task single-flight |
 
-`close_runtime_services` closes exactly four of these: `artifact_store`,
-`ownership_store`, `budget_ledger`, and `task_artifact_cache`.
+`close_runtime_services` closes the five resources that own I/O state:
+`artifact_store`, `ownership_store`, `object_key_ownership_store`,
+`budget_ledger`, and `task_artifact_cache`. The lock registry is process-local,
+removes entries after the last holder or waiter exits, and needs no close step.
 
 ## Request flow for a billable tool
 

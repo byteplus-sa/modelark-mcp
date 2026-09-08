@@ -108,9 +108,11 @@ and uses the `vod:read` JWT scope.
 Returns `VodEnhancementTaskOutput` with normalized `processing`, `succeeded`, or
 `failed` status. A completed result includes `source_url`, its 24-hour expiry,
 duration, resolution, frame rate, enhancement tier, and provider timestamps.
-With `persist_output=true`, the output is copied once into durable artifact
-storage and cached by task ID. Persistence failure is reported separately and
-does not erase provider success; durable video copies remain capped at 200 MiB.
+With `persist_output=true`, concurrent first polls share one artifact copy and
+the result is cached by task ID for later reuse. Cache failures emit safe
+warnings but preserve any created artifact and the provider success. Artifact
+copy failures are reported separately; durable video copies remain capped at
+200 MiB.
 
 ## vod_transcode_video
 

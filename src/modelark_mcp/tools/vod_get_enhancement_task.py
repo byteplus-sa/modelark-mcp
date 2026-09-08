@@ -145,14 +145,19 @@ async def _persist_output(
         return None, None, "not_requested"
 
     runtime = get_runtime(ctx)
-    cached = await runtime.task_artifact_cache.get("vod-mediakit", task_id)
-    if cached and cached.get("video") is not None:
-        return cached["video"], None, "persisted"
+    async with runtime.task_artifact_locks.acquire("vod-mediakit", task_id) as singleflight:
+        if singleflight.artifacts and singleflight.artifacts.get("video") is not None:
+            return singleflight.artifacts["video"], None, "persisted"
 
-    async with runtime.task_artifact_locks.acquire("vod-mediakit", task_id):
-        cached = await runtime.task_artifact_cache.get("vod-mediakit", task_id)
-        if cached and cached.get("video") is not None:
-            return cached["video"], None, "persisted"
+        try:
+            cached = await runtime.task_artifact_cache.get("vod-mediakit", task_id)
+            cached_video = cached.get("video") if cached else None
+        except Exception:
+            cached_video = None
+            await ctx.warning("VOD enhancement artifact cache lookup failed.")
+        if cached_video is not None:
+            singleflight.artifacts = {"video": cached_video}
+            return cached_video, None, "persisted"
 
         try:
             video_ref = await runtime.artifact_store.copy_from_trusted_url(
@@ -189,7 +194,13 @@ async def _persist_output(
                 "failed",
             )
 
-        await runtime.task_artifact_cache.set("vod-mediakit", task_id, {"video": video_ref})
+        singleflight.artifacts = {"video": video_ref}
+        try:
+            await runtime.task_artifact_cache.set("vod-mediakit", task_id, {"video": video_ref})
+        except Exception:
+            await ctx.warning(
+                "VOD enhancement artifact cache update failed; the artifact remains available."
+            )
         return video_ref, None, "persisted"
 
 

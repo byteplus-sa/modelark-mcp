@@ -179,6 +179,7 @@ class TaskArtifactCache(Protocol):
 class _TaskArtifactLockEntry:
     lock: asyncio.Lock
     users: int = 0
+    artifacts: dict[str, ArtifactRef | None] | None = None
 
 
 class TaskArtifactPersistenceLocks:
@@ -189,7 +190,7 @@ class TaskArtifactPersistenceLocks:
         self._registry_lock = asyncio.Lock()
 
     @asynccontextmanager
-    async def acquire(self, provider: str, task_id: str) -> AsyncIterator[None]:
+    async def acquire(self, provider: str, task_id: str) -> AsyncIterator[_TaskArtifactLockEntry]:
         """Serialize persistence for one provider task while leaving other tasks concurrent."""
         key = (provider, task_id)
         async with self._registry_lock:
@@ -201,7 +202,7 @@ class TaskArtifactPersistenceLocks:
 
         try:
             async with entry.lock:
-                yield
+                yield entry
         finally:
             async with self._registry_lock:
                 entry.users -= 1

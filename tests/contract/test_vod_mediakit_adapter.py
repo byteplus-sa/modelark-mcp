@@ -391,6 +391,12 @@ class TestVodMediaKitEnhancementTaskContract:
                 "task_type": "enhance-video",
                 "status": "expired",
             },
+            {
+                "success": True,
+                "task_id": "amk-tool-enhance-video-1",
+                "task_type": "enhance-video",
+                "status": "https://output.example.com/video.mp4?token=secret",
+            },
         ],
     )
     @respx.mock
@@ -405,6 +411,8 @@ class TestVodMediaKitEnhancementTaskContract:
             await service.get("amk-tool-enhance-video-1")
 
         assert exc_info.value.code == "INVALID_RESPONSE"
+        assert "output.example.com" not in exc_info.value.message
+        assert "token=secret" not in exc_info.value.message
 
 
 class TestVodMediaKitErrorContract:

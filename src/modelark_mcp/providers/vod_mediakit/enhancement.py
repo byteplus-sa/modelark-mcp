@@ -251,10 +251,7 @@ class VodMediaKitEnhancementService:
                 operation=_OPERATION_GET,
                 http_status=response.status_code,
                 code="INVALID_RESPONSE",
-                message=(
-                    f"MediaKit returned an unrecognized enhancement status '{parsed.status}'. "
-                    "The status contract must be verified before it can be accepted."
-                ),
+                message="MediaKit returned an unrecognized enhancement task status.",
                 request_id=request_id,
                 retryable=False,
                 ambiguous_completion=False,

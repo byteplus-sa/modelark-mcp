@@ -213,7 +213,8 @@ two-layer SSRF defense. Constructor defaults: `timeout=120.0s`,
 
 `FilesystemArtifactStore` restricts `copy_from_trusted_url` to provider hosts
 via suffix allowlist: `.bytepluses.com`, `.byteplus.com`, `.bytedance.com`,
-`.bytednsdoc.com`, `.volces.com`, `.tos-ap-southeast.bytepluses.com`.
+`.bytednsdoc.com`, `.volces.com`, `.byteplusvod.com`,
+`.tos-ap-southeast.bytepluses.com`.
 
 For VOD AI MediaKit, enhancement and artifact persistence are separate
 outcomes. The tool always preserves a successful provider output URL for the

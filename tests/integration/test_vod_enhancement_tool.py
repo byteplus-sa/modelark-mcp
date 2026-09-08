@@ -335,6 +335,11 @@ async def test_concurrent_first_polls_persist_one_shared_artifact(
         return ref
 
     monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy_from_trusted_url)
+    monkeypatch.setattr(
+        runtime.task_artifact_cache,
+        "set",
+        AsyncMock(side_effect=RuntimeError("cache unavailable")),
+    )
 
     first = asyncio.create_task(
         vod_get_enhancement_task(
@@ -357,6 +362,7 @@ async def test_concurrent_first_polls_persist_one_shared_artifact(
     assert isinstance(second_result, VodEnhancementTaskOutput)
     assert first_result.video == ref
     assert second_result.video == ref
+    assert any("artifact cache update failed" in message for message in fake_ctx.messages)
 
 
 async def test_poll_enhancement_can_skip_persistence(
@@ -423,6 +429,96 @@ async def test_poll_enhancement_persistence_failure_preserves_success(
     assert result.persistence_issue.code == "output_too_large"
     assert result.video is None
     assert any(message.startswith("WARNING:") for message in fake_ctx.messages)
+
+
+async def test_poll_enhancement_cache_lookup_failure_preserves_success(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ref = ArtifactRef(
+        id="artifact-cache-read",
+        uri="seed-media://artifacts/artifact-cache-read",
+        media_type="video",
+        mime_type="video/mp4",
+        bytes=123,
+        sha256="abc",
+        created_at="2026-09-08T14:00:00Z",
+    )
+    monkeypatch.setattr(
+        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())
+    monkeypatch.setattr(
+        runtime.task_artifact_cache,
+        "get",
+        AsyncMock(side_effect=RuntimeError("https://private.example.com/?token=secret")),
+    )
+    monkeypatch.setattr(
+        runtime.artifact_store,
+        "copy_from_trusted_url",
+        AsyncMock(return_value=ref),
+    )
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodEnhancementTaskOutput)
+    assert result.status == "succeeded"
+    assert result.persistence == "persisted"
+    assert result.video == ref
+    messages = "\n".join(fake_ctx.messages)
+    assert "artifact cache lookup failed" in messages
+    assert "private.example.com" not in messages
+    assert "token=secret" not in messages
+
+
+async def test_poll_enhancement_cache_update_failure_returns_created_artifact(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ref = ArtifactRef(
+        id="artifact-cache-write",
+        uri="seed-media://artifacts/artifact-cache-write",
+        media_type="video",
+        mime_type="video/mp4",
+        bytes=123,
+        sha256="abc",
+        created_at="2026-09-08T14:00:00Z",
+    )
+    monkeypatch.setattr(
+        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())
+    monkeypatch.setattr(
+        runtime.artifact_store,
+        "copy_from_trusted_url",
+        AsyncMock(return_value=ref),
+    )
+    monkeypatch.setattr(
+        runtime.task_artifact_cache,
+        "set",
+        AsyncMock(side_effect=RuntimeError("https://private.example.com/?token=secret")),
+    )
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodEnhancementTaskOutput)
+    assert result.status == "succeeded"
+    assert result.persistence == "persisted"
+    assert result.video == ref
+    messages = "\n".join(fake_ctx.messages)
+    assert "artifact cache update failed" in messages
+    assert "private.example.com" not in messages
+    assert "token=secret" not in messages
 
 
 async def test_poll_enhancement_processing_has_no_output(
