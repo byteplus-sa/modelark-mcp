@@ -351,11 +351,13 @@ class TestVodMediaKitEnhancementTaskContract:
         respx.get(TASK_ENDPOINT).mock(
             return_value=httpx.Response(
                 200,
+                headers={"x-tt-logid": "safe-header-log"},
                 json={
                     "success": True,
                     "task_id": "amk-tool-enhance-video-other",
                     "task_type": "enhance-video",
                     "status": status,
+                    "request_id": "https://private.example.com/?token=secret",
                     **extra,
                 },
             )
@@ -366,7 +368,10 @@ class TestVodMediaKitEnhancementTaskContract:
 
         assert exc_info.value.code == "INVALID_RESPONSE"
         assert exc_info.value.retryable is False
+        assert exc_info.value.request_id == "safe-header-log"
         assert "amk-tool-enhance-video" not in exc_info.value.message
+        assert "private.example.com" not in (exc_info.value.request_id or "")
+        assert "token=secret" not in (exc_info.value.request_id or "")
 
     @pytest.mark.parametrize(
         "body",
@@ -405,14 +410,26 @@ class TestVodMediaKitEnhancementTaskContract:
         service: VodMediaKitEnhancementService,
         body: dict[str, object],
     ) -> None:
-        respx.get(TASK_ENDPOINT).mock(return_value=httpx.Response(200, json=body))
+        respx.get(TASK_ENDPOINT).mock(
+            return_value=httpx.Response(
+                200,
+                headers={"x-tt-logid": "safe-header-log"},
+                json={
+                    **body,
+                    "request_id": "https://private.example.com/?token=secret",
+                },
+            )
+        )
 
         with pytest.raises(ProviderError) as exc_info:
             await service.get("amk-tool-enhance-video-1")
 
         assert exc_info.value.code == "INVALID_RESPONSE"
+        assert exc_info.value.request_id == "safe-header-log"
         assert "output.example.com" not in exc_info.value.message
         assert "token=secret" not in exc_info.value.message
+        assert "private.example.com" not in (exc_info.value.request_id or "")
+        assert "token=secret" not in (exc_info.value.request_id or "")
 
 
 class TestVodMediaKitErrorContract:

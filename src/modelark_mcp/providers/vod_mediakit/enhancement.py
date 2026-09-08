@@ -176,7 +176,6 @@ class VodMediaKitEnhancementService:
                 )
             ) from exc
 
-        request_id = parsed.request_id or header_request_id
         if parsed.task_id != task_id:
             raise ProviderError(
                 NormalizedProviderError(
@@ -185,7 +184,7 @@ class VodMediaKitEnhancementService:
                     http_status=response.status_code,
                     code="INVALID_RESPONSE",
                     message="MediaKit returned a mismatched enhancement task response.",
-                    request_id=request_id,
+                    request_id=header_request_id,
                     retryable=False,
                     ambiguous_completion=False,
                 )
@@ -201,11 +200,12 @@ class VodMediaKitEnhancementService:
                         http_status=response.status_code,
                         code="INVALID_RESPONSE",
                         message="MediaKit reported a completed enhancement task without an output URL.",
-                        request_id=request_id,
+                        request_id=header_request_id,
                         retryable=False,
                         ambiguous_completion=False,
                     )
                 )
+            request_id = parsed.request_id or header_request_id
             return EnhancementTask(
                 task_id=parsed.task_id,
                 status="succeeded",
@@ -222,6 +222,7 @@ class VodMediaKitEnhancementService:
             )
 
         if parsed.status == "failed":
+            request_id = parsed.request_id or header_request_id
             code, message = _sanitize_task_error(
                 parsed.error, "MediaKit reported the enhancement task failed."
             )
@@ -237,6 +238,7 @@ class VodMediaKitEnhancementService:
             )
 
         if parsed.status == "running":
+            request_id = parsed.request_id or header_request_id
             return EnhancementTask(
                 task_id=parsed.task_id,
                 status="processing",
@@ -252,7 +254,7 @@ class VodMediaKitEnhancementService:
                 http_status=response.status_code,
                 code="INVALID_RESPONSE",
                 message="MediaKit returned an unrecognized enhancement task status.",
-                request_id=request_id,
+                request_id=header_request_id,
                 retryable=False,
                 ambiguous_completion=False,
             )
