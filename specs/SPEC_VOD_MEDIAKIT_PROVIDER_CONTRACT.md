@@ -216,9 +216,9 @@ The adapter may preserve these optional fields when present:
 - terminal `error.code` and `error.message`.
 
 Unknown or malformed HTTP 2xx bodies raise a normalized, non-retryable
-`INVALID_RESPONSE` provider error. The implementation does not invent a polling
-path from a returned ID. A later verified contract replaces this compatibility
-boundary and updates fixtures before broadening behavior.
+`INVALID_RESPONSE` provider error. These aliases apply only when the submission
+endpoint directly returns a completed result; asynchronous task IDs use the
+separately verified enhancement task contract above.
 
 ## Execution and Retry Semantics (video enhancement)
 
@@ -463,7 +463,8 @@ the MCP returns no cost estimate while that mapping is unverified.
 Before declaring this contract accepted or production-ready, obtain provider
 documentation or sanitized evidence for:
 
-- enhancement cancellation, list, callback, and idempotency behavior;
+- enhancement cancellation, list, callback, and idempotency behavior beyond the
+  verified submit-and-poll lifecycle;
 - redirect hostnames not exercised by the live enhancement result (the initial
   output host used confirmed `*.byteplusvod.com` and returned no redirect);
 - provider-reported MIME, size metadata, and maximum output size (enhancement
@@ -473,5 +474,3 @@ documentation or sanitized evidence for:
   `client_token` + 24h default key confirmed);
 - `queue_id` and `Project` as request parameters (unverified — the projects-and-queues
   guide is currently unreachable);
-- whether the convenience surface supports cancellation, list, or event callbacks
-  (callbacks are documented; cancellation/list are not).

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -300,6 +301,62 @@ async def test_poll_enhancement_succeeded_persists_once(
     assert result.tool_version == "professional"
     assert result_again.video == ref
     assert copy.await_count == 1
+
+
+async def test_concurrent_first_polls_persist_one_shared_artifact(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ref = ArtifactRef(
+        id="artifact-concurrent",
+        uri="seed-media://artifacts/artifact-concurrent",
+        media_type="video",
+        mime_type="video/mp4",
+        bytes=123,
+        sha256="abc",
+        created_at="2026-09-08T14:00:00Z",
+    )
+    monkeypatch.setattr(
+        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())
+    copy_started = asyncio.Event()
+    release_copy = asyncio.Event()
+    copy_count = 0
+
+    async def copy_from_trusted_url(**_kwargs: object) -> ArtifactRef:
+        nonlocal copy_count
+        copy_count += 1
+        copy_started.set()
+        await release_copy.wait()
+        return ref
+
+    monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy_from_trusted_url)
+
+    first = asyncio.create_task(
+        vod_get_enhancement_task(
+            VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+        )
+    )
+    second = asyncio.create_task(
+        vod_get_enhancement_task(
+            VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+        )
+    )
+    await asyncio.wait_for(copy_started.wait(), timeout=1)
+    await asyncio.sleep(0)
+    release_copy.set()
+    results = await asyncio.gather(first, second)
+
+    assert copy_count == 1
+    first_result, second_result = results
+    assert isinstance(first_result, VodEnhancementTaskOutput)
+    assert isinstance(second_result, VodEnhancementTaskOutput)
+    assert first_result.video == ref
+    assert second_result.video == ref
 
 
 async def test_poll_enhancement_can_skip_persistence(

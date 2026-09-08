@@ -149,43 +149,48 @@ async def _persist_output(
     if cached and cached.get("video") is not None:
         return cached["video"], None, "persisted"
 
-    try:
-        video_ref = await runtime.artifact_store.copy_from_trusted_url(
-            url=str(task.output_url),
-            media_type=MediaType.VIDEO,
-            mime_type="video/mp4",
-            source_expires_at=task.source_expires_at,
-            auth=owner,
-        )
-    except ArtifactPersistenceError as exc:
-        await ctx.warning(f"VOD enhancement output persistence failed: {exc.safe_message}")
-        return (
-            None,
-            VodArtifactPersistenceIssue(
-                code=exc.code,
-                message=exc.safe_message,
-                retryable=exc.retryable,
-                artifact_limit_bytes=get_media_limits().video_max_bytes,
-            ),
-            "failed",
-        )
-    except Exception:
-        await ctx.warning(
-            "VOD enhancement output persistence failed due to an internal storage error."
-        )
-        return (
-            None,
-            VodArtifactPersistenceIssue(
-                code="storage_failed",
-                message="Provider output could not be written to artifact storage.",
-                retryable=True,
-                artifact_limit_bytes=get_media_limits().video_max_bytes,
-            ),
-            "failed",
-        )
+    async with runtime.task_artifact_locks.acquire("vod-mediakit", task_id):
+        cached = await runtime.task_artifact_cache.get("vod-mediakit", task_id)
+        if cached and cached.get("video") is not None:
+            return cached["video"], None, "persisted"
 
-    await runtime.task_artifact_cache.set("vod-mediakit", task_id, {"video": video_ref})
-    return video_ref, None, "persisted"
+        try:
+            video_ref = await runtime.artifact_store.copy_from_trusted_url(
+                url=str(task.output_url),
+                media_type=MediaType.VIDEO,
+                mime_type="video/mp4",
+                source_expires_at=task.source_expires_at,
+                auth=owner,
+            )
+        except ArtifactPersistenceError as exc:
+            await ctx.warning(f"VOD enhancement output persistence failed: {exc.safe_message}")
+            return (
+                None,
+                VodArtifactPersistenceIssue(
+                    code=exc.code,
+                    message=exc.safe_message,
+                    retryable=exc.retryable,
+                    artifact_limit_bytes=get_media_limits().video_max_bytes,
+                ),
+                "failed",
+            )
+        except Exception:
+            await ctx.warning(
+                "VOD enhancement output persistence failed due to an internal storage error."
+            )
+            return (
+                None,
+                VodArtifactPersistenceIssue(
+                    code="storage_failed",
+                    message="Provider output could not be written to artifact storage.",
+                    retryable=True,
+                    artifact_limit_bytes=get_media_limits().video_max_bytes,
+                ),
+                "failed",
+            )
+
+        await runtime.task_artifact_cache.set("vod-mediakit", task_id, {"video": video_ref})
+        return video_ref, None, "persisted"
 
 
 async def vod_get_enhancement_task(

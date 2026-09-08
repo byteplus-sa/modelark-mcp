@@ -331,6 +331,44 @@ class TestVodMediaKitEnhancementTaskContract:
         assert "token=x" not in (result.failure_message or "")
 
     @pytest.mark.parametrize(
+        ("status", "extra"),
+        [
+            (
+                "completed",
+                {"result": {"video_url": "https://output.example.com/enhanced.mp4"}},
+            ),
+            ("running", {}),
+            ("failed", {"error": {"code": "Failed", "message": "Task failed."}}),
+        ],
+    )
+    @respx.mock
+    async def test_mismatched_task_id_fails_closed(
+        self,
+        service: VodMediaKitEnhancementService,
+        status: str,
+        extra: dict[str, object],
+    ) -> None:
+        respx.get(TASK_ENDPOINT).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "task_id": "amk-tool-enhance-video-other",
+                    "task_type": "enhance-video",
+                    "status": status,
+                    **extra,
+                },
+            )
+        )
+
+        with pytest.raises(ProviderError) as exc_info:
+            await service.get("amk-tool-enhance-video-1")
+
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert exc_info.value.retryable is False
+        assert "amk-tool-enhance-video" not in exc_info.value.message
+
+    @pytest.mark.parametrize(
         "body",
         [
             {

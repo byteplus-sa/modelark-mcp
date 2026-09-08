@@ -177,6 +177,19 @@ class VodMediaKitEnhancementService:
             ) from exc
 
         request_id = parsed.request_id or header_request_id
+        if parsed.task_id != task_id:
+            raise ProviderError(
+                NormalizedProviderError(
+                    provider="byteplus-vod-mediakit",
+                    operation=_OPERATION_GET,
+                    http_status=response.status_code,
+                    code="INVALID_RESPONSE",
+                    message="MediaKit returned a mismatched enhancement task response.",
+                    request_id=request_id,
+                    retryable=False,
+                    ambiguous_completion=False,
+                )
+            )
         result = parsed.result
 
         if parsed.status == "completed":

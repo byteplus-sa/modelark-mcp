@@ -25,6 +25,7 @@ from modelark_mcp.runtime import (
     SQLiteObjectKeyOwnershipStore,
     SQLiteTaskArtifactCache,
     SQLiteTaskOwnershipStore,
+    TaskArtifactPersistenceLocks,
     _state_sweeper,
     build_lifespan,
     close_runtime_services,
@@ -88,6 +89,22 @@ async def test_task_artifact_cache_pop(tmp_path: Path) -> None:
     assert popped["video"].id == "art-pop"
     assert await cache.get("modelark", "task-pop") is None
     await cache.close()
+
+
+async def test_task_artifact_persistence_locks_keep_different_tasks_concurrent() -> None:
+    locks = TaskArtifactPersistenceLocks()
+    both_entered = asyncio.Event()
+    entered: set[str] = set()
+
+    async def worker(task_id: str) -> None:
+        async with locks.acquire("vod-mediakit", task_id):
+            entered.add(task_id)
+            if len(entered) == 2:
+                both_entered.set()
+            await asyncio.wait_for(both_entered.wait(), timeout=1)
+
+    await asyncio.gather(worker("task-1"), worker("task-2"))
+    assert entered == {"task-1", "task-2"}
 
 
 async def test_task_artifact_cache_clear(tmp_path: Path) -> None:
@@ -505,6 +522,7 @@ class TestStateSweeper:
             budget_ledger=_FakeBudgetLedger(),  # type: ignore[arg-type]
             provider_limiters=SimpleNamespace(),  # type: ignore[arg-type]
             task_artifact_cache=_FakeTaskArtifactCache(),  # type: ignore[arg-type]
+            task_artifact_locks=TaskArtifactPersistenceLocks(),
         )
 
         async def _factory(_settings: Settings) -> RuntimeServices:
