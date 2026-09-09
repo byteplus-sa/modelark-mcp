@@ -44,7 +44,7 @@ Key features:
 - **Runtime controls** — shared provider/principal concurrency, daily budget
   reservations, safe retries, task ownership, readiness with optional provider
   health checks, per-IP HTTP rate limiting, metrics, and tracing
-- **1,087 offline tests** — unit, contract, integration, HTTP security, E2E, and
+- **1,090 offline tests** — unit, contract, integration, HTTP security, E2E, and
   MCP conformance with 88% branch coverage
 
 ## Supported Input Modalities

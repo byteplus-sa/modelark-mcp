@@ -120,6 +120,10 @@ ambiguous after a transport failure. Polling requires the exact task types
 echoed task ID or unknown state, and maps `running`/`processing`, `completed`,
 and `failed` to the normalized task lifecycle. Completed outputs preserve the
 provider URL independently of optional durable artifact persistence.
+An HTTP 2xx envelope with `success: false` is a definitive provider rejection:
+the adapter preserves its safe error code and request ID and does not mark the
+submission as ambiguous. Malformed or unsupported 2xx mutation responses remain
+ambiguous because dispatch may already have occurred.
 
 ## Authentication and Endpoint
 

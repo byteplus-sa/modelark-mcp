@@ -69,12 +69,13 @@ class VodMediaKitGateway(BaseHttpGateway):
     def normalize_error(cls, response: httpx.Response, operation: str) -> ProviderError:
         """Normalize MediaKit HTTP errors without exposing source URLs."""
         status = response.status_code
-        request_id = cls.extract_request_id(response)
+        header_request_id = cls.extract_request_id(response)
         try:
             parsed = VodMediaKitProviderErrorResponse.model_validate(response.json())
         except (json.JSONDecodeError, ValueError):
             parsed = VodMediaKitProviderErrorResponse()
 
+        request_id = parsed.request_id or header_request_id
         detail = parsed.error
         fallback = f"MediaKit returned HTTP {status} during '{operation}'."
         message = sanitize_provider_message(detail.message or "", fallback) if detail else fallback

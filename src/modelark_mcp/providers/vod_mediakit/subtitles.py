@@ -92,8 +92,25 @@ async def _submit[RequestT: BaseModel](
 
     try:
         body = response.json()
+    except json.JSONDecodeError as exc:
+        raise _provider_error(
+            operation=operation,
+            code="INVALID_RESPONSE",
+            message=(
+                f"MediaKit returned an unsupported {label} success response after dispatch. "
+                "Completion is unknown; do not retry blindly."
+            ),
+            request_id=header_request_id,
+            http_status=response.status_code,
+            ambiguous_completion=True,
+        ) from exc
+
+    if isinstance(body, dict) and body.get("success") is False:
+        raise VodMediaKitGateway.normalize_error(response, operation)
+
+    try:
         accepted = VodMediaKitAcceptedResponse.model_validate(body)
-    except (json.JSONDecodeError, ValidationError) as exc:
+    except ValidationError as exc:
         raise _provider_error(
             operation=operation,
             code="INVALID_RESPONSE",
@@ -156,8 +173,22 @@ async def _get(
         raise VodMediaKitGateway.normalize_error(response, operation)
 
     try:
-        parsed = VodMediaKitSubtitleTaskResponse.model_validate(response.json())
-    except (json.JSONDecodeError, ValidationError) as exc:
+        body = response.json()
+    except json.JSONDecodeError as exc:
+        raise _provider_error(
+            operation=operation,
+            code="INVALID_RESPONSE",
+            message=f"MediaKit returned an unsupported {label} task response.",
+            request_id=header_request_id,
+            http_status=response.status_code,
+        ) from exc
+
+    if isinstance(body, dict) and body.get("success") is False:
+        raise VodMediaKitGateway.normalize_error(response, operation)
+
+    try:
+        parsed = VodMediaKitSubtitleTaskResponse.model_validate(body)
+    except ValidationError as exc:
         raise _provider_error(
             operation=operation,
             code="INVALID_RESPONSE",

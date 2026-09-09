@@ -221,6 +221,7 @@ class VodMediaKitProviderErrorResponse(BaseModel):
 
     success: bool | None = None
     error: VodMediaKitProviderErrorDetail | None = None
+    request_id: str | None = None
 
 
 class VodMediaKitTranscodeVideoOptions(BaseModel):

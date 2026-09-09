@@ -250,6 +250,49 @@ async def test_submission_timeout_is_ambiguous(
 
 
 @pytest.mark.parametrize(
+    ("service_type", "request_factory", "path"),
+    [
+        (VodMediaKitSubtitleBurnInService, add_request, "/tools/add-subtitle-to-video"),
+        (
+            VodMediaKitSubtitleRemovalService,
+            remove_request,
+            "/tools/erase-video-subtitle-pro",
+        ),
+    ],
+)
+@respx.mock
+async def test_submission_normalizes_explicit_success_false_error(
+    gateway: VodMediaKitGateway,
+    service_type: type[VodMediaKitSubtitleBurnInService] | type[VodMediaKitSubtitleRemovalService],
+    request_factory: object,
+    path: str,
+) -> None:
+    respx.post(f"{BASE_URL}{path}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": False,
+                "request_id": "req-rejected",
+                "error": {
+                    "code": "InvalidParameter",
+                    "type": "BadRequest",
+                    "message": "Invalid source https://private.example.com/file?token=secret",
+                },
+            },
+        )
+    )
+
+    with pytest.raises(ProviderError) as exc_info:
+        await service_type(gateway=gateway).submit(request_factory())  # type: ignore[operator]
+
+    assert exc_info.value.code == "InvalidParameter"
+    assert exc_info.value.request_id == "req-rejected"
+    assert exc_info.value.ambiguous_completion is False
+    assert "private.example.com" not in exc_info.value.message
+    assert "secret" not in exc_info.value.message
+
+
+@pytest.mark.parametrize(
     ("service_type", "task_type", "resolution"),
     [
         (VodMediaKitSubtitleBurnInService, "add-subtitle-to-video", "1080p"),
@@ -325,6 +368,32 @@ async def test_poll_rejects_mismatched_task_type(
         await service_type(gateway=gateway).get("task-1")
 
     assert exc_info.value.code == "INVALID_RESPONSE"
+
+
+@respx.mock
+async def test_poll_normalizes_explicit_success_false_error(gateway: VodMediaKitGateway) -> None:
+    respx.get(f"{BASE_URL}/tasks/task-1").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": False,
+                "request_id": "req-query-failed",
+                "error": {
+                    "code": "TaskNotFound",
+                    "message": "Unknown task https://private.example.com/task?token=secret",
+                },
+            },
+        )
+    )
+
+    with pytest.raises(ProviderError) as exc_info:
+        await VodMediaKitSubtitleBurnInService(gateway=gateway).get("task-1")
+
+    assert exc_info.value.code == "TaskNotFound"
+    assert exc_info.value.request_id == "req-query-failed"
+    assert exc_info.value.ambiguous_completion is False
+    assert "private.example.com" not in exc_info.value.message
+    assert "secret" not in exc_info.value.message
 
 
 @respx.mock
