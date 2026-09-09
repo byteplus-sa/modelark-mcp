@@ -212,6 +212,44 @@ async def test_vod_scope_rejects_under_scoped_token(tmp_path: Path) -> None:
     assert "unknown tool" in payload["result"]["content"][0]["text"].lower()
 
 
+@pytest.mark.parametrize(
+    ("tool_name", "tool_input"),
+    [
+        (
+            "vod_add_subtitles",
+            {
+                "video_url": "https://example.com/input.mp4",
+                "subtitles": [{"subtitle_text": "test", "start_time": 0, "end_time": 1}],
+            },
+        ),
+        ("vod_remove_subtitles", {"video_url": "https://example.com/input.mp4"}),
+    ],
+)
+async def test_vod_subtitle_scopes_reject_enhancement_only_token(
+    tmp_path: Path, tool_name: str, tool_input: dict[str, object]
+) -> None:
+    async with _http_client(tmp_path) as http_client:
+        response = await http_client.post(
+            "/mcp",
+            headers={
+                "Authorization": "Bearer vod-token",
+                "Origin": "https://client.example.com",
+                "Accept": "application/json, text/event-stream",
+            },
+            json={
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": {"input": tool_input}},
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"]["isError"] is True
+    assert "unknown tool" in payload["result"]["content"][0]["text"].lower()
+
+
 async def test_vod_scope_allows_dispatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from modelark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
     from modelark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission

@@ -3,7 +3,7 @@ title: BytePlus VOD AI MediaKit Provider Contract
 status: proposed
 horizon: current
 created: 2026-08-12
-updated: 2026-09-08
+updated: 2026-09-09
 tags:
   - byteplus-vod
   - ai-mediakit
@@ -14,6 +14,10 @@ source:
   - https://docs.byteplus.com/en/docs/byteplus-vod/reference-getexecution
   - https://docs.byteplus.com/zh-CN/docs/byteplus-vod/ai-mediakit-create-a-video-transcoding-task
   - https://docs.byteplus.com/en/docs/byteplus-vod/ai-mediakit-get-task-details
+  - https://docs.byteplus.com/en/docs/byteplus-vod/ai-mediakit-subtitle-burn-in
+  - https://docs.byteplus.com/en/docs/byteplus-vod/ai-mediakit-create-a-subtitle-burn-in-task
+  - https://docs.byteplus.com/en/docs/byteplus-vod/ai-mediakit-precision-erasure
+  - https://docs.byteplus.com/en/docs/byteplus-vod/ai-mediakit-create-a-precision-erasure-task
 related:
   - specs/SPEC_VOD_OPENAPI_PROVIDER_CONTRACT.md
   - docs/tools.md
@@ -34,7 +38,13 @@ for MCP integration on the AI MediaKit data plane:
   transcoding, `vod_transcode_video` / `vod_get_transcode_task`);
 - `POST /api/v1/tools/separate-voice` + `GET /api/v1/tasks/{task_id}` (voice
   and background audio separation, `vod_separate_audio` /
-  `vod_get_audio_separation`).
+  `vod_get_audio_separation`);
+- `POST /api/v1/tools/add-subtitle-to-video` + `GET /api/v1/tasks/{task_id}`
+  (subtitle burn-in, `vod_add_subtitles` /
+  `vod_get_subtitle_addition_task`);
+- `POST /api/v1/tools/erase-video-subtitle-pro` + `GET /api/v1/tasks/{task_id}`
+  (precision subtitle/text erasure, `vod_remove_subtitles` /
+  `vod_get_subtitle_removal_task`).
 
 The AK/SK-signed BytePlus VOD `StartExecution`/`GetExecution` surface is no
 longer used by this server; its former contract is retained in the deprecated
@@ -79,6 +89,37 @@ independent pages):
   works for confirmed outputs.
 - `queue_id` and `Project` as *request* parameters are **unverified** and must not
   be exposed to clients.
+
+### Subtitle burn-in and precision-erasure surfaces
+
+Verification is **complete from the official API reference** as of 2026-09-09
+for endpoint routes, Bearer authentication, request fields, asynchronous task
+types, lifecycle states, completed MP4 result fields, and 24-hour output URL
+lifetime. The supplied convenience-endpoint samples additionally establish
+optional legacy `Project` and precision-erasure `model_version` fields; these
+extensions are omitted by default and are not treated as required by the
+current official contract.
+
+Subtitle burn-in accepts a public video URL and at least one of a public
+SRT/VTT/ASS `subtitle_url` or an inline `subtitles` cue list. A file URL takes
+priority when both are present. Inline cues carry `subtitle_text`,
+`start_time`, and `end_time`; the MCP rejects blank text and invalid time
+ranges. Styling includes a position preset, positive pixel font size, RGBA
+color, and a documented font identifier.
+
+Precision erasure accepts `mode=Subtitle|Text` and
+`output_encode_mode=Quality|Size`. The MCP additionally exposes documented
+normalized erasure rectangles, selected/skipped time segments, and subtitle
+OCR thresholds. Text mode is intentionally described as broader because it can
+remove titles, labels, and watermarks in addition to dialogue subtitles.
+
+Both submissions accept the documented `client_token`, callback, and queue
+fields. Mutation POSTs are not automatically retried because completion is
+ambiguous after a transport failure. Polling requires the exact task types
+`add-subtitle-to-video` or `erase-video-subtitle-pro`, rejects a mismatched
+echoed task ID or unknown state, and maps `running`/`processing`, `completed`,
+and `failed` to the normalized task lifecycle. Completed outputs preserve the
+provider URL independently of optional durable artifact persistence.
 
 ## Authentication and Endpoint
 

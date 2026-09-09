@@ -9,6 +9,10 @@ from pydantic import ValidationError
 
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.observability.logger import debug as log_debug
+from modelark_mcp.providers.vod_mediakit._task_utils import (
+    normalize_timestamp,
+    sanitize_task_error,
+)
 from modelark_mcp.providers.vod_mediakit.client import (
     VodMediaKitGateway,
     sanitize_provider_message,
@@ -20,10 +24,6 @@ from modelark_mcp.providers.vod_mediakit.schemas import (
     VodMediaKitEnhancementRequest,
     VodMediaKitEnhancementTaskResponse,
     VodMediaKitProviderResponse,
-)
-from modelark_mcp.providers.vod_mediakit.transcode import (
-    _normalize_timestamp,
-    _sanitize_task_error,
 )
 
 _ENHANCE_PATH = "/tools/enhance-video"
@@ -216,14 +216,14 @@ class VodMediaKitEnhancementService:
                 fps=result.fps,
                 resolution=result.resolution,
                 tool_version=result.tool_version,
-                created_at=_normalize_timestamp(parsed.created_at),
-                finished_at=_normalize_timestamp(parsed.finished_at),
-                source_expires_at=_normalize_timestamp(parsed.expires_at),
+                created_at=normalize_timestamp(parsed.created_at),
+                finished_at=normalize_timestamp(parsed.finished_at),
+                source_expires_at=normalize_timestamp(parsed.expires_at),
             )
 
         if parsed.status == "failed":
             request_id = parsed.request_id or header_request_id
-            code, message = _sanitize_task_error(
+            code, message = sanitize_task_error(
                 parsed.error, "MediaKit reported the enhancement task failed."
             )
             return EnhancementTask(
@@ -233,8 +233,8 @@ class VodMediaKitEnhancementService:
                 request_id=request_id,
                 failure_code=code,
                 failure_message=message,
-                created_at=_normalize_timestamp(parsed.created_at),
-                finished_at=_normalize_timestamp(parsed.finished_at),
+                created_at=normalize_timestamp(parsed.created_at),
+                finished_at=normalize_timestamp(parsed.finished_at),
             )
 
         if parsed.status == "running":
@@ -244,7 +244,7 @@ class VodMediaKitEnhancementService:
                 status="processing",
                 provider_status=parsed.status,
                 request_id=request_id,
-                created_at=_normalize_timestamp(parsed.created_at),
+                created_at=normalize_timestamp(parsed.created_at),
             )
 
         raise ProviderError(

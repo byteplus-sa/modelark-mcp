@@ -9,6 +9,10 @@ from pydantic import ValidationError
 
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.observability.logger import debug as log_debug
+from modelark_mcp.providers.vod_mediakit._task_utils import (
+    normalize_timestamp,
+    sanitize_task_error,
+)
 from modelark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
 from modelark_mcp.providers.vod_mediakit.schemas import (
     SeparateVoiceSubmission,
@@ -16,10 +20,6 @@ from modelark_mcp.providers.vod_mediakit.schemas import (
     VodMediaKitAcceptedResponse,
     VodMediaKitSeparateVoiceRequest,
     VodMediaKitSeparateVoiceTaskResponse,
-)
-from modelark_mcp.providers.vod_mediakit.transcode import (
-    _normalize_timestamp,
-    _sanitize_task_error,
 )
 
 _SEPARATE_VOICE_PATH = "/tools/separate-voice"
@@ -188,13 +188,13 @@ class VodMediaKitSeparateVoiceService:
                 music_url=result.music_audio_url,
                 sfx_url=result.sfx_audio_url,
                 duration_seconds=result.duration,
-                created_at=_normalize_timestamp(parsed.created_at),
-                finished_at=_normalize_timestamp(parsed.finished_at),
-                source_expires_at=_normalize_timestamp(parsed.expires_at),
+                created_at=normalize_timestamp(parsed.created_at),
+                finished_at=normalize_timestamp(parsed.finished_at),
+                source_expires_at=normalize_timestamp(parsed.expires_at),
             )
 
         if parsed.status == "failed":
-            code, message = _sanitize_task_error(
+            code, message = sanitize_task_error(
                 parsed.error, "MediaKit reported the separate-voice task failed."
             )
             log_debug(
@@ -212,8 +212,8 @@ class VodMediaKitSeparateVoiceService:
                 request_id=request_id,
                 failure_code=code,
                 failure_message=message,
-                created_at=_normalize_timestamp(parsed.created_at),
-                finished_at=_normalize_timestamp(parsed.finished_at),
+                created_at=normalize_timestamp(parsed.created_at),
+                finished_at=normalize_timestamp(parsed.finished_at),
             )
 
         if parsed.status == "running":
@@ -229,7 +229,7 @@ class VodMediaKitSeparateVoiceService:
                 status="processing",
                 provider_status=parsed.status,
                 request_id=request_id,
-                created_at=_normalize_timestamp(parsed.created_at),
+                created_at=normalize_timestamp(parsed.created_at),
             )
 
         raise ProviderError(

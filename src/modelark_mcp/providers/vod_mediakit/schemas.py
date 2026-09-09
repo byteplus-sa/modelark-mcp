@@ -519,3 +519,301 @@ class SeparateVoiceTask(BaseModel):
         if value is not None and not value.strip():
             return None
         return value
+
+
+class VodMediaKitSubtitleCue(BaseModel):
+    """One inline subtitle cue for the MediaKit burn-in endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subtitle_text: str = Field(min_length=1, description="Subtitle text shown for this cue.")
+    start_time: float = Field(
+        ge=0,
+        allow_inf_nan=False,
+        description="Cue start time in seconds from the beginning of the video.",
+    )
+    end_time: float = Field(
+        gt=0,
+        allow_inf_nan=False,
+        description="Cue end time in seconds from the beginning of the video.",
+    )
+
+    @field_validator("subtitle_text")
+    @classmethod
+    def reject_blank_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("subtitle_text must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> VodMediaKitSubtitleCue:
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be greater than start_time")
+        return self
+
+
+class VodMediaKitAddSubtitlesRequest(BaseModel):
+    """Request body for ``POST /tools/add-subtitle-to-video``."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    video_url: HttpsUrl
+    subtitle_url: HttpsUrl | None = None
+    subtitles: list[VodMediaKitSubtitleCue] | None = Field(default=None, min_length=1)
+    subtitle_pos_preset: Literal["bottom_center", "top_center", "center", "lower_third"] = (
+        "bottom_center"
+    )
+    subtitle_font_size: int = Field(default=50, gt=0)
+    subtitle_font_color: str = Field(default="#FFFFFFFF", pattern=r"^#[0-9A-Fa-f]{8}$")
+    subtitle_font_type: Literal[
+        "inter",
+        "montserrat",
+        "oppo_sans",
+        "roboto",
+        "source_han_serif",
+        "sy_black",
+        "pm_zhengdao",
+        "zhanku_kuaile",
+    ] = "inter"
+    client_token: str | None = Field(default=None, pattern=r"^[\x20-\x7E]{1,64}$")
+    callback_args: str | None = None
+    callback_url: HttpsUrl | None = None
+    queue_id: str | None = Field(default=None, min_length=1)
+    project: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        serialization_alias="Project",
+    )
+
+    @model_validator(mode="after")
+    def require_subtitle_content(self) -> VodMediaKitAddSubtitlesRequest:
+        if self.subtitle_url is None and not self.subtitles:
+            raise ValueError("subtitle_url or subtitles is required")
+        return self
+
+    @field_validator("callback_args")
+    @classmethod
+    def validate_callback_args_size(cls, value: str | None) -> str | None:
+        if value is not None and len(value.encode("utf-8")) > 512:
+            raise ValueError("callback_args must not exceed 512 bytes")
+        return value
+
+
+class VodMediaKitEraseLocation(BaseModel):
+    """Normalized rectangular erasure area within a video frame."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    top_left_x: float = Field(
+        ge=0, le=1, allow_inf_nan=False, description="Left edge as a frame-width ratio."
+    )
+    top_left_y: float = Field(
+        ge=0, le=1, allow_inf_nan=False, description="Top edge as a frame-height ratio."
+    )
+    bottom_right_x: float = Field(
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        description="Right edge as a frame-width ratio; greater than top_left_x.",
+    )
+    bottom_right_y: float = Field(
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        description="Bottom edge as a frame-height ratio; greater than top_left_y.",
+    )
+
+    @model_validator(mode="after")
+    def validate_corners(self) -> VodMediaKitEraseLocation:
+        if self.bottom_right_x <= self.top_left_x:
+            raise ValueError("bottom_right_x must be greater than top_left_x")
+        if self.bottom_right_y <= self.top_left_y:
+            raise ValueError("bottom_right_y must be greater than top_left_y")
+        return self
+
+
+class VodMediaKitTimeSegment(BaseModel):
+    """Time interval selected or skipped during precision erasure."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_time: float = Field(
+        ge=0, allow_inf_nan=False, description="Segment start time in seconds."
+    )
+    end_time: float = Field(
+        gt=0,
+        allow_inf_nan=False,
+        description="Segment end time in seconds; greater than start_time.",
+    )
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> VodMediaKitTimeSegment:
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be greater than start_time")
+        return self
+
+
+class VodMediaKitTimeSegmentFilter(BaseModel):
+    """Controls whether listed erasure time segments are selected or skipped."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["selected", "skip"] = Field(
+        description="selected erases only listed segments; skip erases outside them."
+    )
+    segments: list[VodMediaKitTimeSegment] = Field(
+        min_length=1, description="Non-empty list of time segments."
+    )
+
+
+class VodMediaKitSubtitleFilter(BaseModel):
+    """Optional OCR thresholds used by precision subtitle erasure."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_text_height_ratio: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        description="Minimum OCR text-height ratio treated as a subtitle.",
+    )
+    max_text_height_ratio: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        description="Maximum OCR text-height ratio treated as a subtitle.",
+    )
+    center_offset_ratio: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        description="Maximum horizontal center offset ratio treated as a subtitle.",
+    )
+
+    @model_validator(mode="after")
+    def validate_height_range(self) -> VodMediaKitSubtitleFilter:
+        if (
+            self.min_text_height_ratio is not None
+            and self.max_text_height_ratio is not None
+            and self.min_text_height_ratio > self.max_text_height_ratio
+        ):
+            raise ValueError("min_text_height_ratio must not exceed max_text_height_ratio")
+        return self
+
+
+class VodMediaKitRemoveSubtitlesRequest(BaseModel):
+    """Request body for ``POST /tools/erase-video-subtitle-pro``."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    video_url: HttpsUrl
+    mode: Literal["Subtitle", "Text"] = "Subtitle"
+    output_encode_mode: Literal["Quality", "Size"] = "Quality"
+    erase_ratio_location: list[VodMediaKitEraseLocation] | None = Field(
+        default=None, min_length=1, max_length=20
+    )
+    time_segment_filter: VodMediaKitTimeSegmentFilter | None = None
+    subtitle_filter: VodMediaKitSubtitleFilter | None = None
+    client_token: str | None = Field(default=None, pattern=r"^[\x20-\x7E]{1,64}$")
+    callback_args: str | None = None
+    callback_url: HttpsUrl | None = None
+    queue_id: str | None = Field(default=None, min_length=1)
+    model_version: Literal["v4", "v5"] | None = None
+    project: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        serialization_alias="Project",
+    )
+
+    @field_validator("callback_args")
+    @classmethod
+    def validate_callback_args_size(cls, value: str | None) -> str | None:
+        if value is not None and len(value.encode("utf-8")) > 512:
+            raise ValueError("callback_args must not exceed 512 bytes")
+        return value
+
+
+class VodMediaKitSubtitleTaskResult(BaseModel):
+    """Completed video result from a subtitle MediaKit task."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    video_url: HttpsUrl = Field(validation_alias=AliasChoices("video_url", "output_url", "url"))
+    duration: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    resolution: str | None = None
+
+
+class VodMediaKitSubtitleTaskResponse(BaseModel):
+    """Polling response from ``GET /tasks/{task_id}`` for subtitle operations."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    success: Literal[True]
+    task_id: str = Field(min_length=1)
+    task_type: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    result: VodMediaKitSubtitleTaskResult | None = None
+    error: VodMediaKitProviderErrorDetail | None = None
+    request_id: str | None = None
+    queue_id: str | None = None
+    expires_at: str | int | None = None
+    created_at: str | int | None = None
+    finished_at: str | int | None = None
+
+
+class SubtitleSubmission(BaseModel):
+    """Normalized accepted subtitle operation for the tool layer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["accepted"]
+    request_id: str | None = None
+    provider_log_id: str | None = None
+    task_id: str = Field(min_length=1)
+
+
+class SubtitleTask(BaseModel):
+    """Normalized subtitle burn-in or erasure task state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str = Field(min_length=1)
+    status: Literal["processing", "succeeded", "failed"]
+    provider_status: str | None = None
+    request_id: str | None = None
+    output_url: HttpsUrl | None = None
+    duration_seconds: float | None = Field(default=None, ge=0)
+    resolution: str | None = None
+    created_at: str | None = None
+    finished_at: str | None = None
+    source_expires_at: str | None = None
+    failure_code: str | None = None
+    failure_message: str | None = None
+
+    @model_validator(mode="after")
+    def validate_state(self) -> SubtitleTask:
+        if self.status == "succeeded":
+            if self.output_url is None:
+                raise ValueError("succeeded subtitle task requires output_url")
+            if self.failure_code is not None or self.failure_message is not None:
+                raise ValueError("succeeded subtitle task must not carry a failure")
+        elif self.status == "processing":
+            if self.output_url is not None:
+                raise ValueError("processing subtitle task must not carry output_url")
+            if self.failure_code is not None or self.failure_message is not None:
+                raise ValueError("processing subtitle task must not carry a failure")
+        elif self.failure_code is None and self.failure_message is None:
+            raise ValueError("failed subtitle task requires failure detail")
+        return self
+
+    @field_validator("failure_code", "failure_message")
+    @classmethod
+    def reject_blank_optional_strings(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            return None
+        return value

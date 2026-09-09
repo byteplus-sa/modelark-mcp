@@ -31,14 +31,18 @@ surface.
 | 22 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
 | 23 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
 | 24 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 25 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
-| 26 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
-| 27 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
-| 28 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
-| 29 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
-| 30 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
-| 31 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
-| 32 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
+| 25 | `vod_add_subtitles` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 26 | `vod_get_subtitle_addition_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 27 | `vod_remove_subtitles` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 28 | `vod_get_subtitle_removal_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 29 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
+| 30 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
+| 31 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
+| 32 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
+| 33 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
+| 34 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
+| 35 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
+| 36 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
 
 ## Tool Annotations
 
@@ -68,6 +72,10 @@ surface.
 | `vod_get_transcode_task` | true | false | true | false |
 | `vod_separate_audio` | false | false | false | true |
 | `vod_get_audio_separation` | true | false | true | false |
+| `vod_add_subtitles` | false | false | false | true |
+| `vod_get_subtitle_addition_task` | true | false | true | false |
+| `vod_remove_subtitles` | false | false | false | true |
+| `vod_get_subtitle_removal_task` | true | false | true | false |
 | `hyper3d_create_task` | false | false | false | true |
 | `hyper3d_get_task` | true | false | true | false |
 | `hyper3d_list_tasks` | true | false | true | false |
@@ -295,6 +303,50 @@ erases provider success. On failure, `error` carries the safe provider detail.
 ```
 
 ---
+
+## vod_add_subtitles
+
+Submit `POST /tools/add-subtitle-to-video` using the configured MediaKit Bearer
+key and the `vod:subtitle:add` JWT scope. `video_url` is required and must be a
+public HTTPS URL. Provide at least one of `subtitle_url` (SRT, VTT, or ASS) or
+`subtitles`, where every inline cue has nonblank `subtitle_text` and an
+`end_time` greater than its nonnegative `start_time`. A subtitle file takes
+priority when both forms are present.
+
+Optional style fields control the position preset, positive pixel font size,
+RGBA color, and MediaKit font. `client_token` is at most 64 printable ASCII
+characters; callback payloads are capped at 512 UTF-8 bytes. `callback_url`
+must be public HTTPS. `project` is a legacy case-sensitive `Project` extension
+and is omitted by default. The accepted output includes `task_id`, request IDs,
+and a 5-second initial polling heuristic.
+
+## vod_get_subtitle_addition_task
+
+Poll `GET /tasks/{task_id}` with `vod:read`. The adapter requires
+`task_type="add-subtitle-to-video"`, validates the echoed task ID, and maps
+provider state to `processing`, `succeeded`, or `failed`. On success it returns
+the expiring `source_url`, duration/resolution when available, and optionally a
+durable MP4 `video` artifact. `persist_output` defaults to true; persistence is
+single-flight and failure is reported separately from provider success.
+
+## vod_remove_subtitles
+
+Submit `POST /tools/erase-video-subtitle-pro` using `vod:subtitle:remove`.
+`mode="subtitle"` removes recognized dialogue subtitles; the broader
+`mode="text"` may also remove titles, labels, or watermarks. Encoding mode is
+`quality` or `size`. Optional precision controls include one-to-twenty
+normalized erasure rectangles, selected/skipped time segments, and subtitle
+OCR size/centering thresholds. Callback, queue, and `client_token` fields match
+subtitle addition. The legacy `model_version` (`v4`/`v5`) and `project` fields
+are omitted unless explicitly supplied. The output includes the task ID and a
+15-second initial polling heuristic.
+
+## vod_get_subtitle_removal_task
+
+Poll `GET /tasks/{task_id}` with `vod:read`. The adapter requires
+`task_type="erase-video-subtitle-pro"`; lifecycle normalization, task ownership,
+source-URL preservation, and best-effort single-flight MP4 persistence match
+`vod_get_subtitle_addition_task`.
 
 ## vod_separate_audio
 

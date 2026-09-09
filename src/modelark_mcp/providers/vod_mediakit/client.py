@@ -25,7 +25,7 @@ def sanitize_provider_message(message: str, fallback: str) -> str:
 
 
 class VodMediaKitGateway(BaseHttpGateway):
-    """Authenticated client exposing the verified enhancement POST and task GET."""
+    """Bearer-authenticated client for the VOD AI MediaKit tool surface."""
 
     PROVIDER: ClassVar[ProviderName] = "byteplus-vod-mediakit"
 

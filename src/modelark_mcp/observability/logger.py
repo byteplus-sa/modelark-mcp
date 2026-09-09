@@ -33,6 +33,7 @@ _REDACT_KEYS: frozenset[str] = frozenset(
         "text_prompt",
         "variation_prompts",
         "subtitle",
+        "subtitle_text",
         "subtitles",
         "url",
         "media_url",
