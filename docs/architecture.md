@@ -42,7 +42,7 @@ src/modelark_mcp/
 │   ├── retry.py
 │   ├── modelark.py        # Seedream + Seedance
 │   ├── seed_speech.py     # Seed Audio
-│   └── vod_mediakit.py    # VOD AI MediaKit (Bearer; enhancement, transcode, separation)
+│   └── vod_mediakit/      # VOD AI MediaKit (Bearer; enhancement, transcode, subtitles, separation)
 ├── runtime.py             # lifespan-owned services (limiter, budget, ownership)
 ├── artifacts/             # durable artifact store (filesystem backend)
 │   ├── store.py           # ArtifactStore protocol
@@ -61,7 +61,7 @@ flowchart LR
     Domain --> Gateway["Provider gateways\n(providers/)"]
     Gateway -->|"Bearer auth"| ModelArk["ModelArk\nSeedream + Seedance"]
     Gateway -->|"X-Api-Key"| SeedSpeech["Seed Speech\nSeed Audio"]
-    Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nenhancement + transcoding + separation"]
+    Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nenhancement + transcode + subtitles + separation"]
     Server -.durable.-> Store["Artifact store\n(filesystem)"]
     Server -.state.-> Runtime["Runtime services\n(runtime.py)"]
 ```
@@ -74,6 +74,7 @@ flowchart LR
 - **VOD AI MediaKit gateway** (`providers/vod_mediakit/`) — serves the
   `vod_enhance_video` / `vod_get_enhancement_task` submit-then-poll pair, the
   `vod_transcode_video` / `vod_get_transcode_task` submit-then-poll pair, and
+  the subtitle burn-in and precision-erasure submit-then-poll pairs, and
   the `vod_separate_audio` / `vod_get_audio_separation` submit-then-poll pair
   (`POST /tools/separate-voice` + `GET /tasks/{task_id}`). It uses Bearer auth
   and defaults to `https://mediakit.ap-southeast-1.bytepluses.com/api/v1`. Its
@@ -84,13 +85,14 @@ flowchart LR
   provider metrics, and normalizes transport/HTTP errors into a single
   `ProviderError` carrying a `NormalizedProviderError`.
 
-MediaKit enhancement, transcode, and separation submission are non-idempotent
+MediaKit enhancement, transcode, subtitle, and separation submissions are non-idempotent
 mutations and bypass the automatic retry helper: a timeout can be ambiguous after
-the provider has begun work. All three operations use the verified task-status
+the provider has begun work. All operations use the verified task-status
 endpoint (`GET /tasks/{task_id}`), so `vod_get_enhancement_task`,
-`vod_get_transcode_task`, and `vod_get_audio_separation` poll it and reuse the
+`vod_get_transcode_task`, both subtitle poll tools, and
+`vod_get_audio_separation` poll it and reuse the
 shared ownership store and task-artifact cache under the `vod-mediakit` provider
-key. For all three surfaces, a completed provider URL is preserved and
+key. For all surfaces, a completed provider URL is preserved and
 persistence is attempted separately as a best-effort operation (under the
 200 MiB video limit for video, 10 MiB audio limit for separated tracks).
 

@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
 import httpx
 from pydantic import ValidationError
 
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.observability.logger import debug as log_debug
-from modelark_mcp.providers.vod_mediakit.client import (
-    VodMediaKitGateway,
-    sanitize_provider_message,
+from modelark_mcp.providers.vod_mediakit._task_utils import (
+    normalize_timestamp,
+    sanitize_task_error,
 )
+from modelark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
 from modelark_mcp.providers.vod_mediakit.schemas import (
     TranscodeSubmission,
     TranscodeTask,
@@ -23,43 +22,10 @@ from modelark_mcp.providers.vod_mediakit.schemas import (
     VodMediaKitTranscodeTaskResponse,
 )
 
-if TYPE_CHECKING:
-    from typing import Any
-
 _TRANSCODE_PATH = "/tools/transcode-video"
 _TASKS_PATH = "/tasks"
 _OPERATION_SUBMIT = "transcode_video"
 _OPERATION_GET = "get_transcode_task"
-
-
-def _normalize_timestamp(value: str | int | None) -> str | None:
-    """Normalize a provider Unix-seconds or ISO-8601 timestamp to ISO-8601 UTC."""
-    if value is None:
-        return None
-    if isinstance(value, int):
-        try:
-            return datetime.fromtimestamp(value, tz=UTC).isoformat()
-        except (OverflowError, OSError, ValueError):
-            return None
-    if isinstance(value, str):
-        if value.strip().isdigit():
-            return _normalize_timestamp(int(value.strip()))
-        try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat()
-        except ValueError:
-            return None
-
-
-def _sanitize_task_error(detail: Any, fallback: str) -> tuple[str | None, str]:
-    """Extract a safe failure code and message from a task error detail."""
-    if detail is None:
-        return None, fallback
-    code = getattr(detail, "code", None)
-    message = getattr(detail, "message", None)
-    return (
-        code if isinstance(code, str) and code else None,
-        sanitize_provider_message(message or "", fallback),
-    )
 
 
 class VodMediaKitTranscodeService:
@@ -214,13 +180,13 @@ class VodMediaKitTranscodeService:
                 duration_seconds=result.duration,
                 resolution=result.resolution,
                 video_codec=result.video_codec,
-                created_at=_normalize_timestamp(parsed.created_at),
-                finished_at=_normalize_timestamp(parsed.finished_at),
-                source_expires_at=_normalize_timestamp(parsed.expires_at),
+                created_at=normalize_timestamp(parsed.created_at),
+                finished_at=normalize_timestamp(parsed.finished_at),
+                source_expires_at=normalize_timestamp(parsed.expires_at),
             )
 
         if parsed.status == "failed":
-            code, message = _sanitize_task_error(
+            code, message = sanitize_task_error(
                 parsed.error, "MediaKit reported the transcode task failed."
             )
             log_debug(
@@ -238,8 +204,8 @@ class VodMediaKitTranscodeService:
                 request_id=request_id,
                 failure_code=code,
                 failure_message=message,
-                created_at=_normalize_timestamp(parsed.created_at),
-                finished_at=_normalize_timestamp(parsed.finished_at),
+                created_at=normalize_timestamp(parsed.created_at),
+                finished_at=normalize_timestamp(parsed.finished_at),
             )
 
         if parsed.status == "running":
@@ -255,7 +221,7 @@ class VodMediaKitTranscodeService:
                 status="processing",
                 provider_status=parsed.status,
                 request_id=request_id,
-                created_at=_normalize_timestamp(parsed.created_at),
+                created_at=normalize_timestamp(parsed.created_at),
             )
 
         raise ProviderError(

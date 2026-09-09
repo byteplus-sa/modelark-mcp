@@ -9,7 +9,7 @@ Settings. Copy `.env.example` to `.env`. Empty values are ignored.
 |---|---|---|
 | `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream, Seedance, and Seed 2.1 understanding; sent as Bearer auth |
 | `BYTEPLUS_SEED_SPEECH_API_KEY` | empty | Enables Seed Audio and speech-to-text; sent as `X-Api-Key` |
-| `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | Enables `vod_enhance_video`, `vod_get_enhancement_task`, `vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, and `vod_get_audio_separation`; sent as Bearer auth |
+| `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | Enables MediaKit enhancement, transcode, subtitle burn-in/removal, audio-separation, and poll tools; sent as Bearer auth |
 | `BYTEPLUS_MODELARK_BASE_URL` | AP Southeast ModelArk URL | HTTPS data-plane base URL |
 | `BYTEPLUS_SEED_AUDIO_BASE_URL` | AP Southeast Seed Speech URL | HTTPS service base URL |
 | `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | HTTPS VOD AI MediaKit convenience-endpoint base URL |
@@ -81,6 +81,8 @@ claim. Tool scopes are enforced by FastMCP:
 - `understanding:read`
 - `vod:enhance`
 - `vod:transcode`
+- `vod:subtitle:add`
+- `vod:subtitle:remove`
 - `vod:read`
 - `vod:extract`
 - `media:upload`
@@ -125,6 +127,16 @@ The transcode request/status contract is verified from the official AI MediaKit
 API reference; the output URL hostname (`*.byteplusvod.com`) is confirmed and
 trusted for durable persistence. `queue_id`/`Project` request params remain
 unverified and are not exposed.
+
+`vod_add_subtitles` / `vod_get_subtitle_addition_task` and
+`vod_remove_subtitles` / `vod_get_subtitle_removal_task` use the same API key.
+Addition accepts a public HTTPS SRT, VTT, or ASS file or inline timed cues and
+burns them into the output video. Removal defaults to dialogue-subtitle mode;
+the broader `text` mode may also erase titles, labels, or watermarks. Both
+submit asynchronously, use `client_token` to reconcile ambiguous submissions,
+and preserve the provider URL when optional durable persistence is skipped or
+fails. The optional `project` and removal `model_version` fields are legacy
+convenience-endpoint extensions and are omitted unless explicitly supplied.
 
 ## VOD AI MediaKit audio separation
 

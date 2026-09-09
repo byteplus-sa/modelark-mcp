@@ -19,6 +19,7 @@ products plus artifact access and an optional media upload helper:
 | **Speech-to-Text** | `speech_to_text` | Synchronous audio transcription through Seed Speech ASR (HTTP) |
 | **VOD AI MediaKit** | `vod_enhance_video`, `vod_get_enhancement_task` | Submit and poll asynchronous AI enhancement for the exact common/professional/4K/high/24-fps profile |
 | **VOD AI MediaKit Transcode** | `vod_transcode_video`, `vod_get_transcode_task` | Submit and poll async video transcoding (codec, container, resolution, bitrate, frame rate) |
+| **VOD AI MediaKit Subtitles** | `vod_add_subtitles`, `vod_get_subtitle_addition_task`, `vod_remove_subtitles`, `vod_get_subtitle_removal_task` | Burn SRT/VTT/ASS or inline cues into video, or remove hardcoded subtitles and recognized on-screen text |
 | **VOD Audio Separation** | `vod_separate_audio`, `vod_get_audio_separation` | Submit and poll voice + background (or voice + music + sfx) audio separation via the VOD AI MediaKit (`separate-voice`) |
 | **Artifacts** | `seed_media_get_artifact` | Retrieve persisted media inline by artifact ID |
 | **Object storage** (optional) | `media_upload`, `media_presign`, `media_presign_batch` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL; renew expired URLs without re-uploading; batch-presign many keys in one call |
@@ -43,7 +44,7 @@ Key features:
 - **Runtime controls** — shared provider/principal concurrency, daily budget
   reservations, safe retries, task ownership, readiness with optional provider
   health checks, per-IP HTTP rate limiting, metrics, and tracing
-- **696 offline tests** — unit, contract, integration, HTTP security, E2E, and
+- **1,090 offline tests** — unit, contract, integration, HTTP security, E2E, and
   MCP conformance with 88% branch coverage
 
 ## Supported Input Modalities
@@ -191,8 +192,10 @@ tools. `seed_media_get_artifact` is always available, provider tools appear only
 when their credentials are configured, `media_upload` and `media_presign` appear
 only when object storage credentials (TOS or S3) are configured, and
 `speech_to_text` appears only when `BYTEPLUS_SEED_SPEECH_API_KEY` is set.
-`vod_enhance_video`, `vod_get_enhancement_task`, `vod_transcode_video`, `vod_get_transcode_task`,
-`vod_separate_audio`, and `vod_get_audio_separation` appear only when
+`vod_enhance_video`, `vod_get_enhancement_task`, `vod_transcode_video`,
+`vod_get_transcode_task`, `vod_add_subtitles`, `vod_get_subtitle_addition_task`,
+`vod_remove_subtitles`, `vod_get_subtitle_removal_task`, `vod_separate_audio`,
+and `vod_get_audio_separation` appear only when
 `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set.
 
 See [Configuration](docs/configuration.md) for the full environment

@@ -1,6 +1,6 @@
 ---
 name: modelark-mcp
-description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, video, and 3D models (including Seedance 2.5, Hyper3D, Hitem3d, BytePlus VOD AI MediaKit enhancement, video transcoding, and voice/background audio separation), understand images and videos through Seed 2.1, transcribe speech to text, manage Seedance and 3D tasks, upload reference media, and fetch persisted artifacts.
+description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, video, and 3D models (including Seedance 2.5, Hyper3D, Hitem3d, BytePlus VOD AI MediaKit enhancement, transcoding, subtitle burn-in/removal, and voice/background audio separation), understand images and videos through Seed 2.1, transcribe speech to text, manage asynchronous tasks, upload reference media, and fetch persisted artifacts.
 ---
 
 # ModelArk Seed Multimodal MCP Server
@@ -30,8 +30,9 @@ behind one server:
   common/professional/4K/high/24-fps profile with task polling and download,
   asynchronous video transcoding
   (codec, container, resolution, bitrate, frame rate) via a submit-then-poll
-  tool pair, and voice + background (or voice + music + sfx) audio separation
-  via a submit-then-poll tool pair.
+  tool pair, subtitle burn-in and precision subtitle/text erasure via two
+  submit-then-poll pairs, and voice + background (or voice + music + sfx)
+  audio separation via a submit-then-poll tool pair.
 - **Artifacts** — durable media access after provider URLs expire.
 - **Object storage upload** — presigned URL generation for URL-only media
   workflows such as Seedance video references.
@@ -56,6 +57,8 @@ Invoke this skill when the user wants to:
 - enhance a public HTTPS video with the supported VOD AI MediaKit profile;
 - transcode a public HTTPS video (codec, container, resolution, bitrate, frame
   rate) with the VOD AI MediaKit submit-then-poll tool pair;
+- burn an SRT/VTT/ASS file or inline timed subtitle cues into a public HTTPS
+  video, or remove hardcoded subtitles/on-screen text with MediaKit;
 - separate voice from background audio (or voice + music + sfx) for a public
   HTTPS audio or video URL using the VOD AI MediaKit tool pair;
 - fetch a previously persisted artifact by ID;
@@ -86,6 +89,10 @@ gracefully degrades to whatever is configured.
 - `vod_get_enhancement_task`
 - `vod_transcode_video`
 - `vod_get_transcode_task`
+- `vod_add_subtitles`
+- `vod_get_subtitle_addition_task`
+- `vod_remove_subtitles`
+- `vod_get_subtitle_removal_task`
 - `vod_separate_audio`
 - `vod_get_audio_separation`
 
@@ -197,7 +204,8 @@ Returns `SeedMediaGetArtifactOutput` with `artifact_id`, `media_type`,
 ### VOD AI MediaKit
 
 Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY`. Auth scopes: `vod:enhance`,
-`vod:transcode`, `vod:read`.
+`vod:transcode`, `vod:subtitle:add`, `vod:subtitle:remove`, `vod:extract`,
+and `vod:read`.
 
 #### `vod_enhance_video`
 
@@ -276,6 +284,34 @@ normalized ISO-8601 `created_at`/`finished_at`/`source_expires_at`. With
 durable artifact store (200 MiB cap) and cached by task ID so repeated polls do
 not re-download; a persistence failure never erases provider success. On
 failure, `error` carries the safe provider detail.
+
+#### `vod_add_subtitles` / `vod_get_subtitle_addition_task`
+
+Burn an SRT/VTT/ASS subtitle file or inline timed cues into a public HTTPS
+video. At least one of `subtitle_url` or `subtitles` is required; the file URL
+takes priority if both are present. Inline cues require nonblank
+`subtitle_text`, a nonnegative `start_time`, and a later `end_time`. Optional
+position, font size, RGBA color, and font identifier fields control styling.
+Submit with `vod:subtitle:add`, capture the task ID, then poll with `vod:read`.
+The poller requires `task_type="add-subtitle-to-video"` and can best-effort
+persist the completed MP4 when `persist_output=true`.
+
+#### `vod_remove_subtitles` / `vod_get_subtitle_removal_task`
+
+Use precision erasure on a public HTTPS video. The default `subtitle` mode
+targets dialogue subtitles; `text` mode is broader and may erase titles,
+labels, or watermarks. Optional normalized rectangles, selected/skipped time
+segments, and OCR subtitle thresholds constrain processing. Submit with
+`vod:subtitle:remove`, capture the task ID, then poll with `vod:read`. The
+poller requires `task_type="erase-video-subtitle-pro"` and shares the subtitle
+addition persistence contract.
+
+Both submission tools are non-idempotent mutations and are never retried after
+ambiguous transport failures. Use a stable `client_token` to reconcile such a
+submission. Callback and queue fields are supported. `project` and removal
+`model_version` are optional legacy endpoint extensions and are omitted by
+default. Completed provider URLs are always preserved when persistence is
+skipped or fails.
 
 ---
 
@@ -1293,7 +1329,7 @@ The server normalizes three distinct BytePlus API surfaces:
 |---|---|---|---|
 | **ModelArk** | `Authorization: Bearer <key>` | `https://ark.ap-southeast.bytepluses.com/api/v3` | Seedream, Seedance, Seed 3D (Hyper3D + Hitem3d), Seed 2.1 Understanding |
 | **Seed Speech** | `X-Api-Key: <key>` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Audio, Speech-to-Text |
-| **VOD AI MediaKit** | `Authorization: Bearer <key>` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | Video enhancement, video transcoding, voice + background audio separation |
+| **VOD AI MediaKit** | `Authorization: Bearer <key>` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | Video enhancement, transcode, subtitle burn-in/removal, audio separation |
 
 One Seed Speech key covers both Seed Audio and ASR — the provider distinguishes
 them by `X-Api-Resource-Id`, not by the key. ModelArk uses a separate Bearer
@@ -1493,10 +1529,13 @@ The server retries only explicitly retryable, non-ambiguous errors:
 - Timeouts are NOT retried (the operation may have succeeded server-side).
 - Provider errors with `retryable=true` are retried.
 
-Exception: `vod_enhance_video`, `vod_transcode_video`, and `vod_separate_audio`
+Exception: MediaKit mutation submissions (`vod_enhance_video`,
+`vod_transcode_video`, `vod_add_subtitles`, `vod_remove_subtitles`, and
+`vod_separate_audio`)
 are never automatically retried. Their POSTs are non-idempotent and a transport
 failure may have ambiguous completion. `vod_get_enhancement_task`,
-`vod_get_transcode_task`, and `vod_get_audio_separation` (read-only GET polls)
+`vod_get_transcode_task`, both subtitle poll tools, and
+`vod_get_audio_separation` (read-only GET polls)
 ARE retried on provider-marked
 retryable errors such as HTTP 429.
 
@@ -1609,8 +1648,8 @@ Set to `0` (default) for record-only mode with no enforcement.
     multi-round extension. The get/list/cancel tools are shared.
 
 17. **Treat MediaKit persistence separately from the provider result.** Keep the
-    returned `source_url` whenever `vod_enhance_video`, `vod_get_enhancement_task`, or
-    `vod_get_transcode_task` reports success. Prefer `persist=true`, but inspect
+    returned `source_url` whenever a MediaKit video task reports success.
+    Prefer persistence, but inspect
     `persistence` and `persistence_issue`: the 200 MiB limit or a
     safe-download/storage failure can prevent the durable copy without
     invalidating the provider result. Do not resubmit after an ambiguous
@@ -1628,14 +1667,20 @@ Set to `0` (default) for record-only mode with no enforcement.
     `container_format` to target a specific output. Do not retry the POST after
     an ambiguous timeout — re-poll the task ID instead.
 
-20. **Choose the right 3D model.** Use `hyper3d_create_task` for text-to-3D or
+20. **Subtitle operations are submit-then-poll.** Use `vod_add_subtitles` for
+    burn-in and `vod_remove_subtitles` for hardcoded subtitle/text erasure, then
+    poll with the matching task tool. Prefer `subtitle` removal mode unless the
+    broader visual effect of `text` mode is intentional. Reuse `client_token`
+    when reconciling an ambiguous submission.
+
+21. **Choose the right 3D model.** Use `hyper3d_create_task` for text-to-3D or
     when you need seeds, PBR materials, custom mesh modes, or HD textures. Use
     `hitem3d_create_task` for image-to-3D with multi-view inputs (front/back/
     left/right) and resolution control (1536/1536pro). The get/list/cancel tools
     are family-specific — use `hyper3d_*` for Hyper3D task IDs and `hitem3d_*`
     for Hitem3d task IDs.
 
-21. **3D output is a zip package.** The provider returns a 24-hour file URL
+22. **3D output is a zip package.** The provider returns a 24-hour file URL
     containing a zip of the 3D file. On first successful poll with
     `persist_output=true` (default), the file is copied to the artifact store.
     Use the returned `ArtifactRef.uri` for durable access after the provider
@@ -1649,7 +1694,7 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 - `BYTEPLUS_MODELARK_API_KEY` — enables Seedream, Seedance, Seed 3D (with flag), and Seed 2.1 Understanding
 - `BYTEPLUS_SEED_SPEECH_API_KEY` — enables Seed Audio (TTS) and Speech-to-Text (ASR)
-- `BYTEPLUS_VOD_MEDIAKIT_API_KEY` — enables VOD AI MediaKit enhancement, video transcoding, and audio separation
+- `BYTEPLUS_VOD_MEDIAKIT_API_KEY` — enables VOD AI MediaKit enhancement, transcoding, subtitle operations, and audio separation
 - `BYTEPLUS_MODELARK_BASE_URL` — override ModelArk data-plane host
 - `BYTEPLUS_SEED_AUDIO_BASE_URL` — override Seed Audio host
 - `SEED_SPEECH_ASR_BASE_URL` — override ASR host

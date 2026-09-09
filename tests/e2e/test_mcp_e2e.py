@@ -123,6 +123,10 @@ class TestToolDiscovery:
                 "vod_get_transcode_task",
                 "vod_separate_audio",
                 "vod_get_audio_separation",
+                "vod_add_subtitles",
+                "vod_get_subtitle_addition_task",
+                "vod_remove_subtitles",
+                "vod_get_subtitle_removal_task",
             }
 
     async def test_tool_has_input_schema(self, e2e_server: object) -> None:

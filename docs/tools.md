@@ -201,6 +201,59 @@ remain subject to the 200 MiB limit. On failure, `error.code`/`error.message`
 carry the safe provider failure detail. GET polling is retried only on
 provider-marked retryable errors (e.g. 429).
 
+## vod_add_subtitles
+
+Burn subtitles into a public HTTPS video with MediaKit. Supply either
+`subtitle_url` for an SRT, VTT, or ASS file or a non-empty `subtitles` list of
+`subtitle_text`, `start_time`, and `end_time` cues. If both are supplied, the
+subtitle file takes priority. The tool uses `vod:subtitle:add` in JWT mode and
+returns a task ID for `vod_get_subtitle_addition_task`.
+
+Style options are `subtitle_pos_preset` (`bottom_center`, `top_center`,
+`center`, `lower_third`), positive `subtitle_font_size`, RGBA
+`subtitle_font_color` (`#RRGGBBAA`), and a documented MediaKit font identifier.
+Optional `client_token` supports submission reconciliation; callback and queue
+fields are also available. `project` is a legacy convenience-endpoint extension
+and is omitted by default.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+## vod_get_subtitle_addition_task
+
+Poll the task returned by `vod_add_subtitles`. The tool uses `vod:read`, maps
+provider lifecycle states to `processing`, `succeeded`, or `failed`, and can
+best-effort persist the MP4 output when `persist_output=true` (default). A
+succeeded response always preserves the expiring `source_url`; persistence
+failure is reported separately and does not erase provider success.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+## vod_remove_subtitles
+
+Remove hardcoded dialogue subtitles or recognized on-screen text from a public
+HTTPS video with MediaKit precision erasure. `mode="subtitle"` is the safe
+default; `mode="text"` is broader and may remove titles, labels, or watermarks.
+`output_encode_mode` selects `quality` (default) or `size`. Optional controls
+include up to 20 normalized erasure rectangles, selected/skipped time segments,
+subtitle OCR thresholds, callbacks, a queue ID, and a `client_token`. The
+legacy `model_version` (`v4`/`v5`) and `project` extensions are omitted unless
+explicitly supplied. The tool uses `vod:subtitle:remove` and returns a task ID
+for `vod_get_subtitle_removal_task`.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+## vod_get_subtitle_removal_task
+
+Poll the task returned by `vod_remove_subtitles`. Its normalized lifecycle,
+optional durable MP4 persistence, source-URL preservation, and failure behavior
+match `vod_get_subtitle_addition_task`. The tool uses `vod:read`.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
 ## vod_separate_audio
 
 Submit an asynchronous BytePlus VOD AI MediaKit voice and background audio

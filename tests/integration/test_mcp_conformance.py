@@ -115,6 +115,10 @@ class TestToolDiscovery:
             "vod_get_transcode_task",
             "vod_separate_audio",
             "vod_get_audio_separation",
+            "vod_add_subtitles",
+            "vod_get_subtitle_addition_task",
+            "vod_remove_subtitles",
+            "vod_get_subtitle_removal_task",
         }
 
     async def test_vod_mediakit_tool_not_registered_without_its_key(
@@ -128,6 +132,10 @@ class TestToolDiscovery:
         assert "vod_get_transcode_task" not in names
         assert "vod_separate_audio" not in names
         assert "vod_get_audio_separation" not in names
+        assert "vod_add_subtitles" not in names
+        assert "vod_get_subtitle_addition_task" not in names
+        assert "vod_remove_subtitles" not in names
+        assert "vod_get_subtitle_removal_task" not in names
 
     async def test_media_upload_registered_with_s3_only(self, s3_only_server: None) -> None:
         server = s3_only_server
@@ -238,6 +246,33 @@ class TestToolAnnotations:
     async def test_vod_get_audio_separation_annotations(self, configured_server: None) -> None:
         tools = await configured_server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "vod_get_audio_separation")
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is True
+        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.idempotentHint is True
+        assert tool.annotations.openWorldHint is False
+
+    @pytest.mark.parametrize("tool_name", ["vod_add_subtitles", "vod_remove_subtitles"])
+    async def test_vod_subtitle_submit_annotations(
+        self, configured_server: None, tool_name: str
+    ) -> None:
+        tools = await configured_server.mcp.list_tools()
+        tool = next(item for item in tools if item.name == tool_name)
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is False
+        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.idempotentHint is False
+        assert tool.annotations.openWorldHint is True
+
+    @pytest.mark.parametrize(
+        "tool_name",
+        ["vod_get_subtitle_addition_task", "vod_get_subtitle_removal_task"],
+    )
+    async def test_vod_subtitle_poll_annotations(
+        self, configured_server: None, tool_name: str
+    ) -> None:
+        tools = await configured_server.mcp.list_tools()
+        tool = next(item for item in tools if item.name == tool_name)
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -396,6 +431,50 @@ class TestInputSchemas:
         assert all("description" in field for field in input_schema["properties"].values())
         assert tool.output_schema is not None
         assert tool.output_schema["properties"]["status"]["description"]
+        assert all(
+            "description" in field or "$ref" in field
+            for field in tool.output_schema["properties"].values()
+        )
+
+    @pytest.mark.parametrize("tool_name", ["vod_add_subtitles", "vod_remove_subtitles"])
+    async def test_vod_subtitle_submit_schema_is_self_describing(
+        self, configured_server: None, tool_name: str
+    ) -> None:
+        tools = await configured_server.mcp.list_tools()
+        tool = next(item for item in tools if item.name == tool_name)
+        assert tool.description
+        input_schema = tool.parameters["properties"]["input"]
+        assert input_schema["required"] == ["video_url"]
+        assert all("description" in field for field in input_schema["properties"].values())
+        assert tool.output_schema is not None
+        assert all(
+            "description" in field or "$ref" in field
+            for field in tool.output_schema["properties"].values()
+        )
+
+    async def test_vod_add_subtitles_cue_schema_is_self_describing(
+        self, configured_server: None
+    ) -> None:
+        tools = await configured_server.mcp.list_tools()
+        tool = next(item for item in tools if item.name == "vod_add_subtitles")
+        input_schema = tool.parameters["properties"]["input"]
+        cue_schema = input_schema["properties"]["subtitles"]["anyOf"][0]["items"]
+        assert all("description" in field for field in cue_schema["properties"].values())
+
+    @pytest.mark.parametrize(
+        "tool_name",
+        ["vod_get_subtitle_addition_task", "vod_get_subtitle_removal_task"],
+    )
+    async def test_vod_subtitle_poll_schema_is_self_describing(
+        self, configured_server: None, tool_name: str
+    ) -> None:
+        tools = await configured_server.mcp.list_tools()
+        tool = next(item for item in tools if item.name == tool_name)
+        assert tool.description
+        input_schema = tool.parameters["properties"]["input"]
+        assert input_schema["required"] == ["task_id"]
+        assert all("description" in field for field in input_schema["properties"].values())
+        assert tool.output_schema is not None
         assert all(
             "description" in field or "$ref" in field
             for field in tool.output_schema["properties"].values()
