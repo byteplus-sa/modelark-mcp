@@ -95,7 +95,7 @@ tool → scope mapping is wired in `server.py::register_tools`:
 | `seed:asr:transcribe` | `speech_to_text` |
 | `vod:enhance` | `vod_enhance_video` |
 | `vod:transcode` | `vod_transcode_video` |
-| `vod:read` | `vod_get_transcode_task`, `vod_get_audio_separation` |
+| `vod:read` | `vod_get_enhancement_task`, `vod_get_transcode_task`, `vod_get_audio_separation` |
 | `vod:extract` | `vod_separate_audio` |
 | `media:upload` | `media_upload` |
 | `media:presign` | `media_presign`, `media_presign_batch` |
@@ -105,7 +105,7 @@ The `seed-health://status` resource and the `/health`, `/ready`, `/metrics`
 routes are **not** scope-protected at the FastMCP layer. Seed Audio and
 speech-to-text tools are registered only when `BYTEPLUS_SEED_SPEECH_API_KEY`
 is set; Seedream/Seedance tools only when `BYTEPLUS_MODELARK_API_KEY` is set;
-`vod_enhance_video`,
+`vod_enhance_video`, `vod_get_enhancement_task`,
 `vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, and
 `vod_get_audio_separation` only when
 `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. The `media_upload`, `media_presign`,
@@ -213,7 +213,8 @@ two-layer SSRF defense. Constructor defaults: `timeout=120.0s`,
 
 `FilesystemArtifactStore` restricts `copy_from_trusted_url` to provider hosts
 via suffix allowlist: `.bytepluses.com`, `.byteplus.com`, `.bytedance.com`,
-`.bytednsdoc.com`, `.volces.com`, `.tos-ap-southeast.bytepluses.com`.
+`.bytednsdoc.com`, `.volces.com`, `.byteplusvod.com`,
+`.tos-ap-southeast.bytepluses.com`.
 
 For VOD AI MediaKit, enhancement and artifact persistence are separate
 outcomes. The tool always preserves a successful provider output URL for the

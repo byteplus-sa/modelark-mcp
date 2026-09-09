@@ -118,6 +118,7 @@ class TestToolDiscovery:
                 "media_presign",
                 "media_presign_batch",
                 "vod_enhance_video",
+                "vod_get_enhancement_task",
                 "vod_transcode_video",
                 "vod_get_transcode_task",
                 "vod_separate_audio",

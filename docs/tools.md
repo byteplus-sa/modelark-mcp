@@ -76,9 +76,8 @@ the `vod:enhance` JWT scope.
 
 ### Output and execution limits
 
-The verified provider contract returns `status="accepted"` with a task ID.
-There is no verified Bearer-surface polling tool, so accepted tasks cannot yet
-be completed through MCP. The non-idempotent POST is not retried automatically
+The verified provider contract returns `status="accepted"` with a task ID for
+`vod_get_enhancement_task`. The non-idempotent POST is not retried automatically
 because a timeout can have ambiguous completion. A completed output always
 preserves `source_url`. Persistence is reported as `not_applicable`, `persisted`,
 `failed`, or `not_requested`, and a failed artifact copy does not erase provider success.
@@ -87,6 +86,33 @@ Durable video copies remain subject to the 200 MiB limit.
 The success-body mapping remains provisional and rejects unknown response
 shapes. `estimated_cost_usd` is always null until convenience-endpoint pricing
 is confirmed.
+
+## vod_get_enhancement_task
+
+Poll the status and retrieve the output of a BytePlus VOD AI MediaKit enhancement
+task. This tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set
+and uses the `vod:read` JWT scope.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | string | Yes | Task ID returned by `vod_enhance_video` |
+| `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true) |
+
+### Output and execution limits
+
+Returns `VodEnhancementTaskOutput` with normalized `processing`, `succeeded`, or
+`failed` status. A completed result includes `source_url`, its 24-hour expiry,
+duration, resolution, frame rate, enhancement tier, and provider timestamps.
+With `persist_output=true`, concurrent first polls share one artifact copy and
+the result is cached by task ID for later reuse. Cache failures emit safe
+warnings but preserve any created artifact and the provider success. Artifact
+copy failures are reported separately; durable video copies remain capped at
+200 MiB.
 
 ## vod_transcode_video
 
