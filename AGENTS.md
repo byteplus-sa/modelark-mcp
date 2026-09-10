@@ -18,7 +18,8 @@ surface:
   reasoning through ModelArk Chat Completions; supports deep-thinking mode.
 - **Speech-to-Text** — synchronous audio transcription through Seed Speech ASR.
 - **VOD AI MediaKit** — asynchronous video enhancement, video transcoding,
-  and voice/background audio separation through the BytePlus VOD AI MediaKit.
+  subtitle burn-in and precision subtitle/text erasure, and voice/background
+  audio separation through the BytePlus VOD AI MediaKit.
 - **Object storage upload** — presigned URL generation for URL-only media
   workflows (TOS or S3 backend).
 - **Durable artifacts** — MCP resources for generated media whose provider URLs

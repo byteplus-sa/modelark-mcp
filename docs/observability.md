@@ -58,13 +58,14 @@ Redacted keys (case-insensitive): `authorization`, `x-api-key`, `api_key`,
 `apikey`, `token`, `secret`, `password`, `b64_json`, `audio_data`,
 `image_data`, `base64`, `prompt`, `text_prompt`, `variation_prompts`,
 `subtitle`, `subtitles`, `url`, `media_url`, `audio_url`, `image_url`,
-`video_url`.
+`video_url`, `subtitle_text`.
 
 Policy (per the module docstring): never log prompt text, full media URLs,
 Base64, subtitles, or credentials. Redaction is a safety net; call sites
 avoid passing these fields in the first place.
 
-`vod_enhance_video` logs lifecycle and safe persistence messages only. Its
+`vod_enhance_video` and `vod_get_enhancement_task` log lifecycle and safe
+persistence messages only. Their
 source and output URLs and Bearer credential are not logged. A successful
 enhancement whose best-effort artifact copy fails remains a successful tool
 result with `persistence="failed"`; operators should therefore monitor the
@@ -87,10 +88,11 @@ labels). Both Histograms use the `prometheus_client` default buckets
 | `modelark_mcp_budget_rejections_total` | Counter | `product` | requests rejected for exceeding daily budget | one inc per rejection |
 | `modelark_mcp_retry_attempts_total` | Counter | `provider`, `operation` | retried provider attempts (excluding the initial attempt) | one inc per retry |
 
-VOD AI MediaKit POSTs are intentionally not passed through the automatic
+VOD AI MediaKit mutation POSTs are intentionally not passed through the automatic
 retry helper because they are non-idempotent and a timeout may be ambiguous.
-Consequently, `modelark_mcp_retry_attempts_total` should not increase for
-`provider="byteplus-vod-mediakit"` enhancement calls.
+Consequently, `modelark_mcp_retry_attempts_total` should not increase for the
+submission. Read-only task polling may retry provider-marked
+retryable failures such as HTTP 429.
 
 ### `MetricsMiddleware`
 

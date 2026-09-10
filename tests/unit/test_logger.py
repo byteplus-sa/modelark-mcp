@@ -68,6 +68,11 @@ class TestRedaction:
         records = _parse_stderr(capsys)
         assert records[0]["prompt"] == "[REDACTED]"
 
+    def test_redacts_subtitle_text(self, capsys: pytest.CaptureFixture[str]) -> None:
+        logger.info("test", subtitle_text="private dialogue")
+        records = _parse_stderr(capsys)
+        assert records[0]["subtitle_text"] == "[REDACTED]"
+
     def test_redacts_media_url(self, capsys: pytest.CaptureFixture[str]) -> None:
         logger.info("test", video_url="https://example.com/private.mp4")
         records = _parse_stderr(capsys)

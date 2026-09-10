@@ -69,7 +69,7 @@ class MediaUploadInput(BaseModel):
         description=(
             "Presigned URL validity in seconds (60-604800). Defaults to the configured presign "
             "TTL. VOD tools fetch source URLs asynchronously, so use a long TTL (e.g. 3600) for "
-            "uploads destined for vod_separate_audio, vod_transcode_video, or vod_enhance_video."
+            "uploads destined for VOD enhancement, transcoding, subtitle, or audio-separation tools."
         ),
     )
 

@@ -76,9 +76,8 @@ the `vod:enhance` JWT scope.
 
 ### Output and execution limits
 
-The verified provider contract returns `status="accepted"` with a task ID.
-There is no verified Bearer-surface polling tool, so accepted tasks cannot yet
-be completed through MCP. The non-idempotent POST is not retried automatically
+The verified provider contract returns `status="accepted"` with a task ID for
+`vod_get_enhancement_task`. The non-idempotent POST is not retried automatically
 because a timeout can have ambiguous completion. A completed output always
 preserves `source_url`. Persistence is reported as `not_applicable`, `persisted`,
 `failed`, or `not_requested`, and a failed artifact copy does not erase provider success.
@@ -87,6 +86,33 @@ Durable video copies remain subject to the 200 MiB limit.
 The success-body mapping remains provisional and rejects unknown response
 shapes. `estimated_cost_usd` is always null until convenience-endpoint pricing
 is confirmed.
+
+## vod_get_enhancement_task
+
+Poll the status and retrieve the output of a BytePlus VOD AI MediaKit enhancement
+task. This tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set
+and uses the `vod:read` JWT scope.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | string | Yes | Task ID returned by `vod_enhance_video` |
+| `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true) |
+
+### Output and execution limits
+
+Returns `VodEnhancementTaskOutput` with normalized `processing`, `succeeded`, or
+`failed` status. A completed result includes `source_url`, its 24-hour expiry,
+duration, resolution, frame rate, enhancement tier, and provider timestamps.
+With `persist_output=true`, concurrent first polls share one artifact copy and
+the result is cached by task ID for later reuse. Cache failures emit safe
+warnings but preserve any created artifact and the provider success. Artifact
+copy failures are reported separately; durable video copies remain capped at
+200 MiB.
 
 ## vod_transcode_video
 
@@ -174,6 +200,59 @@ failed artifact copy does not erase provider success. Durable video copies
 remain subject to the 200 MiB limit. On failure, `error.code`/`error.message`
 carry the safe provider failure detail. GET polling is retried only on
 provider-marked retryable errors (e.g. 429).
+
+## vod_add_subtitles
+
+Burn subtitles into a public HTTPS video with MediaKit. Supply either
+`subtitle_url` for an SRT, VTT, or ASS file or a non-empty `subtitles` list of
+`subtitle_text`, `start_time`, and `end_time` cues. If both are supplied, the
+subtitle file takes priority. The tool uses `vod:subtitle:add` in JWT mode and
+returns a task ID for `vod_get_subtitle_addition_task`.
+
+Style options are `subtitle_pos_preset` (`bottom_center`, `top_center`,
+`center`, `lower_third`), positive `subtitle_font_size`, RGBA
+`subtitle_font_color` (`#RRGGBBAA`), and a documented MediaKit font identifier.
+Optional `client_token` supports submission reconciliation; callback and queue
+fields are also available. `project` is a legacy convenience-endpoint extension
+and is omitted by default.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+## vod_get_subtitle_addition_task
+
+Poll the task returned by `vod_add_subtitles`. The tool uses `vod:read`, maps
+provider lifecycle states to `processing`, `succeeded`, or `failed`, and can
+best-effort persist the MP4 output when `persist_output=true` (default). A
+succeeded response always preserves the expiring `source_url`; persistence
+failure is reported separately and does not erase provider success.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+## vod_remove_subtitles
+
+Remove hardcoded dialogue subtitles or recognized on-screen text from a public
+HTTPS video with MediaKit precision erasure. `mode="subtitle"` is the safe
+default; `mode="text"` is broader and may remove titles, labels, or watermarks.
+`output_encode_mode` selects `quality` (default) or `size`. Optional controls
+include up to 20 normalized erasure rectangles, selected/skipped time segments,
+subtitle OCR thresholds, callbacks, a queue ID, and a `client_token`. The
+legacy `model_version` (`v4`/`v5`) and `project` extensions are omitted unless
+explicitly supplied. The tool uses `vod:subtitle:remove` and returns a task ID
+for `vod_get_subtitle_removal_task`.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+## vod_get_subtitle_removal_task
+
+Poll the task returned by `vod_remove_subtitles`. Its normalized lifecycle,
+optional durable MP4 persistence, source-URL preservation, and failure behavior
+match `vod_get_subtitle_addition_task`. The tool uses `vod:read`.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
 
 ## vod_separate_audio
 

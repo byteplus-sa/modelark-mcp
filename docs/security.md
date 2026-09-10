@@ -95,7 +95,9 @@ tool → scope mapping is wired in `server.py::register_tools`:
 | `seed:asr:transcribe` | `speech_to_text` |
 | `vod:enhance` | `vod_enhance_video` |
 | `vod:transcode` | `vod_transcode_video` |
-| `vod:read` | `vod_get_transcode_task`, `vod_get_audio_separation` |
+| `vod:subtitle:add` | `vod_add_subtitles` |
+| `vod:subtitle:remove` | `vod_remove_subtitles` |
+| `vod:read` | All MediaKit task polling tools |
 | `vod:extract` | `vod_separate_audio` |
 | `media:upload` | `media_upload` |
 | `media:presign` | `media_presign`, `media_presign_batch` |
@@ -105,8 +107,10 @@ The `seed-health://status` resource and the `/health`, `/ready`, `/metrics`
 routes are **not** scope-protected at the FastMCP layer. Seed Audio and
 speech-to-text tools are registered only when `BYTEPLUS_SEED_SPEECH_API_KEY`
 is set; Seedream/Seedance tools only when `BYTEPLUS_MODELARK_API_KEY` is set;
-`vod_enhance_video`,
-`vod_transcode_video`, `vod_get_transcode_task`, `vod_separate_audio`, and
+`vod_enhance_video`, `vod_get_enhancement_task`,
+`vod_transcode_video`, `vod_get_transcode_task`, `vod_add_subtitles`,
+`vod_get_subtitle_addition_task`, `vod_remove_subtitles`,
+`vod_get_subtitle_removal_task`, `vod_separate_audio`, and
 `vod_get_audio_separation` only when
 `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. The `media_upload`, `media_presign`,
 and `media_presign_batch` tools are registered only when object storage
@@ -213,9 +217,10 @@ two-layer SSRF defense. Constructor defaults: `timeout=120.0s`,
 
 `FilesystemArtifactStore` restricts `copy_from_trusted_url` to provider hosts
 via suffix allowlist: `.bytepluses.com`, `.byteplus.com`, `.bytedance.com`,
-`.bytednsdoc.com`, `.volces.com`, `.tos-ap-southeast.bytepluses.com`.
+`.bytednsdoc.com`, `.volces.com`, `.byteplusvod.com`,
+`.tos-ap-southeast.bytepluses.com`.
 
-For VOD AI MediaKit, enhancement and artifact persistence are separate
+For VOD AI MediaKit, video processing and artifact persistence are separate
 outcomes. The tool always preserves a successful provider output URL for the
 authorized caller, then best-effort downloads it through this SSRF-safe path.
 Outputs above the 200 MiB video limit or failing host/MIME/download/storage
@@ -295,6 +300,8 @@ with an under-reported size could bypass it. The provider enforces the
 - VOD AI MediaKit requests are authenticated with
   `Authorization: Bearer ${BYTEPLUS_VOD_MEDIAKIT_API_KEY}`; the key is never
   logged, returned, or accepted as a tool argument.
+- Inline `subtitle_text` is treated as sensitive content and is redacted from
+  structured logs together with prompt, subtitle, media URL, and credential fields.
 
 ## Settings caching
 

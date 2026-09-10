@@ -13,10 +13,10 @@ Server as shipped today. For the original design rationale, see
   `X-Api-Key`; VOD AI MediaKit uses its own Bearer-authenticated convenience
   endpoint for enhancement, transcoding, and audio separation. The differences
   are hidden behind normalized adapters.
-- **Durable artifacts** — known provider media URLs expire (2h audio, 24h
-  ModelArk image/video), so outputs are persisted to a local store and
-  re-exposed as stable `seed-media://artifacts/{id}` MCP resources. MediaKit
-  source lifetime is unconfirmed and its persistence is best-effort.
+- **Durable artifacts** — known provider media URLs expire (2h Seed Audio; 24h
+  ModelArk image/video and observed MediaKit outputs), so outputs are persisted
+  to a local store and re-exposed as stable `seed-media://artifacts/{id}` MCP
+  resources. MediaKit persistence is best-effort.
 - **Safe by default** — local `stdio` requires no auth; remote HTTP requires
   JWT verification, Host/Origin protection, and body limits.
 - **Observable and budget-aware** — structured logs, Prometheus metrics, and a
@@ -42,7 +42,7 @@ src/modelark_mcp/
 │   ├── retry.py
 │   ├── modelark.py        # Seedream + Seedance
 │   ├── seed_speech.py     # Seed Audio
-│   └── vod_mediakit.py    # VOD AI MediaKit (Bearer; enhancement, transcode, separation)
+│   └── vod_mediakit/      # VOD AI MediaKit (Bearer; enhancement, transcode, subtitles, separation)
 ├── runtime.py             # lifespan-owned services (limiter, budget, ownership)
 ├── artifacts/             # durable artifact store (filesystem backend)
 │   ├── store.py           # ArtifactStore protocol
@@ -61,7 +61,7 @@ flowchart LR
     Domain --> Gateway["Provider gateways\n(providers/)"]
     Gateway -->|"Bearer auth"| ModelArk["ModelArk\nSeedream + Seedance"]
     Gateway -->|"X-Api-Key"| SeedSpeech["Seed Speech\nSeed Audio"]
-    Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nenhancement + transcoding + separation"]
+    Gateway -->|"Bearer auth"| MediaKit["VOD AI MediaKit\nenhancement + transcode + subtitles + separation"]
     Server -.durable.-> Store["Artifact store\n(filesystem)"]
     Server -.state.-> Runtime["Runtime services\n(runtime.py)"]
 ```
@@ -72,8 +72,9 @@ flowchart LR
 - **Seed Speech gateway** (`providers/seed_speech.py`) — serves Seed Audio.
   Uses `X-Api-Key` and base URL `https://voice.ap-southeast-1.bytepluses.com`.
 - **VOD AI MediaKit gateway** (`providers/vod_mediakit/`) — serves the
-  asynchronous `vod_enhance_video` submission endpoint, the
+  `vod_enhance_video` / `vod_get_enhancement_task` submit-then-poll pair, the
   `vod_transcode_video` / `vod_get_transcode_task` submit-then-poll pair, and
+  the subtitle burn-in and precision-erasure submit-then-poll pairs, and
   the `vod_separate_audio` / `vod_get_audio_separation` submit-then-poll pair
   (`POST /tools/separate-voice` + `GET /tasks/{task_id}`). It uses Bearer auth
   and defaults to `https://mediakit.ap-southeast-1.bytepluses.com/api/v1`. Its
@@ -84,14 +85,14 @@ flowchart LR
   provider metrics, and normalizes transport/HTTP errors into a single
   `ProviderError` carrying a `NormalizedProviderError`.
 
-MediaKit enhancement, transcode, and separation submission are non-idempotent
+MediaKit enhancement, transcode, subtitle, and separation submissions are non-idempotent
 mutations and bypass the automatic retry helper: a timeout can be ambiguous after
-the provider has begun work. Enhancement accepts asynchronous task submission
-with no verified polling route for that surface. Transcoding and separation, by
-contrast, have a verified task-status endpoint (`GET /tasks/{task_id}`), so
-`vod_get_transcode_task` and `vod_get_audio_separation` poll it and reuse the
+the provider has begun work. All operations use the verified task-status
+endpoint (`GET /tasks/{task_id}`), so `vod_get_enhancement_task`,
+`vod_get_transcode_task`, both subtitle poll tools, and
+`vod_get_audio_separation` poll it and reuse the
 shared ownership store and task-artifact cache under the `vod-mediakit` provider
-key. For all three surfaces, a completed provider URL is preserved and
+key. For all surfaces, a completed provider URL is preserved and
 persistence is attempted separately as a best-effort operation (under the
 200 MiB video limit for video, 10 MiB audio limit for separated tracks).
 
@@ -115,10 +116,10 @@ sequenceDiagram
     R-->>T: services
     T->>T: billed_provider_slot(...)
     M->>L: shutdown
-    L->>R: close_runtime_services (artifact_store, ownership_store, budget_ledger, task_artifact_cache)
+    L->>R: close_runtime_services (artifact, ownership, object-key, budget, cache stores)
 ```
 
-`RuntimeServices` holds seven components (see [runtime.md](runtime.md) for
+`RuntimeServices` holds nine components (see [runtime.md](runtime.md) for
 full detail):
 
 | Field | Purpose |
@@ -126,13 +127,17 @@ full detail):
 | `settings` | resolved `Settings` |
 | `artifact_store` | `FilesystemArtifactStore` — durable media |
 | `safe_downloader` | SSRF-safe HTTP downloader |
-| `ownership_store` | `SQLiteTaskOwnershipStore` — Seedance task ownership |
+| `ownership_store` | `SQLiteTaskOwnershipStore` — provider task ownership |
+| `object_key_ownership_store` | `SQLiteObjectKeyOwnershipStore` — uploaded-object ownership |
 | `budget_ledger` | `BudgetLedger` — per-principal UTC daily budget |
 | `provider_limiters` | `ProviderLimiters` — provider + principal concurrency |
 | `task_artifact_cache` | `SQLiteTaskArtifactCache` — provider task → artifact ref cache |
+| `task_artifact_locks` | `TaskArtifactPersistenceLocks` — process-local per-task single-flight |
 
-`close_runtime_services` closes exactly four of these: `artifact_store`,
-`ownership_store`, `budget_ledger`, and `task_artifact_cache`.
+`close_runtime_services` closes the five resources that own I/O state:
+`artifact_store`, `ownership_store`, `object_key_ownership_store`,
+`budget_ledger`, and `task_artifact_cache`. The lock registry is process-local,
+removes entries after the last holder or waiter exits, and needs no close step.
 
 ## Request flow for a billable tool
 

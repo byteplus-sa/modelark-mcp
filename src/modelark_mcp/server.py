@@ -157,6 +157,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
         )(speech_to_text)
 
     if settings.has_vod_mediakit:
+        from modelark_mcp.tools.vod_add_subtitles import (
+            TOOL_ANNOTATIONS as vod_add_subtitles_annotations,
+        )
+        from modelark_mcp.tools.vod_add_subtitles import (
+            VodAddSubtitlesOutput,
+            vod_add_subtitles,
+        )
         from modelark_mcp.tools.vod_enhance_video import (
             TOOL_ANNOTATIONS as vod_enhance_annotations,
         )
@@ -171,12 +178,40 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             VodAudioSeparationTaskOutput,
             vod_get_audio_separation,
         )
+        from modelark_mcp.tools.vod_get_enhancement_task import (
+            TOOL_ANNOTATIONS as vod_get_enhancement_annotations,
+        )
+        from modelark_mcp.tools.vod_get_enhancement_task import (
+            VodEnhancementTaskOutput,
+            vod_get_enhancement_task,
+        )
+        from modelark_mcp.tools.vod_get_subtitle_addition_task import (
+            TOOL_ANNOTATIONS as vod_get_subtitle_addition_annotations,
+        )
+        from modelark_mcp.tools.vod_get_subtitle_addition_task import (
+            VodSubtitleAdditionTaskOutput,
+            vod_get_subtitle_addition_task,
+        )
+        from modelark_mcp.tools.vod_get_subtitle_removal_task import (
+            TOOL_ANNOTATIONS as vod_get_subtitle_removal_annotations,
+        )
+        from modelark_mcp.tools.vod_get_subtitle_removal_task import (
+            VodSubtitleRemovalTaskOutput,
+            vod_get_subtitle_removal_task,
+        )
         from modelark_mcp.tools.vod_get_transcode_task import (
             TOOL_ANNOTATIONS as vod_get_transcode_annotations,
         )
         from modelark_mcp.tools.vod_get_transcode_task import (
             VodTranscodeTaskOutput,
             vod_get_transcode_task,
+        )
+        from modelark_mcp.tools.vod_remove_subtitles import (
+            TOOL_ANNOTATIONS as vod_remove_subtitles_annotations,
+        )
+        from modelark_mcp.tools.vod_remove_subtitles import (
+            VodRemoveSubtitlesOutput,
+            vod_remove_subtitles,
         )
         from modelark_mcp.tools.vod_separate_audio import (
             TOOL_ANNOTATIONS as vod_separate_audio_annotations,
@@ -199,6 +234,12 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             output_schema=VodEnhanceVideoOutput.model_json_schema(),
             auth=component_auth(settings, "vod:enhance"),
         )(vod_enhance_video)
+        server.tool(
+            name="vod_get_enhancement_task",
+            annotations={**vod_get_enhancement_annotations},
+            output_schema=VodEnhancementTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_enhancement_task)
         server.tool(
             name="vod_transcode_video",
             annotations={**vod_transcode_annotations},
@@ -223,6 +264,30 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             output_schema=VodAudioSeparationTaskOutput.model_json_schema(),
             auth=component_auth(settings, "vod:read"),
         )(vod_get_audio_separation)
+        server.tool(
+            name="vod_add_subtitles",
+            annotations={**vod_add_subtitles_annotations},
+            output_schema=VodAddSubtitlesOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:subtitle:add"),
+        )(vod_add_subtitles)
+        server.tool(
+            name="vod_get_subtitle_addition_task",
+            annotations={**vod_get_subtitle_addition_annotations},
+            output_schema=VodSubtitleAdditionTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_subtitle_addition_task)
+        server.tool(
+            name="vod_remove_subtitles",
+            annotations={**vod_remove_subtitles_annotations},
+            output_schema=VodRemoveSubtitlesOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:subtitle:remove"),
+        )(vod_remove_subtitles)
+        server.tool(
+            name="vod_get_subtitle_removal_task",
+            annotations={**vod_get_subtitle_removal_annotations},
+            output_schema=VodSubtitleRemovalTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_subtitle_removal_task)
 
     if not settings.has_modelark:
         log_info("tools_skipped", reason="BYTEPLUS_MODELARK_API_KEY not configured")
@@ -551,8 +616,9 @@ def create_server(
         instructions=(
             "BytePlus multimodal generation server. Provides Seed Audio, Seedream, "
             "Seedance, Seed 2.1 multimodal understanding, and Speech-to-Text tools. "
-            "BytePlus VOD AI MediaKit enhancement, video transcoding, and voice and "
-            "background audio separation are available when the MediaKit API key is "
+            "BytePlus VOD AI MediaKit enhancement, video transcoding, subtitle burn-in, "
+            "subtitle or text removal, and voice and background audio separation are "
+            "available when the MediaKit API key is "
             "configured. Generated media is persisted as durable MCP resources."
         ),
         auth=auth_provider or build_auth_provider(resolved_settings),

@@ -26,18 +26,23 @@ surface.
 | 17 | `seed_media_get_artifact` | Artifacts | Read-only | Local / JWT |
 | 18 | `speech_to_text` | Seed Speech ASR (optional) | Synchronous | Seed Speech |
 | 19 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 20 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
-| 21 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 22 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 23 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 24 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
-| 25 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
-| 26 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
-| 27 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
-| 28 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
-| 29 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
-| 30 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
-| 31 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
+| 20 | `vod_get_enhancement_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 21 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
+| 22 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 23 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 24 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 25 | `vod_add_subtitles` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 26 | `vod_get_subtitle_addition_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 27 | `vod_remove_subtitles` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
+| 28 | `vod_get_subtitle_removal_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
+| 29 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
+| 30 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
+| 31 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
+| 32 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
+| 33 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
+| 34 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
+| 35 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
+| 36 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
 
 ## Tool Annotations
 
@@ -62,10 +67,15 @@ surface.
 | `seed_media_get_artifact` | true | false | true | false |
 | `speech_to_text` | true | false | true | false |
 | `vod_enhance_video` | false | false | false | true |
+| `vod_get_enhancement_task` | true | false | true | false |
 | `vod_transcode_video` | false | false | false | true |
 | `vod_get_transcode_task` | true | false | true | false |
 | `vod_separate_audio` | false | false | false | true |
 | `vod_get_audio_separation` | true | false | true | false |
+| `vod_add_subtitles` | false | false | false | true |
+| `vod_get_subtitle_addition_task` | true | false | true | false |
+| `vod_remove_subtitles` | false | false | false | true |
+| `vod_get_subtitle_removal_task` | true | false | true | false |
 | `hyper3d_create_task` | false | false | false | true |
 | `hyper3d_get_task` | true | false | true | false |
 | `hyper3d_list_tasks` | true | false | true | false |
@@ -85,9 +95,10 @@ MediaKit convenience endpoint. The tool is registered only when
 scope in JWT mode.
 
 The verified contract returns an accepted asynchronous task and deliberately fixes the
-provider profile to `common` / `professional` / `4k` / `high` / 24 fps. It
-does not expose polling. The POST is non-idempotent and is never retried
-automatically because a timeout may occur after the provider began processing.
+provider profile to `common` / `professional` / `4k` / `high` / 24 fps. Poll
+the returned task ID with `vod_get_enhancement_task`. The POST is non-idempotent
+and is never retried automatically because a timeout may occur after the provider
+began processing.
 
 ### Input
 
@@ -118,8 +129,8 @@ a failure without exposing the URL or credential. `video` contains the durable
 `null` until the convenience endpoint's pricing and billing-unit mapping are
 confirmed.
 
-The asynchronous acceptance shape is verified by a sanitized live probe. The
-completed-output shape remains provisional; unknown shapes fail closed.
+The asynchronous acceptance and completed task shapes are verified by sanitized
+live probes. Unknown shapes fail closed.
 
 ### Example
 
@@ -134,6 +145,37 @@ completed-output shape remains provisional; unknown shapes fail closed.
   "project": "default",
   "persist": true
 }
+```
+
+---
+
+## vod_get_enhancement_task
+
+Poll the status and retrieve the output of a BytePlus VOD AI MediaKit enhancement
+task. Registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is configured;
+requires the `vod:read` scope in JWT mode.
+
+### Input
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `task_id` | string | Yes | — |
+| `persist_output` | boolean | No | `true` |
+
+### Output
+
+Returns `VodEnhancementTaskOutput` with normalized `processing`, `succeeded`, or
+`failed` status. On success it includes the provider `source_url`, its 24-hour
+expiry, duration, resolution, frame rate, enhancement tier, and task timestamps.
+With persistence enabled, concurrent first polls share one artifact copy and
+the `ArtifactRef` is cached for later reuse. Cache failures emit safe warnings
+without discarding a created artifact. Artifact-copy failures are reported
+separately without changing provider success.
+
+### Example
+
+```json
+{ "task_id": "amk-tool-enhance-video-example" }
 ```
 
 ---
@@ -261,6 +303,50 @@ erases provider success. On failure, `error` carries the safe provider detail.
 ```
 
 ---
+
+## vod_add_subtitles
+
+Submit `POST /tools/add-subtitle-to-video` using the configured MediaKit Bearer
+key and the `vod:subtitle:add` JWT scope. `video_url` is required and must be a
+public HTTPS URL. Provide at least one of `subtitle_url` (SRT, VTT, or ASS) or
+`subtitles`, where every inline cue has nonblank `subtitle_text` and an
+`end_time` greater than its nonnegative `start_time`. A subtitle file takes
+priority when both forms are present.
+
+Optional style fields control the position preset, positive pixel font size,
+RGBA color, and MediaKit font. `client_token` is at most 64 printable ASCII
+characters; callback payloads are capped at 512 UTF-8 bytes. `callback_url`
+must be public HTTPS. `project` is a legacy case-sensitive `Project` extension
+and is omitted by default. The accepted output includes `task_id`, request IDs,
+and a 5-second initial polling heuristic.
+
+## vod_get_subtitle_addition_task
+
+Poll `GET /tasks/{task_id}` with `vod:read`. The adapter requires
+`task_type="add-subtitle-to-video"`, validates the echoed task ID, and maps
+provider state to `processing`, `succeeded`, or `failed`. On success it returns
+the expiring `source_url`, duration/resolution when available, and optionally a
+durable MP4 `video` artifact. `persist_output` defaults to true; persistence is
+single-flight and failure is reported separately from provider success.
+
+## vod_remove_subtitles
+
+Submit `POST /tools/erase-video-subtitle-pro` using `vod:subtitle:remove`.
+`mode="subtitle"` removes recognized dialogue subtitles; the broader
+`mode="text"` may also remove titles, labels, or watermarks. Encoding mode is
+`quality` or `size`. Optional precision controls include one-to-twenty
+normalized erasure rectangles, selected/skipped time segments, and subtitle
+OCR size/centering thresholds. Callback, queue, and `client_token` fields match
+subtitle addition. The legacy `model_version` (`v4`/`v5`) and `project` fields
+are omitted unless explicitly supplied. The output includes the task ID and a
+15-second initial polling heuristic.
+
+## vod_get_subtitle_removal_task
+
+Poll `GET /tasks/{task_id}` with `vod:read`. The adapter requires
+`task_type="erase-video-subtitle-pro"`; lifecycle normalization, task ownership,
+source-URL preservation, and best-effort single-flight MP4 persistence match
+`vod_get_subtitle_addition_task`.
 
 ## vod_separate_audio
 

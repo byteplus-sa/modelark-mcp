@@ -175,6 +175,41 @@ class TaskArtifactCache(Protocol):
     async def close(self) -> None: ...
 
 
+@dataclass(slots=True)
+class _TaskArtifactLockEntry:
+    lock: asyncio.Lock
+    users: int = 0
+    artifacts: dict[str, ArtifactRef | None] | None = None
+
+
+class TaskArtifactPersistenceLocks:
+    """Bounded-lifetime task locks for artifact persistence single-flight."""
+
+    def __init__(self) -> None:
+        self._entries: dict[tuple[str, str], _TaskArtifactLockEntry] = {}
+        self._registry_lock = asyncio.Lock()
+
+    @asynccontextmanager
+    async def acquire(self, provider: str, task_id: str) -> AsyncIterator[_TaskArtifactLockEntry]:
+        """Serialize persistence for one provider task while leaving other tasks concurrent."""
+        key = (provider, task_id)
+        async with self._registry_lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                entry = _TaskArtifactLockEntry(lock=asyncio.Lock())
+                self._entries[key] = entry
+            entry.users += 1
+
+        try:
+            async with entry.lock:
+                yield entry
+        finally:
+            async with self._registry_lock:
+                entry.users -= 1
+                if entry.users == 0:
+                    self._entries.pop(key, None)
+
+
 class SQLiteTaskOwnershipStore:
     """Small single-instance ownership database for provider task IDs."""
 
@@ -747,6 +782,7 @@ class RuntimeServices:
     budget_ledger: BudgetLedger
     provider_limiters: ProviderLimiters
     task_artifact_cache: TaskArtifactCache
+    task_artifact_locks: TaskArtifactPersistenceLocks
 
 
 @dataclass(slots=True)
@@ -812,6 +848,7 @@ async def create_runtime_services(settings: Settings) -> RuntimeServices:
             principal_limit=settings.principal_max_concurrency,
         ),
         task_artifact_cache=task_artifact_cache,
+        task_artifact_locks=TaskArtifactPersistenceLocks(),
     )
 
 

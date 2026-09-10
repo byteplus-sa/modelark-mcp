@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,12 +12,17 @@ from modelark_mcp.artifacts.store import ArtifactPersistenceError
 from modelark_mcp.domain.artifacts import ArtifactRef
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
-from modelark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission
+from modelark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission, EnhancementTask
 from modelark_mcp.security.auth_context import AuthContext
 from modelark_mcp.tools.vod_enhance_video import (
     VodEnhanceVideoInput,
     VodEnhanceVideoOutput,
     vod_enhance_video,
+)
+from modelark_mcp.tools.vod_get_enhancement_task import (
+    VodEnhancementTaskOutput,
+    VodGetEnhancementTaskInput,
+    vod_get_enhancement_task,
 )
 from tests.fixtures.fake_context import FakeContext
 
@@ -36,6 +42,23 @@ def _submission() -> EnhancementSubmission:
         expires_at="2026-08-13T00:00:00Z",
         output_size_bytes=123,
         provider_status="completed",
+    )
+
+
+def _succeeded_task() -> EnhancementTask:
+    return EnhancementTask(
+        task_id="amk-tool-enhance-video-1",
+        status="succeeded",
+        provider_status="completed",
+        request_id="req-get",
+        output_url="https://tos-ap-southeast.bytepluses.com/enhanced.mp4",
+        duration_seconds=30.917,
+        fps=24,
+        resolution="4k",
+        tool_version="professional",
+        created_at="2026-09-08T13:39:47+00:00",
+        finished_at="2026-09-08T13:54:16+00:00",
+        source_expires_at="2026-09-09T13:54:15+00:00",
     )
 
 
@@ -236,3 +259,339 @@ async def test_provider_error_returns_mcp_error(
 def test_input_rejects_unverified_profile_values() -> None:
     with pytest.raises(ValueError):
         VodEnhanceVideoInput(video_url="https://example.com/input.mp4", resolution="1080p")  # type: ignore[arg-type]
+
+
+async def test_poll_enhancement_succeeded_persists_once(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ref = ArtifactRef(
+        id="artifact-1",
+        uri="seed-media://artifacts/artifact-1",
+        media_type="video",
+        mime_type="video/mp4",
+        bytes=123,
+        sha256="abc",
+        created_at="2026-09-08T14:00:00Z",
+    )
+    monkeypatch.setattr(
+        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())
+    copy = AsyncMock(return_value=ref)
+    monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy)
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+    result_again = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodEnhancementTaskOutput)
+    assert result.status == "succeeded"
+    assert result.video == ref
+    assert result.persistence == "persisted"
+    assert result.duration_seconds == 30.917
+    assert result.fps == 24
+    assert result.resolution == "4k"
+    assert result.tool_version == "professional"
+    assert result_again.video == ref
+    assert copy.await_count == 1
+
+
+async def test_concurrent_first_polls_persist_one_shared_artifact(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ref = ArtifactRef(
+        id="artifact-concurrent",
+        uri="seed-media://artifacts/artifact-concurrent",
+        media_type="video",
+        mime_type="video/mp4",
+        bytes=123,
+        sha256="abc",
+        created_at="2026-09-08T14:00:00Z",
+    )
+    monkeypatch.setattr(
+        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())
+    copy_started = asyncio.Event()
+    release_copy = asyncio.Event()
+    copy_count = 0
+
+    async def copy_from_trusted_url(**_kwargs: object) -> ArtifactRef:
+        nonlocal copy_count
+        copy_count += 1
+        copy_started.set()
+        await release_copy.wait()
+        return ref
+
+    monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy_from_trusted_url)
+    monkeypatch.setattr(
+        runtime.task_artifact_cache,
+        "set",
+        AsyncMock(side_effect=RuntimeError("cache unavailable")),
+    )
+
+    first = asyncio.create_task(
+        vod_get_enhancement_task(
+            VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+        )
+    )
+    second = asyncio.create_task(
+        vod_get_enhancement_task(
+            VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+        )
+    )
+    await asyncio.wait_for(copy_started.wait(), timeout=1)
+    await asyncio.sleep(0)
+    release_copy.set()
+    results = await asyncio.gather(first, second)
+
+    assert copy_count == 1
+    first_result, second_result = results
+    assert isinstance(first_result, VodEnhancementTaskOutput)
+    assert isinstance(second_result, VodEnhancementTaskOutput)
+    assert first_result.video == ref
+    assert second_result.video == ref
+    assert any("artifact cache update failed" in message for message in fake_ctx.messages)
+
+
+async def test_poll_enhancement_can_skip_persistence(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())
+    copy = AsyncMock()
+    monkeypatch.setattr(runtime.artifact_store, "copy_from_trusted_url", copy)
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(
+            task_id="amk-tool-enhance-video-1",
+            persist_output=False,
+        ),
+        fake_ctx,
+    )
+
+    assert isinstance(result, VodEnhancementTaskOutput)
+    assert result.status == "succeeded"
+    assert result.persistence == "not_requested"
+    assert result.video is None
+    assert str(result.source_url) == "https://tos-ap-southeast.bytepluses.com/enhanced.mp4"
+    copy.assert_not_awaited()
+
+
+async def test_poll_enhancement_persistence_failure_preserves_success(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())
+    monkeypatch.setattr(
+        runtime.artifact_store,
+        "copy_from_trusted_url",
+        AsyncMock(
+            side_effect=ArtifactPersistenceError(
+                "output_too_large",
+                "Output exceeds the artifact limit.",
+                retryable=False,
+            )
+        ),
+    )
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodEnhancementTaskOutput)
+    assert result.status == "succeeded"
+    assert result.persistence == "failed"
+    assert result.persistence_issue is not None
+    assert result.persistence_issue.code == "output_too_large"
+    assert result.video is None
+    assert any(message.startswith("WARNING:") for message in fake_ctx.messages)
+
+
+async def test_poll_enhancement_cache_lookup_failure_preserves_success(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ref = ArtifactRef(
+        id="artifact-cache-read",
+        uri="seed-media://artifacts/artifact-cache-read",
+        media_type="video",
+        mime_type="video/mp4",
+        bytes=123,
+        sha256="abc",
+        created_at="2026-09-08T14:00:00Z",
+    )
+    monkeypatch.setattr(
+        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())
+    monkeypatch.setattr(
+        runtime.task_artifact_cache,
+        "get",
+        AsyncMock(side_effect=RuntimeError("https://private.example.com/?token=secret")),
+    )
+    monkeypatch.setattr(
+        runtime.artifact_store,
+        "copy_from_trusted_url",
+        AsyncMock(return_value=ref),
+    )
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodEnhancementTaskOutput)
+    assert result.status == "succeeded"
+    assert result.persistence == "persisted"
+    assert result.video == ref
+    messages = "\n".join(fake_ctx.messages)
+    assert "artifact cache lookup failed" in messages
+    assert "private.example.com" not in messages
+    assert "token=secret" not in messages
+
+
+async def test_poll_enhancement_cache_update_failure_returns_created_artifact(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ref = ArtifactRef(
+        id="artifact-cache-write",
+        uri="seed-media://artifacts/artifact-cache-write",
+        media_type="video",
+        mime_type="video/mp4",
+        bytes=123,
+        sha256="abc",
+        created_at="2026-09-08T14:00:00Z",
+    )
+    monkeypatch.setattr(
+        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+    runtime = fake_ctx.lifespan_context["runtime"]
+    await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())
+    monkeypatch.setattr(
+        runtime.artifact_store,
+        "copy_from_trusted_url",
+        AsyncMock(return_value=ref),
+    )
+    monkeypatch.setattr(
+        runtime.task_artifact_cache,
+        "set",
+        AsyncMock(side_effect=RuntimeError("https://private.example.com/?token=secret")),
+    )
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodEnhancementTaskOutput)
+    assert result.status == "succeeded"
+    assert result.persistence == "persisted"
+    assert result.video == ref
+    messages = "\n".join(fake_ctx.messages)
+    assert "artifact cache update failed" in messages
+    assert "private.example.com" not in messages
+    assert "token=secret" not in messages
+
+
+async def test_poll_enhancement_processing_has_no_output(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = EnhancementTask(
+        task_id="amk-tool-enhance-video-1",
+        status="processing",
+        provider_status="running",
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "get", AsyncMock(return_value=task))
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodEnhancementTaskOutput)
+    assert result.status == "processing"
+    assert result.source_url is None
+    assert result.persistence == "not_applicable"
+
+
+async def test_poll_enhancement_failed_returns_safe_error(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = EnhancementTask(
+        task_id="amk-tool-enhance-video-1",
+        status="failed",
+        provider_status="failed",
+        failure_code="DownloadFailed",
+        failure_message="Failed to download the source video.",
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "get", AsyncMock(return_value=task))
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, VodEnhancementTaskOutput)
+    assert result.status == "failed"
+    assert result.error is not None
+    assert result.error.code == "DownloadFailed"
+    assert result.persistence == "not_applicable"
+
+
+async def test_poll_enhancement_provider_error_returns_mcp_error(
+    test_env: None,
+    fake_ctx: FakeContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = ProviderError(
+        NormalizedProviderError(
+            provider="byteplus-vod-mediakit",
+            operation="get_enhancement_task",
+            http_status=429,
+            code="RATE_LIMITED",
+            message="Try later.",
+            retryable=False,
+        )
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "get", AsyncMock(side_effect=error))
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
+
+    result = await vod_get_enhancement_task(
+        VodGetEnhancementTaskInput(task_id="amk-tool-enhance-video-1"), fake_ctx
+    )
+
+    assert isinstance(result, ToolResult)
+    assert result.is_error is True
+    assert "RATE_LIMITED" in result.content[0].text
