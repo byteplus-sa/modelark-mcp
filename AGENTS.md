@@ -9,16 +9,30 @@ surface:
 - **Seed Audio** — full-scene audio generation through Seed Speech.
 - **Seedream** — image generation and editing through ModelArk.
 - **Seedance** — asynchronous video generation and task management through
-  ModelArk.
+  ModelArk. Supports two model generations: 2.0 (legacy, 15s, 4K) and 2.5
+  (default, 30s, 1080p, structured editing, native extension).
+- **Seed 3D** — asynchronous 3D model generation through ModelArk (Hyper3D
+  text-to-3D and Hitem3d image-to-3D). Gated by `BYTEPLUS_MODELARK_3D_ENABLED`;
+  disabled by default.
+- **Seed 2.1 Understanding** — multimodal video/image understanding and
+  reasoning through ModelArk Chat Completions; supports deep-thinking mode.
+- **Speech-to-Text** — synchronous audio transcription through Seed Speech ASR.
+- **VOD AI MediaKit** — asynchronous video enhancement, video transcoding,
+  subtitle burn-in and precision subtitle/text erasure, and voice/background
+  audio separation through the BytePlus VOD AI MediaKit.
+- **Object storage upload** — presigned URL generation for URL-only media
+  workflows (TOS or S3 backend).
 - **Durable artifacts** — MCP resources for generated media whose provider URLs
-  expire (2h for audio, 24h for image/video).
+  expire (2h for audio, 24h for image/video/3D).
 - **Transports** — local `stdio` first, with protected Streamable HTTP as a
   deployable option (both natively supported by FastMCP).
 
-Seedance and Seedream share the ModelArk data-plane host and Bearer
-authentication, while Seed Audio is hosted by Seed Speech and uses `X-Api-Key`.
-The server uses two provider gateways behind one normalized domain layer. See
-`plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md` for the full design.
+Seedance, Seedream, Seed 3D, and Seed 2.1 Understanding share the ModelArk
+data-plane host and Bearer authentication. Seed Audio and Speech-to-Text are
+hosted by Seed Speech and use `X-Api-Key`. VOD AI MediaKit uses a separate
+Bearer key. The server uses three provider gateways behind one normalized
+domain layer. See `plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md` for the full
+design.
 
 ## Repository Layout
 
@@ -36,6 +50,7 @@ modelark-mcp/
 ├── plans/             # implementation plans for features
 ├── specs/             # future-looking specs and design docs
 ├── docs/              # project documentation
+├── scripts/           # live smoke tests and utility scripts
 ├── src/modelark_mcp/  # server source (Python package)
 └── tests/             # tests (pytest)
 ```
@@ -144,6 +159,33 @@ troubleshoot the server.
   dates. Prefer official BytePlus and Model Context Protocol sources.
 - **Secrets.** Never commit credentials, API keys, or provider response
   fixtures containing real media. Redact before saving examples.
+
+## Repository Hygiene
+
+The repository should contain only source code, tests, configuration,
+documentation, plans, specs, and skills — **not** generated media, scratch
+reports, or transient review artifacts. The following must never be committed:
+
+- **Generated media at the repository root.** This includes `*.mp4`, `*.wav`,
+  `*.mp3`, `*.jpeg`, `*.png`, `*.mov` files produced by the MCP tools, smoke
+  tests, or manual experiments (e.g. `ppop-*.wav`, `output_*.mp4`,
+  `seedance_*_test_*.mp4`). Move them to `.artifacts/` or `out/` (both
+  gitignored) or delete them.
+- **Generated output directories.** `output/`, `assets/`, and `sample/` are
+  scratch containers for demo or experiment output. Do not commit them.
+- **PR review scratch files.** `pr-reviews/` holds transient review reports
+  produced during PR cycles. Delete them after the PR is merged or closed.
+- **One-off reports and handovers.** Files like `CODE_REVIEW_REPORT.md` and
+  `HANDOVER.md` are session-scoped artifacts. If their content has lasting
+  value, distill it into `docs/` or `specs/`; otherwise delete them.
+- **Shipped, superseded, or deprecated plans.** Once a plan reaches
+  `status: shipped`, `status: superseded`, or `status: deprecated`, remove it
+  from `plans/`. Move durable decisions into `specs/` or `docs/` first.
+- **Build artifacts and runtime state.** `.artifacts/`, `out/`, and `dist/`
+  are gitignored. Never force-commit them.
+
+When in doubt about whether a file is scratch, treat it as scratch and delete
+it. Practice CLAYGO — clean as you go, not just at the end of a task.
 
 ## Tool Contract Rules
 

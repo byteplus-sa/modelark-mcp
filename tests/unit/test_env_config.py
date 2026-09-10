@@ -11,10 +11,11 @@ from modelark_mcp.config.env import Settings, get_settings, validate
 @pytest.fixture
 def clean_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test-modelark")
-    monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test-speech")
+    monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test-speech")
+    monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_API_KEY", "test-mediakit-key")
     monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", "https://ark.test.example.com/api/v3")
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.test.example.com")
-    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+    monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_BASE_URL", "https://mediakit.test.example.com/api/v1")
     monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "https://voice.test.example.com")
     monkeypatch.setenv("ARTIFACT_TTL_SECONDS", "3600")
     monkeypatch.setenv("MCP_INLINE_MEDIA_MAX_BYTES", "8388608")
@@ -33,6 +34,7 @@ class TestValidate:
         get_settings.cache_clear()
         monkeypatch.delenv("BYTEPLUS_MODELARK_BASE_URL", raising=False)
         monkeypatch.delenv("BYTEPLUS_SEED_AUDIO_BASE_URL", raising=False)
+        monkeypatch.delenv("BYTEPLUS_VOD_MEDIAKIT_BASE_URL", raising=False)
         monkeypatch.delenv("SEED_SPEECH_ASR_BASE_URL", raising=False)
         validate()
         get_settings.cache_clear()
@@ -59,6 +61,15 @@ class TestValidate:
         get_settings.cache_clear()
         with pytest.raises(ValueError, match="BYTEPLUS_SEED_AUDIO_BASE_URL must use HTTPS"):
             validate()
+        get_settings.cache_clear()
+
+    def test_validate_rejects_non_https_vod_mediakit_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_BASE_URL", "http://mediakit.example.com/api/v1")
+        get_settings.cache_clear()
+        with pytest.raises(ValidationError, match="BYTEPLUS_VOD_MEDIAKIT_BASE_URL must use HTTPS"):
+            Settings(_env_file=None)
         get_settings.cache_clear()
 
     def test_validate_rejects_non_https_asr_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -158,10 +169,17 @@ class TestSettingsFromEnv:
         settings = Settings(_env_file=None)
         assert settings.modelark_api_key == "sk-from-env"  # pragma: allowlist secret
 
-    def test_seed_audio_api_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-audio-env")
+    def test_seed_speech_api_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-speech-env")
         settings = Settings(_env_file=None)
-        assert settings.seed_audio_api_key == "sk-audio-env"  # pragma: allowlist secret
+        assert settings.seed_speech_api_key == "sk-speech-env"  # pragma: allowlist secret
+
+    def test_vod_mediakit_values_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_API_KEY", "test-mediakit-env")
+        monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_BASE_URL", "https://mediakit.example.com/api/v1")
+        settings = Settings(_env_file=None)
+        assert settings.vod_mediakit_api_key == "test-mediakit-env"  # pragma: allowlist secret
+        assert settings.vod_mediakit_base_url == "https://mediakit.example.com/api/v1"
 
     def test_transport_http_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MCP_TRANSPORT", "http")
@@ -233,12 +251,12 @@ class TestSttConfig:
     """Tests for Seed Speech ASR (STT) configuration."""
 
     def test_has_stt_true_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+        monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test-speech")
         settings = Settings(_env_file=None)
         assert settings.has_stt is True
 
     def test_has_stt_false_when_key_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "")
+        monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "")
         settings = Settings(_env_file=None)
         assert settings.has_stt is False
 
@@ -276,3 +294,33 @@ class TestSttConfig:
         monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", "http://voice.example.com")
         with pytest.raises(ValidationError, match="SEED_SPEECH_ASR_BASE_URL must use HTTPS"):
             Settings(_env_file=None)
+
+
+class TestStateAndArtifactBackend:
+    """Settings for the state and durable-artifact backends."""
+
+    def test_object_storage_backend_without_credentials_fails(self) -> None:
+        with pytest.raises(
+            ValidationError,
+            match="ARTIFACT_BACKEND=object_storage requires TOS_\\* or S3_\\* credentials",
+        ):
+            Settings(_env_file=None, ARTIFACT_BACKEND="object_storage")
+
+    def test_state_backend_accepts_only_sqlite(self) -> None:
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, STATE_BACKEND="redis")
+
+    def test_state_backend_sqlite_is_accepted(self) -> None:
+        settings = Settings(_env_file=None, STATE_BACKEND="sqlite")
+        assert settings.state_backend == "sqlite"
+
+    def test_object_storage_backend_with_tos_credentials_passes(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            ARTIFACT_BACKEND="object_storage",
+            TOS_ACCESS_KEY="ak-tos",
+            TOS_SECRET_KEY="sk-tos",  # pragma: allowlist secret
+            TOS_BUCKET="bucket",
+        )
+        assert settings.artifact_backend == "object_storage"
+        assert settings.has_object_storage is True

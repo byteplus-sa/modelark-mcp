@@ -265,7 +265,7 @@ async def test_video_generation_with_image(
     if not final_result.video and final_result.status == "succeeded":
         print("\n  Video not persisted during polling — retrying with fresh context...")
         # Clear the runtime-owned cache for this task to force re-download.
-        runtime.persistence_cache.pop(task_id, None)
+        await runtime.task_artifact_cache.pop(task_id)
 
         retry_ctx = SmokeContext(lifespan_context={"runtime": runtime})
         final_result = require_tool_success(

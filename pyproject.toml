@@ -3,6 +3,7 @@ name = "modelark-mcp"
 version = "0.1.0"
 description = "Python MCP server (FastMCP on uv) exposing BytePlus multimodal generation: Seed Audio, Seedream, and Seedance."
 readme = "README.md"
+license = { text = "MIT" }
 authors = [
     { name = "Arthur Reimus", email = "arthur.lechoncito@bytedance.com" }
 ]
@@ -115,6 +116,7 @@ asyncio_mode = "auto"
 addopts = ["--allow-unix-socket", "--ignore=tests/live"]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = ["live: requires live credentials and network"]
 
 [tool.coverage.run]
 source = ["modelark_mcp"]

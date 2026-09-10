@@ -13,7 +13,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from modelark_mcp.artifacts.store import ArtifactMetadata, ArtifactStore, StoredArtifact
+from modelark_mcp.artifacts.store import (
+    ArtifactMetadata,
+    ArtifactPersistenceError,
+    ArtifactPersistenceErrorCode,
+    ArtifactStore,
+    StoredArtifact,
+)
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.observability.logger import info as log_info
@@ -23,16 +29,23 @@ from modelark_mcp.security.auth_context import AuthContext
 from modelark_mcp.security.media_policy import (
     decode_base64_safely,
     get_media_limits,
+    validate_3d_mime,
     validate_audio_mime,
     validate_image_mime,
     validate_video_mime,
 )
-from modelark_mcp.security.safe_downloader import SafeDownloader
+from modelark_mcp.security.safe_downloader import (
+    SafeDownloader,
+    SafeDownloadError,
+    SafeDownloadErrorCode,
+)
 
 # Host allowlist for downloading provider output URLs.
+_TRUSTED_EXACT_HOSTS: frozenset[str] = frozenset()
 _TRUSTED_HOST_SUFFIXES: tuple[str, ...] = (
     ".bytepluses.com",
     ".byteplus.com",
+    ".byteplusvod.com",
     ".bytedance.com",
     ".bytednsdoc.com",
     ".volces.com",
@@ -43,7 +56,37 @@ _TRUSTED_HOST_SUFFIXES: tuple[str, ...] = (
 def _is_trusted_host(hostname: str) -> bool:
     """Check if a hostname is in the trusted provider/TOS allowlist."""
     hostname_lower = hostname.lower()
-    return any(hostname_lower.endswith(suffix) for suffix in _TRUSTED_HOST_SUFFIXES)
+    return hostname_lower in _TRUSTED_EXACT_HOSTS or any(
+        hostname_lower.endswith(suffix) for suffix in _TRUSTED_HOST_SUFFIXES
+    )
+
+
+# Generic binary content-types that carry no useful file-type signal. When a
+# provider returns one of these for a known file extension (e.g. .glb), keep
+# the caller-supplied MIME type instead of adopting the generic header.
+_GENERIC_OCTET_STREAM: frozenset[str] = frozenset(
+    {
+        "application/octet-stream",
+        "binary/octet-stream",
+    }
+)
+
+
+def _translate_download_error(exc: SafeDownloadError) -> ArtifactPersistenceError:
+    code_map: dict[SafeDownloadErrorCode, ArtifactPersistenceErrorCode] = {
+        "untrusted_host": "untrusted_output_host",
+        "redirect_rejected": "untrusted_output_host",
+        "too_large": "output_too_large",
+        "source_expired": "source_expired",
+        "invalid_url": "download_failed",
+        "http_error": "download_failed",
+        "network_error": "download_failed",
+    }
+    return ArtifactPersistenceError(
+        code_map[exc.code],
+        exc.safe_message,
+        retryable=exc.retryable,
+    )
 
 
 def _mime_to_media_type(mime_type: str) -> MediaType:
@@ -54,6 +97,11 @@ def _mime_to_media_type(mime_type: str) -> MediaType:
         return MediaType.AUDIO
     if mime_type.startswith("video/"):
         return MediaType.VIDEO
+    if mime_type.startswith("model/") or mime_type in {
+        "application/zip",
+        "application/x-zip-compressed",
+    }:
+        return MediaType.THREE_D
     return MediaType.IMAGE  # Conservative default
 
 
@@ -61,6 +109,9 @@ _MIME_TO_EXT: dict[str, str] = {
     "audio/wav": ".wav",
     "audio/mpeg": ".mp3",
     "audio/mp3": ".mp3",
+    "audio/aac": ".aac",
+    "audio/mp4": ".m4a",
+    "audio/flac": ".flac",
     "audio/ogg": ".ogg",
     "audio/pcm": ".pcm",
     "image/png": ".png",
@@ -68,6 +119,11 @@ _MIME_TO_EXT: dict[str, str] = {
     "image/webp": ".webp",
     "video/mp4": ".mp4",
     "video/webm": ".webm",
+    "application/zip": ".zip",
+    "application/x-zip-compressed": ".zip",
+    "model/gltf-binary": ".glb",
+    "model/gltf+json": ".gltf",
+    "model/vnd.usdz+zip": ".usdz",
 }
 
 
@@ -129,6 +185,7 @@ class FilesystemArtifactStore(ArtifactStore):
             "image": limits.image_max_bytes,
             "audio": limits.audio_max_bytes,
             "video": limits.video_max_bytes,
+            "three_d": limits.three_d_max_bytes,
         }[media_type]
         raw = decode_base64_safely(data, max_bytes, label=media_type)
         return await self._store_bytes(raw, media_type, mime_type, source_expires_at, auth)
@@ -151,16 +208,20 @@ class FilesystemArtifactStore(ArtifactStore):
             "image": limits.image_max_bytes,
             "audio": limits.audio_max_bytes,
             "video": limits.video_max_bytes,
+            "three_d": limits.three_d_max_bytes,
         }[media_type]
-        downloaded = await self._downloader.download(
-            url,
-            trusted_hosts=_is_trusted_host,
-            max_bytes=max_bytes,
-        )
+        try:
+            downloaded = await self._downloader.download(
+                url,
+                trusted_hosts=_is_trusted_host,
+                max_bytes=max_bytes,
+            )
+        except SafeDownloadError as exc:
+            raise _translate_download_error(exc) from exc
 
         # Validate MIME from content-type if the header is present.
         content_type = downloaded.content_type or ""
-        if content_type and content_type != mime_type:
+        if content_type and content_type != mime_type and content_type not in _GENERIC_OCTET_STREAM:
             log_info(
                 "artifact_mime_mismatch",
                 expected=mime_type,
@@ -169,9 +230,31 @@ class FilesystemArtifactStore(ArtifactStore):
             )
             mime_type = content_type or mime_type
 
-        return await self._store_bytes(
-            downloaded.body, media_type, mime_type, source_expires_at, auth
-        )
+        if len(downloaded.body) > max_bytes:
+            raise ArtifactPersistenceError(
+                "output_too_large",
+                f"Provider output exceeds the {max_bytes}-byte artifact limit.",
+                retryable=False,
+            )
+
+        try:
+            return await self._store_bytes(
+                downloaded.body, media_type, mime_type, source_expires_at, auth
+            )
+        except ArtifactPersistenceError:
+            raise
+        except ValueError as exc:
+            raise ArtifactPersistenceError(
+                "invalid_output_mime",
+                "Provider output has an unsupported media type.",
+                retryable=False,
+            ) from exc
+        except OSError as exc:
+            raise ArtifactPersistenceError(
+                "storage_failed",
+                "Provider output could not be written to artifact storage.",
+                retryable=True,
+            ) from exc
 
     async def _store_bytes(
         self,
@@ -187,6 +270,7 @@ class FilesystemArtifactStore(ArtifactStore):
             "image": limits.image_max_bytes,
             "audio": limits.audio_max_bytes,
             "video": limits.video_max_bytes,
+            "three_d": limits.three_d_max_bytes,
         }[media_type]
         if len(raw) > max_bytes:
             raise ValueError(
@@ -196,6 +280,7 @@ class FilesystemArtifactStore(ArtifactStore):
             "image": validate_image_mime,
             "audio": validate_audio_mime,
             "video": validate_video_mime,
+            "three_d": validate_3d_mime,
         }[media_type](mime_type)
 
         owner = auth or AuthContext()
@@ -280,12 +365,12 @@ class FilesystemArtifactStore(ArtifactStore):
         if not path.exists():
             raise FileNotFoundError(f"Artifact '{artifact_id}' not found.")
 
-        data = path.read_bytes()
-
         metadata = self._load_metadata(meta_path)
         owner = auth or AuthContext()
         if metadata.principal_id != owner.principal_id or metadata.tenant_id != owner.tenant_id:
             raise PermissionError("Artifact is not owned by the current principal.")
+
+        data = path.read_bytes()
 
         artifact = StoredArtifact(
             data=data,

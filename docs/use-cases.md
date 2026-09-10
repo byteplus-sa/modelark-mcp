@@ -390,5 +390,6 @@ The presigned URL is valid for 30 minutes by default (configurable via
 `TOS_PRESIGN_TTL_SECONDS` or `S3_PRESIGN_TTL_SECONDS` depending on the
 selected backend). When the URL expires, use `media_presign` with the
 `object_key` from the original upload to generate a fresh URL without
-re-uploading. The bucket remains private; the presigned URL is the only
-way for BytePlus to read the object.
+re-uploading. To renew many references at once, use `media_presign_batch`
+with a list of `object_keys`. The bucket remains private; the presigned URL is
+the only way for BytePlus to read the object.

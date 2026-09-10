@@ -33,7 +33,11 @@ class SeedanceGetTaskInput(BaseModel):
 
     task_id: str = Field(
         ...,
-        description="The task ID returned by seedance_create_task or seedance_create_task_variations.",
+        description=(
+            "The task ID returned by seedance_create_task, "
+            "seedance_create_task_variations, seedance_2_5_create_task, "
+            "or seedance_2_5_create_task_variations."
+        ),
     )
     persist_output: bool = Field(
         True,
@@ -82,7 +86,7 @@ async def seedance_get_task(
     await ctx.report_progress(progress=20, total=100)
     runtime = get_runtime(ctx)
     owner = get_principal(ctx)
-    await runtime.ownership_store.require_owner(input.task_id, owner)
+    await runtime.ownership_store.require_owner("modelark", input.task_id, owner)
 
     service = SeedanceService()
     try:
@@ -108,7 +112,7 @@ async def seedance_get_task(
     last_frame_ref: ArtifactRef | None = None
 
     if task.status == "succeeded" and input.persist_output:
-        cache = runtime.persistence_cache.get(input.task_id)
+        cache = await runtime.task_artifact_cache.get("modelark", input.task_id)
         if cache:
             video_ref = cache.get("video")
             last_frame_ref = cache.get("last_frame")
@@ -156,13 +160,18 @@ async def seedance_get_task(
                     )
                     await ctx.warning(f"Failed to persist last-frame artifact: {exc}")
 
-            # Only cache if at least one artifact was persisted.
-            # Don't cache failures — allow retry on next poll.
-            if video_ref is not None or last_frame_ref is not None:
-                runtime.persistence_cache[input.task_id] = {
-                    "video": video_ref,
-                    "last_frame": last_frame_ref,
-                }
+            video_ok = task.video_url is None or video_ref is not None
+            last_frame_ok = task.last_frame_url is None or last_frame_ref is not None
+
+            if video_ok and last_frame_ok:
+                await runtime.task_artifact_cache.set(
+                    "modelark",
+                    input.task_id,
+                    {
+                        "video": video_ref,
+                        "last_frame": last_frame_ref,
+                    },
+                )
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

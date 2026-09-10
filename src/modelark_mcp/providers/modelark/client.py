@@ -80,7 +80,7 @@ class ModelArkGateway(BaseHttpGateway):
         message = error_obj.get("message", str(body)) if isinstance(error_obj, dict) else str(body)
 
         retryable = status == 429 or status >= 500
-        mutation = operation in {"generate_image", "create_task", "delete_task"}
+        mutation = operation in {"generate_image", "create_task", "delete_task", "chat_completion"}
         retry_after = response.headers.get("Retry-After")
         try:
             retry_after_seconds = float(retry_after) if retry_after is not None else None

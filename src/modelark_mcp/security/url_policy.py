@@ -15,9 +15,17 @@ from urllib.parse import SplitResult, urlsplit
 
 import httpx
 
+from modelark_mcp.observability.logger import warning as log_warning
+
 
 class UrlValidationError(ValueError):
-    """Raised when a URL fails security validation."""
+    """Raised when a URL fails security validation.
+
+    ``safe_message`` is a caller-visible message that never contains the
+    hostname or IP that failed validation (which ``str(exc)`` does).
+    """
+
+    safe_message = "Invalid media URL."
 
 
 _BLOCKED_HOSTS: frozenset[str] = frozenset(
@@ -63,6 +71,7 @@ def _is_blocked_address(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> 
         or addr.is_multicast
         or addr.is_reserved
         or addr.is_unspecified
+        or not addr.is_global
     )
     if blocked or isinstance(addr, ipaddress.IPv4Address):
         return blocked
@@ -93,6 +102,13 @@ def validate_url_syntax(url: str, *, allow_http: bool = False) -> tuple[SplitRes
     except (UnicodeError, ValueError) as exc:
         raise UrlValidationError(f"URL has an invalid hostname or port: {exc}") from exc
 
+    allowed_ports = {443} if parsed.scheme == "https" else {80}
+    if parsed.port is not None and parsed.port not in allowed_ports:
+        raise UrlValidationError(
+            f"URL port '{parsed.port}' is not allowed for {parsed.scheme}. "
+            f"Allowed ports: {sorted(allowed_ports)}."
+        )
+
     if hostname in _BLOCKED_HOSTS:
         raise UrlValidationError(f"Host '{hostname}' is blocked (metadata endpoint).")
     return parsed, hostname, port
@@ -113,9 +129,11 @@ def resolve_public_addresses(
         try:
             raw_addresses = tuple((resolver or system_resolver)(hostname, port))
         except (OSError, socket.gaierror) as exc:
+            log_warning("url_resolution_failed", reason="dns_error")
             raise UrlValidationError(f"Failed to resolve hostname '{hostname}': {exc}") from exc
 
     if not raw_addresses:
+        log_warning("url_resolution_failed", reason="no_addresses")
         raise UrlValidationError(f"Hostname '{hostname}' did not resolve to an address.")
 
     addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
@@ -127,6 +145,7 @@ def resolve_public_addresses(
                 f"Resolver returned invalid IP address '{raw_address}' for '{hostname}'."
             ) from exc
         if _is_blocked_address(address):
+            log_warning("url_blocked", reason="private_or_reserved_ip")
             raise UrlValidationError(f"Hostname '{hostname}' resolves to blocked IP '{address}'.")
         addresses.append(address)
     return tuple(dict.fromkeys(addresses))

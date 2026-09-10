@@ -48,7 +48,8 @@ class SeedanceListTasksInput(BaseModel):
     model: str | None = Field(
         None,
         description=(
-            "Filter tasks by model ID. Default available: 'dreamina-seedance-2-0-260128' (Standard). "
+            "Filter tasks by model ID. Available: 'dreamina-seedance-2-0-260128' (Standard), "
+            "'dreamina-seedance-2-5-260628' (2.5). "
             "Fast and Mini model IDs may also be configured via SEEDANCE_MODEL_BINDINGS."
         ),
     )
@@ -81,7 +82,7 @@ async def seedance_list_tasks(
     await ctx.info("Listing Seedance tasks")
     await ctx.report_progress(progress=20, total=100)
     owner = get_principal(ctx)
-    owned_task_ids = await get_runtime(ctx).ownership_store.list_task_ids(owner)
+    owned_task_ids = await get_runtime(ctx).ownership_store.list_task_ids("modelark", owner)
 
     requested_task_ids = input.task_ids
     if not owner.is_local:

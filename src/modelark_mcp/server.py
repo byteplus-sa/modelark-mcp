@@ -12,7 +12,7 @@ import os
 import subprocess  # nosec B404
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import truststore
@@ -22,6 +22,7 @@ truststore.inject_into_ssl()
 from fastmcp import Context, FastMCP  # noqa: E402
 from fastmcp.resources import ResourceContent, ResourceResult  # noqa: E402
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest  # noqa: E402
+from starlette.middleware import Middleware  # noqa: E402
 from starlette.responses import JSONResponse, Response  # noqa: E402
 
 if TYPE_CHECKING:
@@ -43,6 +44,10 @@ from modelark_mcp.runtime import (  # noqa: E402
 from modelark_mcp.security.http_auth import (  # noqa: E402
     build_auth_provider,
     component_auth,
+)
+from modelark_mcp.security.http_middleware import (  # noqa: E402
+    RateLimitMiddleware,
+    RequestBodyLimitMiddleware,
 )
 
 
@@ -101,6 +106,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             MediaPresignOutput,
             media_presign,
         )
+        from modelark_mcp.tools.media_presign_batch import (
+            TOOL_ANNOTATIONS as presign_batch_annotations,
+        )
+        from modelark_mcp.tools.media_presign_batch import (
+            MediaPresignBatchOutput,
+            media_presign_batch,
+        )
         from modelark_mcp.tools.media_upload import (
             TOOL_ANNOTATIONS as upload_annotations,
         )
@@ -121,6 +133,12 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             output_schema=MediaPresignOutput.model_json_schema(),
             auth=component_auth(settings, "media:presign"),
         )(media_presign)
+        server.tool(
+            name="media_presign_batch",
+            annotations={**presign_batch_annotations},
+            output_schema=MediaPresignBatchOutput.model_json_schema(),
+            auth=component_auth(settings, "media:presign"),
+        )(media_presign_batch)
 
     if settings.has_stt:
         from modelark_mcp.tools.speech_to_text import (
@@ -138,10 +156,164 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             auth=component_auth(settings, "seed:asr:transcribe"),
         )(speech_to_text)
 
+    if settings.has_vod_mediakit:
+        from modelark_mcp.tools.vod_add_subtitles import (
+            TOOL_ANNOTATIONS as vod_add_subtitles_annotations,
+        )
+        from modelark_mcp.tools.vod_add_subtitles import (
+            VodAddSubtitlesOutput,
+            vod_add_subtitles,
+        )
+        from modelark_mcp.tools.vod_enhance_video import (
+            TOOL_ANNOTATIONS as vod_enhance_annotations,
+        )
+        from modelark_mcp.tools.vod_enhance_video import (
+            VodEnhanceVideoOutput,
+            vod_enhance_video,
+        )
+        from modelark_mcp.tools.vod_get_audio_separation import (
+            TOOL_ANNOTATIONS as vod_get_audio_separation_annotations,
+        )
+        from modelark_mcp.tools.vod_get_audio_separation import (
+            VodAudioSeparationTaskOutput,
+            vod_get_audio_separation,
+        )
+        from modelark_mcp.tools.vod_get_enhancement_task import (
+            TOOL_ANNOTATIONS as vod_get_enhancement_annotations,
+        )
+        from modelark_mcp.tools.vod_get_enhancement_task import (
+            VodEnhancementTaskOutput,
+            vod_get_enhancement_task,
+        )
+        from modelark_mcp.tools.vod_get_subtitle_addition_task import (
+            TOOL_ANNOTATIONS as vod_get_subtitle_addition_annotations,
+        )
+        from modelark_mcp.tools.vod_get_subtitle_addition_task import (
+            VodSubtitleAdditionTaskOutput,
+            vod_get_subtitle_addition_task,
+        )
+        from modelark_mcp.tools.vod_get_subtitle_removal_task import (
+            TOOL_ANNOTATIONS as vod_get_subtitle_removal_annotations,
+        )
+        from modelark_mcp.tools.vod_get_subtitle_removal_task import (
+            VodSubtitleRemovalTaskOutput,
+            vod_get_subtitle_removal_task,
+        )
+        from modelark_mcp.tools.vod_get_transcode_task import (
+            TOOL_ANNOTATIONS as vod_get_transcode_annotations,
+        )
+        from modelark_mcp.tools.vod_get_transcode_task import (
+            VodTranscodeTaskOutput,
+            vod_get_transcode_task,
+        )
+        from modelark_mcp.tools.vod_remove_subtitles import (
+            TOOL_ANNOTATIONS as vod_remove_subtitles_annotations,
+        )
+        from modelark_mcp.tools.vod_remove_subtitles import (
+            VodRemoveSubtitlesOutput,
+            vod_remove_subtitles,
+        )
+        from modelark_mcp.tools.vod_separate_audio import (
+            TOOL_ANNOTATIONS as vod_separate_audio_annotations,
+        )
+        from modelark_mcp.tools.vod_separate_audio import (
+            VodSeparateAudioOutput,
+            vod_separate_audio,
+        )
+        from modelark_mcp.tools.vod_transcode_video import (
+            TOOL_ANNOTATIONS as vod_transcode_annotations,
+        )
+        from modelark_mcp.tools.vod_transcode_video import (
+            VodTranscodeVideoOutput,
+            vod_transcode_video,
+        )
+
+        server.tool(
+            name="vod_enhance_video",
+            annotations={**vod_enhance_annotations},
+            output_schema=VodEnhanceVideoOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:enhance"),
+        )(vod_enhance_video)
+        server.tool(
+            name="vod_get_enhancement_task",
+            annotations={**vod_get_enhancement_annotations},
+            output_schema=VodEnhancementTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_enhancement_task)
+        server.tool(
+            name="vod_transcode_video",
+            annotations={**vod_transcode_annotations},
+            output_schema=VodTranscodeVideoOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:transcode"),
+        )(vod_transcode_video)
+        server.tool(
+            name="vod_get_transcode_task",
+            annotations={**vod_get_transcode_annotations},
+            output_schema=VodTranscodeTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_transcode_task)
+        server.tool(
+            name="vod_separate_audio",
+            annotations={**vod_separate_audio_annotations},
+            output_schema=VodSeparateAudioOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:extract"),
+        )(vod_separate_audio)
+        server.tool(
+            name="vod_get_audio_separation",
+            annotations={**vod_get_audio_separation_annotations},
+            output_schema=VodAudioSeparationTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_audio_separation)
+        server.tool(
+            name="vod_add_subtitles",
+            annotations={**vod_add_subtitles_annotations},
+            output_schema=VodAddSubtitlesOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:subtitle:add"),
+        )(vod_add_subtitles)
+        server.tool(
+            name="vod_get_subtitle_addition_task",
+            annotations={**vod_get_subtitle_addition_annotations},
+            output_schema=VodSubtitleAdditionTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_subtitle_addition_task)
+        server.tool(
+            name="vod_remove_subtitles",
+            annotations={**vod_remove_subtitles_annotations},
+            output_schema=VodRemoveSubtitlesOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:subtitle:remove"),
+        )(vod_remove_subtitles)
+        server.tool(
+            name="vod_get_subtitle_removal_task",
+            annotations={**vod_get_subtitle_removal_annotations},
+            output_schema=VodSubtitleRemovalTaskOutput.model_json_schema(),
+            auth=component_auth(settings, "vod:read"),
+        )(vod_get_subtitle_removal_task)
+
     if not settings.has_modelark:
         log_info("tools_skipped", reason="BYTEPLUS_MODELARK_API_KEY not configured")
         return
 
+    from modelark_mcp.tools.seed_understand import (
+        TOOL_ANNOTATIONS as understand_annotations,
+    )
+    from modelark_mcp.tools.seed_understand import (
+        SeedUnderstandOutput,
+        seed_understand,
+    )
+    from modelark_mcp.tools.seedance_2_5_create_task import (
+        TOOL_ANNOTATIONS as create_2_5_annotations,
+    )
+    from modelark_mcp.tools.seedance_2_5_create_task import (
+        Seedance25CreateTaskOutput,
+        seedance_2_5_create_task,
+    )
+    from modelark_mcp.tools.seedance_2_5_create_task_variations import (
+        TOOL_ANNOTATIONS as seedance_2_5_var_annotations,
+    )
+    from modelark_mcp.tools.seedance_2_5_create_task_variations import (
+        Seedance25VariationsOutput,
+        seedance_2_5_create_task_variations,
+    )
     from modelark_mcp.tools.seedance_cancel_or_delete_task import (
         TOOL_ANNOTATIONS as cancel_annotations,
     )
@@ -226,6 +398,20 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             seedance_create_task_variations,
         ),
         (
+            "seedance_2_5_create_task",
+            create_2_5_annotations,
+            Seedance25CreateTaskOutput,
+            "seedance:create",
+            seedance_2_5_create_task,
+        ),
+        (
+            "seedance_2_5_create_task_variations",
+            seedance_2_5_var_annotations,
+            Seedance25VariationsOutput,
+            "seedance:create",
+            seedance_2_5_create_task_variations,
+        ),
+        (
             "seedance_get_task",
             get_annotations,
             SeedanceTaskOutput,
@@ -246,6 +432,13 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             "seedance:delete",
             seedance_cancel_or_delete_task,
         ),
+        (
+            "seed_understand",
+            understand_annotations,
+            SeedUnderstandOutput,
+            "understanding:read",
+            seed_understand,
+        ),
     )
     for name, tool_annotations, output_model, scope, handler in registrations:
         server.tool(
@@ -254,6 +447,158 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             output_schema=output_model.model_json_schema(),
             auth=component_auth(settings, scope),
         )(handler)
+
+    if settings.has_seed3d:
+        from modelark_mcp.tools._seed3d_shared import (
+            Seed3DCancelOrDeleteOutput,
+            Seed3DCreateTaskOutput,
+            Seed3DTaskOutput,
+            Seed3DTaskPage,
+        )
+        from modelark_mcp.tools.hitem3d_cancel_or_delete_task import (
+            TOOL_ANNOTATIONS as hitem3d_cancel_annotations,
+        )
+        from modelark_mcp.tools.hitem3d_cancel_or_delete_task import (
+            hitem3d_cancel_or_delete_task,
+        )
+        from modelark_mcp.tools.hitem3d_create_task import (
+            TOOL_ANNOTATIONS as hitem3d_create_annotations,
+        )
+        from modelark_mcp.tools.hitem3d_create_task import hitem3d_create_task
+        from modelark_mcp.tools.hitem3d_get_task import (
+            TOOL_ANNOTATIONS as hitem3d_get_annotations,
+        )
+        from modelark_mcp.tools.hitem3d_get_task import hitem3d_get_task
+        from modelark_mcp.tools.hitem3d_list_tasks import (
+            TOOL_ANNOTATIONS as hitem3d_list_annotations,
+        )
+        from modelark_mcp.tools.hitem3d_list_tasks import hitem3d_list_tasks
+        from modelark_mcp.tools.hyper3d_cancel_or_delete_task import (
+            TOOL_ANNOTATIONS as hyper3d_cancel_annotations,
+        )
+        from modelark_mcp.tools.hyper3d_cancel_or_delete_task import (
+            hyper3d_cancel_or_delete_task,
+        )
+        from modelark_mcp.tools.hyper3d_create_task import (
+            TOOL_ANNOTATIONS as hyper3d_create_annotations,
+        )
+        from modelark_mcp.tools.hyper3d_create_task import hyper3d_create_task
+        from modelark_mcp.tools.hyper3d_get_task import (
+            TOOL_ANNOTATIONS as hyper3d_get_annotations,
+        )
+        from modelark_mcp.tools.hyper3d_get_task import hyper3d_get_task
+        from modelark_mcp.tools.hyper3d_list_tasks import (
+            TOOL_ANNOTATIONS as hyper3d_list_annotations,
+        )
+        from modelark_mcp.tools.hyper3d_list_tasks import hyper3d_list_tasks
+
+        seed3d_registrations = (
+            (
+                "hyper3d_create_task",
+                hyper3d_create_annotations,
+                Seed3DCreateTaskOutput,
+                "hyper3d:create",
+                hyper3d_create_task,
+            ),
+            (
+                "hyper3d_get_task",
+                hyper3d_get_annotations,
+                Seed3DTaskOutput,
+                "hyper3d:read",
+                hyper3d_get_task,
+            ),
+            (
+                "hyper3d_list_tasks",
+                hyper3d_list_annotations,
+                Seed3DTaskPage,
+                "hyper3d:read",
+                hyper3d_list_tasks,
+            ),
+            (
+                "hyper3d_cancel_or_delete_task",
+                hyper3d_cancel_annotations,
+                Seed3DCancelOrDeleteOutput,
+                "hyper3d:delete",
+                hyper3d_cancel_or_delete_task,
+            ),
+            (
+                "hitem3d_create_task",
+                hitem3d_create_annotations,
+                Seed3DCreateTaskOutput,
+                "hitem3d:create",
+                hitem3d_create_task,
+            ),
+            (
+                "hitem3d_get_task",
+                hitem3d_get_annotations,
+                Seed3DTaskOutput,
+                "hitem3d:read",
+                hitem3d_get_task,
+            ),
+            (
+                "hitem3d_list_tasks",
+                hitem3d_list_annotations,
+                Seed3DTaskPage,
+                "hitem3d:read",
+                hitem3d_list_tasks,
+            ),
+            (
+                "hitem3d_cancel_or_delete_task",
+                hitem3d_cancel_annotations,
+                Seed3DCancelOrDeleteOutput,
+                "hitem3d:delete",
+                hitem3d_cancel_or_delete_task,
+            ),
+        )
+        for (
+            seed3d_name,
+            seed3d_annotations,
+            seed3d_output_model,
+            seed3d_scope,
+            seed3d_handler,
+        ) in seed3d_registrations:
+            server.tool(
+                name=seed3d_name,
+                annotations={**seed3d_annotations},
+                output_schema=seed3d_output_model.model_json_schema(),
+                auth=component_auth(settings, seed3d_scope),
+            )(seed3d_handler)
+
+
+class HardenedFastMCP(FastMCP):
+    """FastMCP subclass that applies ASGI body and rate-limit middleware for HTTP."""
+
+    def __init__(
+        self,
+        *args: Any,
+        app_settings: Settings | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._app_settings = app_settings
+
+    def http_app(self, *args: Any, **kwargs: Any) -> Any:
+        if self._app_settings is not None and self._app_settings.mcp_transport == "http":
+            asgi_middleware = [
+                Middleware(
+                    RequestBodyLimitMiddleware,
+                    max_bytes=self._app_settings.mcp_http_max_body_bytes,
+                ),
+            ]
+            if self._app_settings.rate_limit_rpm > 0:
+                asgi_middleware.append(
+                    Middleware(
+                        RateLimitMiddleware,
+                        rpm=self._app_settings.rate_limit_rpm,
+                        burst=(
+                            self._app_settings.rate_limit_burst or self._app_settings.rate_limit_rpm
+                        ),
+                        trust_proxy_headers=self._app_settings.rate_limit_trust_proxy_headers,
+                    )
+                )
+            asgi_middleware.extend(kwargs.get("middleware") or [])
+            kwargs["middleware"] = asgi_middleware
+        return super().http_app(*args, **kwargs)
 
 
 def create_server(
@@ -266,16 +611,20 @@ def create_server(
     resolved_settings = settings or get_settings()
     set_level(resolved_settings.log_level)
     runtime_state = RuntimeState()
-    server: FastMCP = FastMCP(
+    server: FastMCP = HardenedFastMCP(
         "ModelArk Seed Multimodal",
         instructions=(
             "BytePlus multimodal generation server. Provides Seed Audio, Seedream, "
-            "Seedance, and Speech-to-Text tools. Generated media is persisted as "
-            "durable MCP resources."
+            "Seedance, Seed 2.1 multimodal understanding, and Speech-to-Text tools. "
+            "BytePlus VOD AI MediaKit enhancement, video transcoding, subtitle burn-in, "
+            "subtitle or text removal, and voice and background audio separation are "
+            "available when the MediaKit API key is "
+            "configured. Generated media is persisted as durable MCP resources."
         ),
         auth=auth_provider or build_auth_provider(resolved_settings),
         lifespan=build_lifespan(resolved_settings, runtime_factory, runtime_state),
         middleware=[MetricsMiddleware()],
+        app_settings=resolved_settings,
     )
 
     @server.resource(
@@ -317,7 +666,9 @@ def create_server(
             f"Build: {stamp}\n"
             "Status: healthy\n"
             f"ModelArk configured: {resolved_settings.has_modelark}\n"
+            f"Seed 3D configured: {resolved_settings.has_seed3d}\n"
             f"Seed Audio configured: {resolved_settings.has_seed_audio}\n"
+            f"VOD AI MediaKit configured: {resolved_settings.has_vod_mediakit}\n"
             f"TOS configured: {resolved_settings.has_tos}\n"
             f"S3 configured: {resolved_settings.has_s3}\n"
             f"Object storage backend: {resolved_settings.object_storage_backend}\n"
@@ -342,13 +693,111 @@ def create_server(
                 raise RuntimeError("Artifact storage is not writable.")
         except Exception:
             return JSONResponse({"status": "not_ready"}, status_code=503)
-        return JSONResponse({"status": "ready"})
+
+        if not resolved_settings.readiness_check_providers:
+            return JSONResponse({"status": "ready"})
+
+        providers: dict[str, str] = {}
+        timeout = resolved_settings.readiness_provider_timeout_seconds
+
+        if resolved_settings.has_modelark:
+            from modelark_mcp.providers.modelark.client import ModelArkGateway
+
+            modelark_gw = ModelArkGateway(
+                api_key=resolved_settings.modelark_api_key,
+                base_url=resolved_settings.modelark_base_url,
+                timeout=resolved_settings.request_timeout_ms / 1000,
+                connect_timeout=resolved_settings.connect_timeout_ms / 1000,
+            )
+            try:
+                providers["modelark"] = (
+                    "reachable"
+                    if await modelark_gw.health_check(timeout_seconds=timeout)
+                    else "unreachable"
+                )
+            finally:
+                await modelark_gw.close()
+
+        if resolved_settings.has_seed_audio:
+            from modelark_mcp.providers.seed_speech.client import SeedSpeechGateway
+
+            audio_gw = SeedSpeechGateway(
+                api_key=resolved_settings.seed_speech_api_key,
+                base_url=resolved_settings.seed_audio_base_url,
+                timeout=resolved_settings.request_timeout_ms / 1000,
+                connect_timeout=resolved_settings.connect_timeout_ms / 1000,
+            )
+            try:
+                providers["seed_audio"] = (
+                    "reachable"
+                    if await audio_gw.health_check(timeout_seconds=timeout)
+                    else "unreachable"
+                )
+            finally:
+                await audio_gw.close()
+
+        if resolved_settings.has_stt:
+            from modelark_mcp.providers.seed_speech.asr_http import SeedSpeechAsrHttpGateway
+
+            stt_gw = SeedSpeechAsrHttpGateway(
+                api_key=resolved_settings.seed_speech_api_key,
+                base_url=resolved_settings.seed_speech_asr_base_url,
+                timeout=resolved_settings.request_timeout_ms / 1000,
+                connect_timeout=resolved_settings.connect_timeout_ms / 1000,
+            )
+            try:
+                providers["stt"] = (
+                    "reachable"
+                    if await stt_gw.health_check(timeout_seconds=timeout)
+                    else "unreachable"
+                )
+            finally:
+                await stt_gw.close()
+
+        if resolved_settings.has_vod_mediakit:
+            from modelark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
+
+            vod_gw = VodMediaKitGateway(
+                api_key=resolved_settings.vod_mediakit_api_key,
+                base_url=resolved_settings.vod_mediakit_base_url,
+                timeout=resolved_settings.request_timeout_ms / 1000,
+                connect_timeout=resolved_settings.connect_timeout_ms / 1000,
+            )
+            try:
+                providers["vod_mediakit"] = (
+                    "reachable"
+                    if await vod_gw.health_check(timeout_seconds=timeout)
+                    else "unreachable"
+                )
+            finally:
+                await vod_gw.close()
+
+        all_reachable = all(v == "reachable" for v in providers.values())
+        if all_reachable:
+            return JSONResponse({"status": "ready", "providers": providers})
+        return JSONResponse(
+            {"status": "degraded", "providers": providers},
+            status_code=503,
+        )
 
     @server.custom_route("/metrics", methods=["GET"])
     async def metrics(_request: Request) -> Response:
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     register_tools(server, resolved_settings)
+    log_info(
+        "server_ready",
+        transport=resolved_settings.mcp_transport,
+        auth_mode=resolved_settings.mcp_auth_mode.value,
+        modelark_configured=resolved_settings.has_modelark,
+        seed_audio_configured=resolved_settings.has_seed_audio,
+        seed3d_configured=resolved_settings.has_seed3d,
+        stt_configured=resolved_settings.has_stt,
+        vod_mediakit_configured=resolved_settings.has_vod_mediakit,
+        object_storage_backend=resolved_settings.object_storage_backend,
+        artifact_backend=resolved_settings.artifact_backend,
+        log_level=resolved_settings.log_level,
+    )
     return server
 
 

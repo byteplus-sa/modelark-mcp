@@ -108,7 +108,10 @@ defaults to 30 minutes (`TOS_PRESIGN_TTL_SECONDS`); both backends use the same d
 When the same reference media is used across multiple generation calls spread
 over time (e.g. several Seedance tasks throughout a day), re-uploading the
 same file each time is wasteful. The `media_presign` tool generates a fresh
-presigned URL for an existing object without re-uploading:
+presigned URL for an existing object without re-uploading. When many
+references must be presigned at once (e.g. a Seedance 2.5 shot with 30
+reference images), use `media_presign_batch` to presign all object keys in a
+single call.
 
 ```mermaid
 sequenceDiagram
@@ -262,7 +265,7 @@ if input.file_path is not None:
 ### JWT scope
 
 In JWT auth mode, `media_upload` requires the `media:upload` scope and
-`media_presign` requires the `media:presign` scope. See
+`media_presign` / `media_presign_batch` require the `media:presign` scope. See
 [security.md](security.md#scope-taxonomy).
 
 ## Setup guide
@@ -507,6 +510,7 @@ credentials are configured). They work identically with either backend.
 |---|---|---|
 | `media_upload` | `media:upload` | Upload media (Base64 or file), return presigned URL + object key |
 | `media_presign` | `media:presign` | Generate a fresh presigned URL for an existing object key |
+| `media_presign_batch` | `media:presign` | Generate fresh presigned URLs for many object keys in one call |
 
 ## Where to read more
 
@@ -518,4 +522,3 @@ credentials are configured). They work identically with either backend.
 | Durable artifact lifecycle | [artifacts.md](artifacts.md) |
 | Tool reference | [tools.md](tools.md) |
 | Architecture overview | [architecture.md](architecture.md) |
-| Design plan | [../plans/PLAN_S3_OBJECT_STORAGE.md](../plans/PLAN_S3_OBJECT_STORAGE.md) |

@@ -10,7 +10,9 @@ from typing import Any
 
 import httpx
 
+from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.domain.models import Subtitle, SubtitleUtterance, SubtitleWord
+from modelark_mcp.observability.logger import debug as log_debug
 from modelark_mcp.providers.seed_speech.client import SeedSpeechGateway
 from modelark_mcp.providers.seed_speech.schemas import (
     SeedAudioProviderRequest,
@@ -36,6 +38,7 @@ class SeedAudioService:
         diagnostic header.
         Raises ``NormalizedProviderError`` on failure.
         """
+        log_debug("seed_audio_generate", model=request.model)
         try:
             response = await self._gateway.post(
                 "/api/v3/tts/create",
@@ -55,7 +58,26 @@ class SeedAudioService:
             raise SeedSpeechGateway.normalize_error(response, "generate_audio")
 
         body = response.json()
-        return SeedAudioProviderResponse.model_validate(body), log_id
+        parsed = SeedAudioProviderResponse.model_validate(body)
+        if parsed.code not in (0, None, ""):
+            raise ProviderError(
+                NormalizedProviderError(
+                    provider="seed-speech",
+                    operation="generate_audio",
+                    http_status=response.status_code,
+                    code=str(parsed.code),
+                    message=parsed.message or f"Seed Audio failed with code {parsed.code}",
+                    request_id=log_id,
+                    retryable=False,
+                    ambiguous_completion=False,
+                )
+            )
+        log_debug(
+            "seed_audio_generate_complete",
+            status_code=response.status_code,
+            log_id=log_id,
+        )
+        return parsed, log_id
 
     @staticmethod
     def build_request(

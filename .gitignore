@@ -89,6 +89,10 @@ build/
 *.log
 logs/
 
+# Scratch / draft files
+.pr-body.md
+pr-reviews/
+
 # OS
 Thumbs.db
 ehthumbs.db

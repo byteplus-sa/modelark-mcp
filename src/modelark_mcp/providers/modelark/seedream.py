@@ -8,16 +8,28 @@ for MVP — streaming events are deferred per the plan.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
 from modelark_mcp.domain.models import SeedreamItemError, SeedreamUsage
+from modelark_mcp.observability.logger import debug as log_debug
 from modelark_mcp.providers.modelark.client import ModelArkGateway
 from modelark_mcp.providers.modelark.schemas import (
     SeedreamProviderRequest,
     SeedreamProviderResponse,
 )
+from modelark_mcp.providers.modelark.seedance import _parse_success_body
+
+
+def _image_value(item: dict[str, Any]) -> str | None:
+    """Resolve one reference image to a URL or base64 data URI."""
+    if item.get("url"):
+        return cast("str", item["url"])
+    if item.get("data"):
+        mime = item.get("mime_type", "image/png")
+        return f"data:{mime};base64,{item['data']}"
+    return None
 
 
 class SeedreamService:
@@ -35,6 +47,7 @@ class SeedreamService:
         Returns the parsed provider response and the ModelArk request ID.
         Raises ``NormalizedProviderError`` on non-2xx responses or timeouts.
         """
+        log_debug("seedream_generate", model=request.model, stream=request.stream)
         try:
             response = await self._gateway.post(
                 "/images/generations", request.model_dump(exclude_none=True)
@@ -51,8 +64,16 @@ class SeedreamService:
         if response.status_code >= 400:
             raise ModelArkGateway.normalize_error(response, "generate_image")
 
-        body = response.json()
-        return SeedreamProviderResponse.model_validate(body), request_id
+        body = _parse_success_body(response, "generate_image")
+        parsed = SeedreamProviderResponse.model_validate(body)
+        log_debug(
+            "seedream_generate_complete",
+            model=request.model,
+            status_code=response.status_code,
+            request_id=request_id,
+            items=len(parsed.data) if parsed.data else 0,
+        )
+        return parsed, request_id
 
     @staticmethod
     def build_request(
@@ -76,12 +97,10 @@ class SeedreamService:
         image_field: str | list[str] | None = None
         if images:
             if len(images) == 1:
-                image_field = images[0].get("url") or images[0].get("data")
+                image_field = _image_value(images[0])
             else:
                 image_field = [
-                    item.get("url") or item.get("data", "")
-                    for item in images
-                    if item.get("url") or item.get("data")
+                    value for value in (_image_value(item) for item in images) if value is not None
                 ]
 
         sequential = None

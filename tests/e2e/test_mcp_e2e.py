@@ -40,8 +40,12 @@ ARK_BASE = "https://ark.test.example.com/api/v3"
 @pytest.fixture
 def e2e_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> object:
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test-modelark")
-    monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_API_KEY", "sk-test-speech")
-    monkeypatch.setenv("SEED_SPEECH_ASR_API_KEY", "sk-test-asr")
+    monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test-speech")
+    monkeypatch.setenv("BYTEPLUS_VOD_MEDIAKIT_API_KEY", "test-mediakit-key")
+    monkeypatch.setenv("BYTEPLUS_MODELARK_3D_ENABLED", "false")
+    monkeypatch.setenv("TOS_ACCESS_KEY", "ak-test-tos")
+    monkeypatch.setenv("TOS_SECRET_KEY", "sk-test-tos")
+    monkeypatch.setenv("TOS_BUCKET", "test-bucket")
     monkeypatch.setenv("BYTEPLUS_MODELARK_BASE_URL", ARK_BASE)
     monkeypatch.setenv("BYTEPLUS_SEED_AUDIO_BASE_URL", "https://voice.test.example.com")
     monkeypatch.setenv("SEEDREAM_DEFAULT_MODEL", "dola-seedream-5-0-pro-260628")
@@ -103,12 +107,26 @@ class TestToolDiscovery:
                 "seedream_generate_image_variations",
                 "seedance_create_task",
                 "seedance_create_task_variations",
+                "seedance_2_5_create_task",
+                "seedance_2_5_create_task_variations",
                 "seedance_get_task",
                 "seedance_list_tasks",
                 "seedance_cancel_or_delete_task",
+                "seed_understand",
                 "speech_to_text",
                 "media_upload",
                 "media_presign",
+                "media_presign_batch",
+                "vod_enhance_video",
+                "vod_get_enhancement_task",
+                "vod_transcode_video",
+                "vod_get_transcode_task",
+                "vod_separate_audio",
+                "vod_get_audio_separation",
+                "vod_add_subtitles",
+                "vod_get_subtitle_addition_task",
+                "vod_remove_subtitles",
+                "vod_get_subtitle_removal_task",
             }
 
     async def test_tool_has_input_schema(self, e2e_server: object) -> None:

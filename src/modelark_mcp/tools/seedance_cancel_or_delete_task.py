@@ -109,6 +109,7 @@ async def seedance_cancel_or_delete_task(
     )
     await ctx.report_progress(progress=20, total=100)
     await get_runtime(ctx).ownership_store.require_owner(
+        "modelark",
         input.task_id,
         get_principal(ctx),
     )

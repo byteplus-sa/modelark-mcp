@@ -28,7 +28,6 @@ source:
   - https://github.com/astral-sh/setup-uv
   - https://hub.docker.com/_/python/
 related:
-  - ../REVIEW_CODEBASE_GAP_ANALYSIS.md
   - PLAN_MODELARK_SEED_MULTIMODAL_MCP.md
   - PLAN_PARALLEL_GENERATION.md
 ---

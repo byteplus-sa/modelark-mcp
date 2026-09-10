@@ -2,11 +2,11 @@
 
 The server exposes a conditional set of typed tools. `seed_media_get_artifact`
 is always available, provider tools are registered only when their credentials
-are configured, and `media_upload` and `media_presign` are registered when
-object storage credentials (TOS or S3) are present. Each tool accepts a
-Pydantic input model and returns a Pydantic output model as structured
-content. All tools accept a `ctx: Context` parameter for progress reporting
-and logging.
+are configured, and `media_upload`, `media_presign`, and `media_presign_batch`
+are registered when object storage credentials (TOS or S3) are present. Each
+tool accepts a Pydantic input model and returns a Pydantic output model as
+structured content. All tools accept a `ctx: Context` parameter for progress
+reporting and logging.
 
 ## Tool Contract for MCP Clients
 
@@ -51,6 +51,268 @@ Retrieve persisted media inline by artifact ID.
 Returns `SeedMediaGetArtifactOutput` with `artifact_id`, `media_type`,
 `mime_type`, `sha256`, `bytes`, and Base64 `data`.
 
+## vod_enhance_video
+
+Enhance a public HTTPS source video through BytePlus VOD AI MediaKit. This
+tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses
+the `vod:enhance` JWT scope.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `video_url` | URL | Yes | Public HTTPS source; private and link-local destinations are rejected |
+| `scene` | `"common"` | No | Fixed current scene profile |
+| `tool_version` | `"professional"` | No | Fixed current enhancement profile |
+| `resolution` | `"4k"` | No | Fixed current output resolution |
+| `bitrate_level` | `"high"` | No | Fixed current bitrate profile |
+| `fps` | `24` | No | Fixed current frame rate in frames per second |
+| `project` | string | No | Defaults to `default`; serialized upstream as `Project` |
+| `input_duration_seconds` | number | No | Reserved for future pricing support; currently produces no estimate |
+| `persist` | boolean | No | Best-effort artifact copy (default: true) |
+
+### Output and execution limits
+
+The verified provider contract returns `status="accepted"` with a task ID for
+`vod_get_enhancement_task`. The non-idempotent POST is not retried automatically
+because a timeout can have ambiguous completion. A completed output always
+preserves `source_url`. Persistence is reported as `not_applicable`, `persisted`,
+`failed`, or `not_requested`, and a failed artifact copy does not erase provider success.
+Durable video copies remain subject to the 200 MiB limit.
+
+The success-body mapping remains provisional and rejects unknown response
+shapes. `estimated_cost_usd` is always null until convenience-endpoint pricing
+is confirmed.
+
+## vod_get_enhancement_task
+
+Poll the status and retrieve the output of a BytePlus VOD AI MediaKit enhancement
+task. This tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set
+and uses the `vod:read` JWT scope.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | string | Yes | Task ID returned by `vod_enhance_video` |
+| `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true) |
+
+### Output and execution limits
+
+Returns `VodEnhancementTaskOutput` with normalized `processing`, `succeeded`, or
+`failed` status. A completed result includes `source_url`, its 24-hour expiry,
+duration, resolution, frame rate, enhancement tier, and provider timestamps.
+With `persist_output=true`, concurrent first polls share one artifact copy and
+the result is cached by task ID for later reuse. Cache failures emit safe
+warnings but preserve any created artifact and the provider success. Artifact
+copy failures are reported separately; durable video copies remain capped at
+200 MiB.
+
+## vod_transcode_video
+
+Submit an asynchronous BytePlus VOD AI MediaKit video transcoding task. This
+tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses the
+`vod:transcode` JWT scope.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `video_url` | URL | Yes | Public HTTPS source; private and link-local destinations are rejected |
+| `container_format` | `"MP4"` \| `"FLV"` \| `"MPEGTS"` | No | Output container format (default: `MP4`) |
+| `video` | VodTranscodeVideoOptions | No | Transcoding options (defaults reproduce the verified portrait-to-720x720 letterbox profile) |
+
+**VodTranscodeVideoOptions:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `codec` | `"h264"` \| `"h265"` | `"h264"` | Output video codec |
+| `scale_type` | `0` \| `1` \| `2` | `2` | `0` follow source, `1` long/short-side limit, `2` width/height limit |
+| `scale_mode` | `0` \| `1` \| `2` | `2` | `0` no upsampling, `1` stretch, `2` letterbox with black bars |
+| `scale_width` | integer \| null | `null` | Target width px [0,4320]; only when `scale_type=2` (defaults to 720) |
+| `scale_height` | integer \| null | `null` | Target height px [0,4320]; only when `scale_type=2` (defaults to 720) |
+| `scale_short` | integer \| null | `null` | Target short side px [0,4320]; only when `scale_type=1` |
+| `scale_long` | integer \| null | `null` | Target long side px [0,4320]; only when `scale_type=1` |
+| `bitrate_mode` | `"crf"` \| `"abr"` \| `"cbr"` | `"crf"` | Bitrate control mode |
+| `bitrate_crf` | integer | `25` | CRF quality [0,51]; only used when `bitrate_mode=crf` |
+| `bitrate_kbps` | integer | `2000` | Bitrate in kbps [10,50000] |
+| `fps_mode` | `"vfr"` \| `"cfr"` | `"vfr"` | Frame-rate mode; only takes effect after `fps` is set |
+| `fps` | integer \| null | `null` | Target frame rate [1,240]; unset keeps source rate |
+| `is_hdr_to_sdr` | boolean | `true` | Convert HDR to SDR; false keeps HDR |
+
+### Output
+
+Returns `VodTranscodeVideoOutput` with `status="accepted"` plus the `task_id`
+to poll via `vod_get_transcode_task` and a heuristic `recommended_poll_after_ms`.
+The non-idempotent POST is not retried automatically because a timeout can have
+ambiguous completion.
+
+### Example
+
+```json
+{
+  "video_url": "https://media.example.com/portrait.mp4",
+  "container_format": "MP4",
+  "video": {
+    "scale_type": 2,
+    "scale_width": 720,
+    "scale_height": 720,
+    "scale_mode": 2
+  }
+}
+```
+
+## vod_get_transcode_task
+
+Poll the status and output of a BytePlus VOD AI MediaKit transcode task. This
+tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses the
+`vod:read` JWT scope.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | string | Yes | Task ID returned by `vod_transcode_video` |
+| `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true) |
+
+### Output and execution limits
+
+Returns `VodTranscodeTaskOutput` with a normalized `status` of `processing`,
+`succeeded`, or `failed` (the provider documents only `running`/`completed`/
+`failed`). On success, `source_url` (24-hour lifetime) and optional metadata
+(`duration_seconds`, `resolution`, `video_codec`) are returned; when
+`persist_output=true` the output is copied once into the durable artifact store
+and cached by task ID so repeated polls do not re-download. Persistence is
+reported as `not_applicable`, `not_requested`, `persisted`, or `failed`, and a
+failed artifact copy does not erase provider success. Durable video copies
+remain subject to the 200 MiB limit. On failure, `error.code`/`error.message`
+carry the safe provider failure detail. GET polling is retried only on
+provider-marked retryable errors (e.g. 429).
+
+## vod_add_subtitles
+
+Burn subtitles into a public HTTPS video with MediaKit. Supply either
+`subtitle_url` for an SRT, VTT, or ASS file or a non-empty `subtitles` list of
+`subtitle_text`, `start_time`, and `end_time` cues. If both are supplied, the
+subtitle file takes priority. The tool uses `vod:subtitle:add` in JWT mode and
+returns a task ID for `vod_get_subtitle_addition_task`.
+
+Style options are `subtitle_pos_preset` (`bottom_center`, `top_center`,
+`center`, `lower_third`), positive `subtitle_font_size`, RGBA
+`subtitle_font_color` (`#RRGGBBAA`), and a documented MediaKit font identifier.
+Optional `client_token` supports submission reconciliation; callback and queue
+fields are also available. `project` is a legacy convenience-endpoint extension
+and is omitted by default.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+## vod_get_subtitle_addition_task
+
+Poll the task returned by `vod_add_subtitles`. The tool uses `vod:read`, maps
+provider lifecycle states to `processing`, `succeeded`, or `failed`, and can
+best-effort persist the MP4 output when `persist_output=true` (default). A
+succeeded response always preserves the expiring `source_url`; persistence
+failure is reported separately and does not erase provider success.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+## vod_remove_subtitles
+
+Remove hardcoded dialogue subtitles or recognized on-screen text from a public
+HTTPS video with MediaKit precision erasure. `mode="subtitle"` is the safe
+default; `mode="text"` is broader and may remove titles, labels, or watermarks.
+`output_encode_mode` selects `quality` (default) or `size`. Optional controls
+include up to 20 normalized erasure rectangles, selected/skipped time segments,
+subtitle OCR thresholds, callbacks, a queue ID, and a `client_token`. The
+legacy `model_version` (`v4`/`v5`) and `project` extensions are omitted unless
+explicitly supplied. The tool uses `vod:subtitle:remove` and returns a task ID
+for `vod_get_subtitle_removal_task`.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+## vod_get_subtitle_removal_task
+
+Poll the task returned by `vod_remove_subtitles`. Its normalized lifecycle,
+optional durable MP4 persistence, source-URL preservation, and failure behavior
+match `vod_get_subtitle_addition_task`. The tool uses `vod:read`.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+## vod_separate_audio
+
+Submit an asynchronous BytePlus VOD AI MediaKit voice and background audio
+separation task (`POST /api/v1/tools/separate-voice`). This tool is registered
+when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses the `vod:extract` JWT
+scope.
+
+Input takes a public HTTPS `audio_url` or `video_url` (exactly one), a `scene`,
+and an `output_format`.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `audio_url` | string | No | Public HTTPS audio URL (mp3, m4a, wav). Exactly one of `audio_url`/`video_url` |
+| `video_url` | string | No | Public HTTPS video URL (mp4, flv, ts, avi, mov, wmv, mkv). Exactly one of `audio_url`/`video_url` |
+| `scene` | string | No | `Audio` (default), `Music`, `Drama`, `Narrate`. `Audio`/`Music` produce 2 tracks; `Drama`/`Narrate` produce 3 |
+| `output_format` | string | No | `aac` (default), `mp3`, `wav`, `m4a`, `flac` |
+
+### Output
+
+Returns `VodSeparateAudioOutput` with `provider` `byteplus-vod-mediakit`,
+`status` `accepted`, the provider `request_id` and `provider_log_id`, the
+`task_id` to poll with `vod_get_audio_separation`, and a heuristic
+`recommended_poll_after_ms`. The POST is non-idempotent and is never retried
+automatically (timeout/5xx means ambiguous completion).
+
+## vod_get_audio_separation
+
+Poll a BytePlus VOD AI MediaKit separate-voice task (`GET
+/api/v1/tasks/{task_id}`). This tool is registered when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses the `vod:read` JWT scope.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | string | Yes | Task ID returned by `vod_separate_audio` |
+| `persist_output` | boolean | No | Copy completed tracks into durable artifact storage on first successful poll (default `true`) |
+
+### Output and execution limits
+
+Returns `VodAudioSeparationTaskOutput` with a normalized `status` of
+`processing`, `succeeded`, or `failed`. On success, `voice`, `background`,
+`music`, and `sfx` each carry the track's expiring `source_url` (valid 24
+hours) and, when best-effort persistence succeeds, a durable `artifact`
+reference. `persist_output=true` copies each track once and caches it by task
+ID so repeated polls do not re-download; persistence is reported per track as
+`not_requested`, `persisted`, or `failed`, and a failed copy does not erase
+provider success. On failure, `error.code`/`error.message` carry the safe
+provider detail. GET polling is retried only on provider-marked retryable
+errors (e.g. 429).
+
 ## seed_audio_generate
 
 Generate full-scene audio through Seed Speech.
@@ -63,7 +325,7 @@ Generate full-scene audio through Seed Speech.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `text_prompt` | string | Yes | Text to synthesize (1-3000 chars) |
-| `audio_references` | list[AudioReference] | No | Up to 3 audio references (speaker/url/base64) |
+| `audio_references` | list[AudioReference] | No | Up to 3 audio references (speaker/url/base64). Base64 WAV preflight-checked against 30s limit. |
 | `image_reference` | MediaSource | No | Image reference (mutually exclusive with audio) |
 | `output` | AudioOutputOptions | No | Format, sample rate, speech rate, pitch |
 | `watermark` | AudioWatermarkOptions | No | AIGC watermark controls |
@@ -151,13 +413,14 @@ Create an asynchronous Seedance video generation task.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `prompt` | string | No | Text prompt (1-32,000 chars) |
-| `images` | list[SeedanceImageInput] | No | Image inputs with roles |
-| `videos` | list[SeedanceVideoInput] | No | Reference videos (max 3) |
-| `audios` | list[SeedanceAudioInput] | No | Reference audio (max 3) |
+| `images` | list[SeedanceImageInput] | No | Image inputs with roles. Each entry may be a plain URL string or `{"url": ...}` (coerced to `role=reference_image`) |
+| `videos` | list[SeedanceVideoInput] | No | Reference videos (max 3). Each entry may be a plain URL string or `{"url": ...}` |
+| `audios` | list[SeedanceAudioInput] | No | Reference audio (max 3). Each entry may be a plain URL string or `{"url": ...}` |
 | `model` | string | No | Override configured model ID |
 | `resolution` | "480p" \| "720p" \| "1080p" \| "4k" | No | Output resolution |
-| `ratio` | string | No | Aspect ratio |
-| `duration` | integer | No | Duration in seconds (-1 for auto, 4-15) |
+| `ratio` | string | No | Aspect ratio. For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
+| `duration` | integer | No | Duration in seconds (-1 for auto, 4-15). Ignored for edit tasks (auto-derived) |
+| `omni_reference_task_type` | string | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
 | `generate_audio` | boolean | No | Generate audio for the video |
 | `watermark` | boolean | No | AIGC watermark |
 | `return_last_frame` | boolean | No | Return last frame as image |
@@ -169,9 +432,60 @@ Text-only input (prompt with no media) is supported for pure text-to-video
 generation. Audio cannot be the sole media input — at least a prompt,
 image, or video is required.
 
+#### Auto-locked parameters by task type
+
+When the provider detects (or is hinted via `omni_reference_task_type`)
+that the task is video editing, extension, or first/last-frame generation,
+certain parameters are auto-derived from the input media:
+
+| Task type | Aspect ratio | Duration |
+|---|---|---|
+| Video editing | Locked to input video | Locked to input video (±0.3s) |
+| Video extension | Locked to input video | Set freely |
+| First/last-frame | Locked to first image | Set freely |
+| Text-to-video / reference | Set freely | Set freely (or `-1`) |
+
 ### Output
 
 Returns a `SeedanceCreateTaskOutput` with task ID, status, and recommended
+poll delay in `recommended_poll_after_ms`.
+
+## seedance_2_5_create_task
+
+Create an asynchronous Seedance 2.5 video generation task. Supports up to
+30-second video generation, 50 multimodal references (30 images, 10 videos,
+10 audio), and 480p/720p/1080p resolution. Poll with `seedance_get_task`.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | No | Text prompt (1-32,000 chars) |
+| `images` | list[SeedanceImageInput] | No | Reference images (max 30; roles `first_frame`, `last_frame`, `reference_image`). Each entry may be a plain URL string or `{"url": ...}` |
+| `videos` | list[SeedanceVideoInput] | No | Reference videos (max 10; URL-only). Each entry may be a plain URL string or `{"url": ...}` |
+| `audios` | list[SeedanceAudioInput] | No | Reference audio (max 10; audio-only input is supported). Each entry may be a plain URL string or `{"url": ...}` |
+| `model` | string | No | Model ID (defaults to `dreamina-seedance-2-5-260628`) |
+| `resolution` | "480p" \| "720p" \| "1080p" | No | Output resolution (4k not supported) |
+| `ratio` | string | No | Aspect ratio. Stripped for `extend_video`; auto-derived for `edit_video`/first-frame |
+| `duration` | integer | No | Duration in seconds (-1 for auto, max 30). Ignored for edit tasks |
+| `omni_reference_task_type` | string | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto` |
+| `generate_audio` | boolean | No | Generate an audio track for the video |
+| `watermark` | boolean | No | AIGC watermark (default: false) |
+| `return_last_frame` | boolean | No | Return last frame as a separate image |
+| `execution_expires_after` | integer | No | Task TTL in seconds (3600-259200) |
+| `priority` | integer | No | Priority (0-9) |
+| `safety_identifier` | string | No | Safety identifier (max 64 chars) |
+
+Seedance 2.5 supports audio-only input (a single BGM, voice, or sound-effect
+track can drive visual pacing, beat matching, and lip-sync). The model must
+resolve to the `seedance_2_5` family or the call raises a `ValueError`.
+
+### Output
+
+Returns a `Seedance25CreateTaskOutput` with task ID, status, and recommended
 poll delay in `recommended_poll_after_ms`.
 
 ## seedance_get_task
@@ -291,7 +605,7 @@ Generate N independent audio variations in parallel.
 | `text_prompt` | string | No* | — | Base prompt (1-3000 chars) |
 | `variations` | integer | No | 1 | Number of variations (1-5) |
 | `variation_prompts` | list[string] | No | — | Explicit prompts per variation |
-| `audio_references` | list[AudioReference] | No | — | Up to 3 audio references |
+| `audio_references` | list[AudioReference] | No | — | Up to 3 audio references (Base64 WAV preflight-checked against 30s limit) |
 | `image_reference` | MediaSource | No | — | Image reference (mutually exclusive with audio) |
 | `output` | AudioOutputOptions | No | — | Format, sample rate, etc. |
 | `watermark` | AudioWatermarkOptions | No | — | AIGC watermark |
@@ -314,6 +628,81 @@ for async polling via `seedance_get_task`.
 \* Either `prompt` or `variation_prompts` must be provided.
 
 **Output:** `VariationSummary` + `recommended_poll_after_ms`.
+
+### seedance_2_5_create_task_variations
+
+Create N independent Seedance 2.5 video tasks in parallel (each a separate
+task). Poll each task ID via `seedance_get_task`; partial failures are
+captured per variation.
+
+**Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+**Input:** Inherits all fields from `seedance_2_5_create_task`, plus:
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `variations` | integer | No | 1 | Number of variations (1-5) |
+| `variation_prompts` | list[string] | No | — | Explicit prompts per variation (each 1-32,000 chars) |
+
+\* Either `prompt` or `variation_prompts` must be provided.
+
+**Output:** `VariationSummary` + `recommended_poll_after_ms`.
+
+## seed_understand
+
+Understand images and videos, or reason about a task, through the Seed 2.1
+multimodal model. Supports deep-thinking (chain-of-thought) reasoning when
+`thinking=true` (deep-thinking is opt-in, not default-on). The default model
+is `dola-seed-2-1-turbo-260628` (Seed 2.1 Turbo); `dola-seed-evolving` (the
+latest Seed-series Pro-tier model) is also supported as a recognized built-in
+ID — set `SEED_UNDERSTANDING_DEFAULT_MODEL=dola-seed-evolving` to opt in; its
+family auto-resolves to `pro` so no explicit `SEED_UNDERSTANDING_MODEL_FAMILY`
+is required. Other custom model IDs can be registered via
+`SEED_UNDERSTANDING_MODEL_BINDINGS`.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=False`, `openWorldHint=True`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | The question or task for the model to reason about (1-32,000 chars) |
+| `images` | list[UnderstandingImageInput] | No | Images to understand (URL or Base64, max 32) |
+| `videos` | list[UnderstandingVideoInput] | No | Videos to understand (URL only, max 32) |
+| `system` | string | No | Optional system instruction (max 32,000 chars) |
+| `model` | string | No | Override the configured Seed 2.1 model ID |
+| `thinking` | boolean | No | Enable deep-thinking reasoning (default: false) |
+| `reasoning_effort` | "low" \| "medium" \| "high" | No | Reasoning effort level (only when thinking=true) |
+| `temperature` | float | No | Sampling temperature (0.0-2.0) |
+| `max_tokens` | integer | No | Maximum output tokens (1-32,768) |
+| `top_p` | float | No | Nucleus sampling probability (0.0-1.0) |
+| `repetition_penalty` | float | No | Repetition penalty (0.0-2.0). Ark-only parameter. |
+
+**UnderstandingImageInput** and **UnderstandingVideoInput** are `MediaSource`
+subclasses with the appropriate MIME validation and size limits. Video Base64
+is not supported by the chat endpoint — upload local videos via `media_upload`
+first to get an HTTPS URL.
+
+### Output
+
+Returns `SeedUnderstandOutput` with `model`, `completion_id`, `choices`
+(each containing `content`, optional `reasoning_content`, and
+`finish_reason`), `usage` (token counts), and `request_id`.
+
+### Example
+
+```json
+{
+  "prompt": "Describe what happens in this video and identify the objects in this image.",
+  "videos": [{"kind": "url", "url": "https://.../sample.mp4", "mime_type": "video/mp4"}],
+  "images": [{"kind": "url", "url": "https://.../frame.png", "mime_type": "image/png"}],
+  "thinking": true,
+  "reasoning_effort": "medium",
+  "max_tokens": 4096
+}
+```
 
 ## speech_to_text
 
@@ -417,6 +806,7 @@ a presigned HTTPS URL.
 | `data` | string | No* | Base64-encoded media bytes |
 | `file_path` | string | No* | Absolute local path; intended for stdio transport |
 | `key_prefix` | string | No | Optional object key prefix |
+| `expires_in_seconds` | integer | No | Presigned URL validity (60–604800). Defaults to the configured TTL; use a long value (e.g. 3600) for VOD inputs that are fetched asynchronously |
 
 \* Provide exactly one of `data` or `file_path`.
 
@@ -439,8 +829,67 @@ presigned URL has expired or is about to expire.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `object_key` | string | Yes | Object key returned by a prior `media_upload` call |
+| `expires_in_seconds` | integer | No | Presigned URL validity (60–604800). Defaults to the configured TTL; use a long value (e.g. 3600) for VOD inputs that are fetched asynchronously |
 
 ### Output
 
 Returns `MediaPresignOutput` with presigned `url`, `expires_at`, and
 `object_key`.
+
+## media_presign_batch
+
+Generate fresh presigned HTTPS GET URLs for many existing objects in storage
+in a single call, without re-uploading. Accepts a list of object keys from
+prior `media_upload` calls. Failures are reported per key — a malformed,
+unowned, or provider-failing key returns an inline error while the rest
+succeed.
+
+**Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
+`idempotentHint=True`, `openWorldHint=False`
+
+### Input
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `object_keys` | list[string] | Yes | Object keys returned by prior `media_upload` calls (1–100 entries) |
+| `expires_in_seconds` | integer | No | Presigned URL validity (60–604800) applied to every key. Defaults to the configured TTL |
+
+### Output
+
+Returns `MediaPresignBatchOutput` with `items` (per-key `object_key`, `url`,
+`expires_at`, `code`, `error`, `request_id`), `succeeded`, and `failed`.
+
+## hyper3d_create_task / hitem3d_create_task
+
+Create an asynchronous 3D generation task. Both tools are gated by
+`BYTEPLUS_MODELARK_3D_ENABLED=true` (disabled by default) and reuse the
+ModelArk API key.
+
+- `hyper3d_create_task` (Hyper3d-Gen2): text-to-3D and/or image-to-3D
+  (1-5 images). Exposes `seed`, `callback_url`, and model text-command
+  parameters (`material`, `mesh_mode`, `quality_override`, `addons`,
+  `use_original_alpha`, `bbox_condition`, `ta_pose`, `subdivision_level`,
+  `file_format`, `hd_texture`).
+- `hitem3d_create_task` (Hitem3d-2.0): image-to-3D only (1-4 images).
+  Exposes `callback_url` and model text-command parameters (`resolution`,
+  `face`, `file_format`, `request_type`, `multi_images_bit`).
+
+### Output
+
+Returns `Seed3DCreateTaskOutput` with `task_id`, `status="queued"`, and a
+recommended polling delay.
+
+## hyper3d_get_task / hitem3d_get_task
+
+Retrieve a 3D task's status and, on first success, persist the provider's
+zip URL into durable artifact storage (`seed-media://artifacts/{id}`).
+
+## hyper3d_list_tasks / hitem3d_list_tasks
+
+List recent 3D tasks (provider keeps 7 days), filtered by status, task IDs,
+or model.
+
+## hyper3d_cancel_or_delete_task / hitem3d_cancel_or_delete_task
+
+Cancel a queued task or delete the record of a terminal (succeeded, failed,
+expired) task. The handler verifies `expected_status` matches before acting.

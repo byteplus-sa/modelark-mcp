@@ -8,7 +8,7 @@ with an actionable `ValueError`.
 
 ## Families
 
-`ModelFamily` (`StrEnum`) has six members:
+`ModelFamily` (`StrEnum`) has eleven members:
 
 | Member | Value |
 |---|---|
@@ -18,11 +18,19 @@ with an actionable `ValueError`.
 | `SEEDANCE_2` | `seedance_2` |
 | `SEEDANCE_2_FAST` | `seedance_2_fast` |
 | `SEEDANCE_2_MINI` | `seedance_2_mini` |
+| `SEEDANCE_2_5` | `seedance_2_5` |
+| `SEED_2_1_PRO` | `seed_2_1_pro` |
+| `SEED_2_1_TURBO` | `seed_2_1_turbo` |
+| `SEED3D_HYPER3D` | `seed3d_hyper3d` |
+| `SEED3D_HITEM3D` | `seed3d_hitem3d` |
 
 The binding enums (`config/env.py`):
 
 - `SeedreamFamily`: `PRO = "pro"`, `LITE = "lite"`, `V4X = "4x"`.
-- `SeedanceFamily`: `STANDARD = "standard"`, `FAST = "fast"`, `MINI = "mini"`.
+- `SeedanceFamily`: `STANDARD = "standard"`, `FAST = "fast"`, `MINI = "mini"`,
+  `SEEDANCE_2_5 = "seedance_2_5"`.
+- `SeedUnderstandingFamily`: `PRO = "pro"`, `TURBO = "turbo"`.
+- `Seed3DFamily`: `HYPER3D = "hyper3d"`, `HITEM3D = "hitem3d"`.
 
 ## Image capabilities (`ImageCapabilities`)
 
@@ -41,7 +49,7 @@ The binding enums (`config/env.py`):
 
 ## Video capabilities (`VideoCapabilities`)
 
-All three Seedance families share: `max_reference_images=9`,
+The three Seedance 2.0 families share: `max_reference_images=9`,
 `max_reference_videos=3`, `max_reference_audios=3`, `supports_seed=False`,
 `supports_camera_fixed=False`, `supports_frames=False`,
 `supports_service_tier_flex=False`, `duration_range=(-1, 15)`,
@@ -51,9 +59,15 @@ Only `supported_resolutions` differs:
 
 | Family | `supported_resolutions` |
 |---|---|
+| `seedance_2_5` | `("480p", "720p", "1080p")` |
 | `MINI` | `("480p", "720p")` |
 | `FAST` | `("480p", "720p")` |
 | `STANDARD` | `("480p", "720p", "1080p", "4k")` |
+
+> Seedance 2.5 differs from the 2.0 families in duration
+> (`duration_range=(-1, 30)`) and reference counts
+> (`max_reference_images=30`, `max_reference_videos=10`,
+> `max_reference_audios=10`); `4k` is not supported on 2.5.
 
 > There is also **no aspect-ratio field** on video capabilities — the
 > `ratio` field exists only on `SeedanceTaskSettings` and the tool input
@@ -61,9 +75,9 @@ Only `supported_resolutions` differs:
 
 ## Seed Speech ASR (Speech-to-Text)
 
-Speech-to-text uses the Seed Speech ASR HTTP API. It uses a dedicated
-`SEED_SPEECH_ASR_API_KEY` (distinct from the TTS key). Audio is submitted
-via HTTP and polled until transcription is complete; the full
+Speech-to-text uses the Seed Speech ASR HTTP API. It reuses
+`BYTEPLUS_SEED_SPEECH_API_KEY` — the same key that powers Seed Audio. Audio
+is submitted via HTTP and polled until transcription is complete; the full
 `TranscriptionResult` is returned synchronously.
 
 Supported audio formats: `wav`, `mp3`, `ogg`, `raw`, `flac`.
@@ -79,18 +93,24 @@ are tunable via `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` and
 |---|---|---|---|
 | `seedream_default_model` | `SEEDREAM_DEFAULT_MODEL` | `dola-seedream-5-0-pro-260628` | `PRO` |
 | `seedance_default_model` | `SEEDANCE_DEFAULT_MODEL` | `dreamina-seedance-2-0-260128` | `STANDARD` |
+| `seed_understanding_default_model` | `SEED_UNDERSTANDING_DEFAULT_MODEL` | `dola-seed-2-1-turbo-260628` | `TURBO` |
 
 The "implied family" defaults are hard-coded in `Settings.validate_model_bindings`
-and apply only when the default model ID equals the built-in default.
+and apply only when the default model ID equals one of the recognized built-in
+IDs. `dola-seed-evolving` is also a recognized built-in ID that auto-resolves to
+family `PRO` when explicitly set as the default (no need to set
+`SEED_UNDERSTANDING_MODEL_FAMILY` for it).
 
 ## Environment variables
 
 | Env var | Format | Default |
 |---|---|---|
 | `SEEDREAM_MODEL_BINDINGS` | JSON array of `{"model_id": str, "family": "pro"\|"lite"\|"4x"}` | `[]` |
-| `SEEDANCE_MODEL_BINDINGS` | JSON array of `{"model_id": str, "family": "standard"\|"fast"\|"mini"}` | `[]` |
+| `SEEDANCE_MODEL_BINDINGS` | JSON array of `{"model_id": str, "family": "standard"\|"fast"\|"mini"\|"seedance_2_5"}` | `[]` |
+| `SEED_UNDERSTANDING_MODEL_BINDINGS` | JSON array of `{"model_id": str, "family": "pro"\|"turbo"}` | `[]` |
 | `SEEDREAM_MODEL_FAMILY` | single family string | `""` |
 | `SEEDANCE_MODEL_FAMILY` | single family string | `""` |
+| `SEED_UNDERSTANDING_MODEL_FAMILY` | single family string | `""` |
 
 Examples (from `.env.example`):
 
@@ -110,8 +130,10 @@ from the model ID string):
 2. If the bindings list is empty and `SEEDREAM_MODEL_FAMILY` (resp.
    `SEEDANCE_MODEL_FAMILY`) is non-empty, a single binding is synthesized
    from the default model ID + that family.
-3. If both are empty and the default model ID equals the built-in default,
-   the built-in default family is used (`PRO` / `STANDARD`).
+3. If both are empty and the default model ID equals a recognized built-in
+   ID, the hard-coded family is used (Seedream `PRO`, Seedance `STANDARD`,
+   Seed understanding `TURBO` for the default `dola-seed-2-1-turbo-260628`,
+   and `PRO` for `dola-seed-evolving` when explicitly opted in).
 4. Otherwise (custom default model, no family, no bindings) → startup fails
    with `ValueError`.
 

@@ -12,14 +12,11 @@ from __future__ import annotations
 from contextlib import suppress
 
 import truststore
-from starlette.middleware import Middleware
 
 truststore.inject_into_ssl()
 
 from modelark_mcp.config.env import get_settings  # noqa: E402
-from modelark_mcp.security.http_middleware import (  # noqa: E402
-    RequestBodyLimitMiddleware,
-)
+from modelark_mcp.observability.logger import info as log_info  # noqa: E402
 from modelark_mcp.server import mcp  # noqa: E402
 
 
@@ -27,6 +24,12 @@ def main() -> None:
     settings = get_settings()
 
     if settings.mcp_transport == "http":
+        log_info(
+            "server_starting",
+            transport="http",
+            host=settings.mcp_host,
+            port=settings.mcp_port,
+        )
         mcp.run(
             transport="http",
             host=settings.mcp_host,
@@ -34,14 +37,13 @@ def main() -> None:
             host_origin_protection=True,
             allowed_hosts=settings.allowed_hosts,
             allowed_origins=settings.allowed_origins,
-            middleware=[
-                Middleware(
-                    RequestBodyLimitMiddleware,
-                    max_bytes=settings.mcp_http_max_body_bytes,
-                )
-            ],
+            stateless_http=True,
+            uvicorn_config={
+                "timeout_graceful_shutdown": int(settings.request_timeout_ms / 1000),
+            },
         )
     else:
+        log_info("server_starting", transport="stdio")
         mcp.run(transport="stdio")
 
 
@@ -49,3 +51,4 @@ if __name__ == "__main__":
     # FastMCP/Uvicorn complete graceful shutdown before propagating Ctrl-C.
     with suppress(KeyboardInterrupt):
         main()
+    log_info("server_stopped")

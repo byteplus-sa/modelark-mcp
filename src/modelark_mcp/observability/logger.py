@@ -33,6 +33,7 @@ _REDACT_KEYS: frozenset[str] = frozenset(
         "text_prompt",
         "variation_prompts",
         "subtitle",
+        "subtitle_text",
         "subtitles",
         "url",
         "media_url",
@@ -64,13 +65,13 @@ def get_level() -> str:
 
 
 def _redact(value: Any) -> Any:
-    """Recursively redact sensitive keys from a dict/list structure."""
+    """Recursively redact sensitive keys from dict/list/tuple/set structures."""
     if isinstance(value, dict):
         return {
             k: ("[REDACTED]" if k.lower() in _REDACT_KEYS else _redact(v)) for k, v in value.items()
         }
-    if isinstance(value, list):
-        return [_redact(item) for item in value]
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return type(value)(_redact(item) for item in value)
     return value
 
 

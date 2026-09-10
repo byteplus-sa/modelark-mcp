@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from modelark_mcp.domain.errors import ProviderError
+from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.observability.metrics import RETRY_ATTEMPTS
 
 AsyncSleep = Callable[[float], Awaitable[None]]
@@ -65,6 +66,14 @@ async def call_with_retry[T](
                 )
                 jitter = base * resolved_policy.jitter_ratio * ((random_value() * 2) - 1)
                 delay = max(0.0, base + jitter)
+            log_info(
+                "retry_attempt",
+                provider=exc.provider,
+                operation=exc.operation,
+                attempt=attempt,
+                max_attempts=resolved_policy.max_attempts,
+                delay_seconds=round(delay, 3),
+            )
             await sleep(delay)
 
     raise AssertionError("Retry loop exited unexpectedly.")

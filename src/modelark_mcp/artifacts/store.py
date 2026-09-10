@@ -18,6 +18,31 @@ from pydantic import BaseModel, Field
 from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
 from modelark_mcp.security.auth_context import AuthContext
 
+ArtifactPersistenceErrorCode = Literal[
+    "untrusted_output_host",
+    "output_too_large",
+    "invalid_output_mime",
+    "source_expired",
+    "download_failed",
+    "storage_failed",
+]
+
+
+class ArtifactPersistenceError(ValueError):
+    """Classified artifact failure safe to expose without provider URLs."""
+
+    def __init__(
+        self,
+        code: ArtifactPersistenceErrorCode,
+        safe_message: str,
+        *,
+        retryable: bool,
+    ) -> None:
+        self.code = code
+        self.safe_message = safe_message
+        self.retryable = retryable
+        super().__init__(safe_message)
+
 
 class Base64ArtifactInput(BaseModel):
     """Input for storing Base64-encoded media."""

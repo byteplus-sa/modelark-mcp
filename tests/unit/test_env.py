@@ -14,12 +14,19 @@ class TestSettings:
         settings = Settings()
         assert settings.modelark_base_url == "https://ark.ap-southeast.bytepluses.com/api/v3"
         assert settings.seed_audio_base_url == "https://voice.ap-southeast-1.bytepluses.com"
+        assert settings.vod_mediakit_base_url == (
+            "https://mediakit.ap-southeast-1.bytepluses.com/api/v1"
+        )
         assert settings.mcp_transport == "stdio"
         assert settings.mcp_host == "127.0.0.1"
         assert settings.mcp_port == 3000
         assert settings.artifact_backend == "filesystem"
         assert settings.artifact_ttl_seconds == 604800
         assert settings.mcp_inline_media_max_bytes == 8388608
+
+    def test_http_body_limit_default_covers_video_upload(self) -> None:
+        settings = Settings(_env_file=None)
+        assert settings.mcp_http_max_body_bytes == 300 * 1024 * 1024
 
     def test_has_modelark_false_when_empty(self) -> None:
         settings = Settings(_env_file=None)
@@ -34,8 +41,57 @@ class TestSettings:
         assert not settings.has_seed_audio
 
     def test_has_seed_audio_true_when_set(self) -> None:
-        settings = Settings(_env_file=None, BYTEPLUS_SEED_AUDIO_API_KEY="sk-test")
+        settings = Settings(_env_file=None, BYTEPLUS_SEED_SPEECH_API_KEY="sk-test")
         assert settings.has_seed_audio
+
+    def test_has_vod_mediakit_reflects_key(self) -> None:
+        assert not Settings(_env_file=None).has_vod_mediakit
+        configured = Settings(
+            _env_file=None,
+            BYTEPLUS_VOD_MEDIAKIT_API_KEY="test-mediakit-key",  # pragma: allowlist secret
+        )
+        assert configured.has_vod_mediakit
+
+    def test_seed3d_disabled_by_default(self) -> None:
+        settings = Settings(_env_file=None, BYTEPLUS_MODELARK_API_KEY="sk-test")
+        assert not settings.seed3d_enabled
+        assert not settings.has_seed3d
+
+    def test_seed3d_requires_both_flag_and_key(self) -> None:
+        assert not Settings(_env_file=None, BYTEPLUS_MODELARK_3D_ENABLED=True).has_seed3d
+        assert Settings(
+            _env_file=None,
+            BYTEPLUS_MODELARK_API_KEY="sk-test",  # pragma: allowlist secret
+            BYTEPLUS_MODELARK_3D_ENABLED=True,
+        ).has_seed3d
+
+    def test_seed3d_bindings_built_from_defaults(self) -> None:
+        settings = Settings(_env_file=None)
+        ids = [binding.model_id for binding in settings.seed3d_model_bindings]
+        assert settings.hyper3d_default_model in ids
+        assert settings.hitem3d_default_model in ids
+
+    def test_seed3d_duplicate_bindings_rejected(self) -> None:
+        with pytest.raises(ValueError, match="duplicate IDs"):
+            Settings(
+                _env_file=None,
+                SEED3D_MODEL_BINDINGS=[
+                    {"model_id": "m1", "family": "hyper3d"},
+                    {"model_id": "m1", "family": "hitem3d"},
+                ],
+            )
+
+    def test_vod_mediakit_base_url_override_requires_https(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            BYTEPLUS_VOD_MEDIAKIT_BASE_URL="https://mediakit.example.com/api/v1",
+        )
+        assert settings.vod_mediakit_base_url == "https://mediakit.example.com/api/v1"
+        with pytest.raises(ValueError, match="BYTEPLUS_VOD_MEDIAKIT_BASE_URL must use HTTPS"):
+            Settings(
+                _env_file=None,
+                BYTEPLUS_VOD_MEDIAKIT_BASE_URL="http://mediakit.example.com/api/v1",
+            )
 
     def test_allowed_origins_empty(self) -> None:
         settings = Settings(_env_file=None)
@@ -61,6 +117,48 @@ class TestSettings:
         settings = Settings(_env_file=None)
         assert settings.connect_timeout_ms == 10000
         assert settings.request_timeout_ms == 600000
+
+    def test_persistence_cache_defaults(self) -> None:
+        settings = Settings(_env_file=None)
+        assert settings.persistence_cache_max_size == 10_000
+        assert settings.persistence_cache_ttl_seconds == 86_400
+
+    def test_persistence_cache_env_overrides(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            PERSISTENCE_CACHE_MAX_SIZE=500,
+            PERSISTENCE_CACHE_TTL_SECONDS=3600,
+        )
+        assert settings.persistence_cache_max_size == 500
+        assert settings.persistence_cache_ttl_seconds == 3600
+
+    def test_readiness_defaults(self) -> None:
+        settings = Settings(_env_file=None)
+        assert settings.readiness_check_providers is False
+        assert settings.readiness_provider_timeout_seconds == 2.0
+
+    def test_readiness_env_overrides(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            READINESS_CHECK_PROVIDERS=True,
+            READINESS_PROVIDER_TIMEOUT_SECONDS=5.0,
+        )
+        assert settings.readiness_check_providers is True
+        assert settings.readiness_provider_timeout_seconds == 5.0
+
+    def test_rate_limit_defaults(self) -> None:
+        settings = Settings(_env_file=None)
+        assert settings.rate_limit_rpm == 0
+        assert settings.rate_limit_burst == 0
+
+    def test_rate_limit_env_overrides(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            RATE_LIMIT_RPM=60,
+            RATE_LIMIT_BURST=10,
+        )
+        assert settings.rate_limit_rpm == 60
+        assert settings.rate_limit_burst == 10
 
     def test_model_bindings(self) -> None:
         settings = Settings(

@@ -7,8 +7,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 
-from modelark_mcp.security.safe_downloader import SafeDownloader
-from modelark_mcp.security.url_policy import UrlValidationError
+from modelark_mcp.security.safe_downloader import SafeDownloader, SafeDownloadError
 
 
 def public_resolver(_hostname: str, _port: int) -> tuple[str, ...]:
@@ -104,14 +103,17 @@ async def test_untrusted_redirect_is_rejected() -> None:
         transport=httpx.MockTransport(handler),
     )
     try:
-        with pytest.raises(ValueError, match="untrusted host"):
+        with pytest.raises(SafeDownloadError) as exc_info:
             await downloader.download(
-                "https://media.byteplus.com/start",
+                "https://media.byteplus.com/start?token=must-not-leak",
                 trusted_hosts=trusted_host,
                 max_bytes=1024,
             )
     finally:
         await downloader.close()
+    assert exc_info.value.code == "redirect_rejected"
+    assert exc_info.value.retryable is False
+    assert "token=" not in str(exc_info.value)
 
 
 async def test_private_dns_result_is_rejected_before_request() -> None:
@@ -127,7 +129,7 @@ async def test_private_dns_result_is_rejected_before_request() -> None:
         transport=httpx.MockTransport(handler),
     )
     try:
-        with pytest.raises(UrlValidationError, match="blocked IP"):
+        with pytest.raises(SafeDownloadError) as exc_info:
             await downloader.download(
                 "https://media.byteplus.com/output",
                 trusted_hosts=trusted_host,
@@ -136,6 +138,8 @@ async def test_private_dns_result_is_rejected_before_request() -> None:
     finally:
         await downloader.close()
     assert called is False
+    assert exc_info.value.code == "invalid_url"
+    assert exc_info.value.retryable is False
 
 
 async def test_declared_oversized_body_is_rejected() -> None:
@@ -151,7 +155,7 @@ async def test_declared_oversized_body_is_rejected() -> None:
         transport=httpx.MockTransport(handler),
     )
     try:
-        with pytest.raises(ValueError, match="Content-Length"):
+        with pytest.raises(SafeDownloadError) as exc_info:
             await downloader.download(
                 "https://media.byteplus.com/output",
                 trusted_hosts=trusted_host,
@@ -159,6 +163,8 @@ async def test_declared_oversized_body_is_rejected() -> None:
             )
     finally:
         await downloader.close()
+    assert exc_info.value.code == "too_large"
+    assert exc_info.value.retryable is False
 
 
 async def test_chunked_oversized_body_is_rejected() -> None:
@@ -170,7 +176,7 @@ async def test_chunked_oversized_body_is_rejected() -> None:
         transport=httpx.MockTransport(handler),
     )
     try:
-        with pytest.raises(ValueError, match="exceeds limit"):
+        with pytest.raises(SafeDownloadError) as exc_info:
             await downloader.download(
                 "https://media.byteplus.com/output",
                 trusted_hosts=trusted_host,
@@ -178,6 +184,7 @@ async def test_chunked_oversized_body_is_rejected() -> None:
             )
     finally:
         await downloader.close()
+    assert exc_info.value.code == "too_large"
 
 
 async def test_redirect_limit_is_enforced() -> None:
@@ -189,7 +196,7 @@ async def test_redirect_limit_is_enforced() -> None:
         transport=httpx.MockTransport(handler),
     )
     try:
-        with pytest.raises(ValueError, match="Too many redirects"):
+        with pytest.raises(SafeDownloadError) as exc_info:
             await downloader.download(
                 "https://media.byteplus.com/start",
                 trusted_hosts=trusted_host,
@@ -198,3 +205,104 @@ async def test_redirect_limit_is_enforced() -> None:
             )
     finally:
         await downloader.close()
+    assert exc_info.value.code == "redirect_rejected"
+
+
+async def test_untrusted_initial_host_does_not_leak_query() -> None:
+    downloader = SafeDownloader(
+        resolver=public_resolver,
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200)),
+    )
+    try:
+        with pytest.raises(SafeDownloadError) as exc_info:
+            await downloader.download(
+                "https://untrusted.example/output.mp4?signature=secret",
+                trusted_hosts=trusted_host,
+                max_bytes=1024,
+            )
+    finally:
+        await downloader.close()
+
+    assert exc_info.value.code == "untrusted_host"
+    assert exc_info.value.retryable is False
+    assert "untrusted.example" not in str(exc_info.value)
+    assert "signature=" not in str(exc_info.value)
+
+
+async def test_timeout_is_typed_and_retryable() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out at signed URL", request=request)
+
+    downloader = SafeDownloader(
+        resolver=public_resolver,
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        with pytest.raises(SafeDownloadError) as exc_info:
+            await downloader.download(
+                "https://media.byteplus.com/output?signature=secret",
+                trusted_hosts=trusted_host,
+                max_bytes=1024,
+            )
+    finally:
+        await downloader.close()
+
+    assert exc_info.value.code == "network_error"
+    assert exc_info.value.retryable is True
+    assert "signature=" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("status_code", [404, 410])
+async def test_expired_source_is_classified(status_code: int) -> None:
+    downloader = SafeDownloader(
+        resolver=public_resolver,
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(status_code, content=b"gone")
+        ),
+    )
+    try:
+        with pytest.raises(SafeDownloadError) as exc_info:
+            await downloader.download(
+                "https://media.byteplus.com/output",
+                trusted_hosts=trusted_host,
+                max_bytes=1024,
+            )
+    finally:
+        await downloader.close()
+
+    assert exc_info.value.code == "source_expired"
+    assert exc_info.value.retryable is False
+
+
+async def test_redirect_body_is_not_buffered() -> None:
+    class FailIfReadStream(httpx.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            raise AssertionError("redirect body must not be read")
+            yield b""  # pragma: no cover
+
+        async def aclose(self) -> None:
+            return None
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/start":
+            return httpx.Response(
+                302,
+                headers={"location": "/final"},
+                stream=FailIfReadStream(),
+            )
+        return httpx.Response(200, content=b"done")
+
+    downloader = SafeDownloader(
+        resolver=public_resolver,
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        result = await downloader.download(
+            "https://media.byteplus.com/start",
+            trusted_hosts=trusted_host,
+            max_bytes=1024,
+        )
+    finally:
+        await downloader.close()
+
+    assert result.body == b"done"

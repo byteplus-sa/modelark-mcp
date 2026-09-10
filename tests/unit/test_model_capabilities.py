@@ -7,6 +7,7 @@ import pytest
 from modelark_mcp.config.model_capabilities import (
     ImageCapabilities,
     ModelFamily,
+    Seed3DCapabilities,
     VideoCapabilities,
     get_capability_registry,
 )
@@ -33,6 +34,7 @@ class TestCapabilityRegistry:
             ModelFamily.SEEDANCE_2,
             ModelFamily.SEEDANCE_2_FAST,
             ModelFamily.SEEDANCE_2_MINI,
+            ModelFamily.SEEDANCE_2_5,
         )
 
     def test_invalid_image_model_raises(self) -> None:
@@ -90,3 +92,116 @@ class TestCapabilityRegistry:
         registry = get_capability_registry()
         models = registry.list_video_models()
         assert len(models) >= 1
+
+
+class TestSeedance25Capabilities:
+    """Tests for Seedance 2.5 model capabilities."""
+
+    def test_seedance_2_5_capabilities_with_bindings(self) -> None:
+        """When SEEDANCE_MODEL_BINDINGS includes a 2.5 binding, caps are correct."""
+        import os
+
+        from modelark_mcp.config.env import refresh_settings
+        from modelark_mcp.config.model_capabilities import refresh_capability_registry
+
+        old_bindings = os.environ.get("SEEDANCE_MODEL_BINDINGS", "")
+        old_default = os.environ.get("SEEDANCE_DEFAULT_MODEL", "")
+        try:
+            os.environ["SEEDANCE_DEFAULT_MODEL"] = "dreamina-seedance-2-5-260628"
+            os.environ["SEEDANCE_MODEL_FAMILY"] = "seedance_2_5"
+            os.environ.pop("SEEDANCE_MODEL_BINDINGS", None)
+            refresh_settings()
+            registry = refresh_capability_registry()
+
+            caps = registry.get_video_capabilities("dreamina-seedance-2-5-260628")
+            assert caps.family is ModelFamily.SEEDANCE_2_5
+            assert caps.duration_range == (-1, 30)
+            assert caps.max_reference_images == 30
+            assert caps.max_reference_videos == 10
+            assert caps.max_reference_audios == 10
+            assert caps.supported_resolutions == ("480p", "720p", "1080p")
+        finally:
+            os.environ["SEEDANCE_MODEL_BINDINGS"] = old_bindings
+            os.environ["SEEDANCE_DEFAULT_MODEL"] = old_default
+            refresh_settings()
+            refresh_capability_registry()
+
+    def test_seedance_2_5_duration_validation(self) -> None:
+        """2.5 model accepts duration up to 30 but not 31."""
+        import os
+
+        from modelark_mcp.config.env import refresh_settings
+        from modelark_mcp.config.model_capabilities import refresh_capability_registry
+
+        old_default = os.environ.get("SEEDANCE_DEFAULT_MODEL", "")
+        try:
+            os.environ["SEEDANCE_DEFAULT_MODEL"] = "dreamina-seedance-2-5-260628"
+            os.environ["SEEDANCE_MODEL_FAMILY"] = "seedance_2_5"
+            os.environ.pop("SEEDANCE_MODEL_BINDINGS", None)
+            refresh_settings()
+            registry = refresh_capability_registry()
+
+            assert registry.validate_duration("dreamina-seedance-2-5-260628", 30) == 30
+            assert registry.validate_duration("dreamina-seedance-2-5-260628", -1) == -1
+            with pytest.raises(ValueError, match="outside the supported range"):
+                registry.validate_duration("dreamina-seedance-2-5-260628", 31)
+        finally:
+            os.environ["SEEDANCE_DEFAULT_MODEL"] = old_default
+            refresh_settings()
+            refresh_capability_registry()
+
+    def test_seedance_2_5_resolution_validation(self) -> None:
+        """2.5 model accepts 480p/720p/1080p but not 4k."""
+        import os
+
+        from modelark_mcp.config.env import refresh_settings
+        from modelark_mcp.config.model_capabilities import refresh_capability_registry
+
+        old_default = os.environ.get("SEEDANCE_DEFAULT_MODEL", "")
+        try:
+            os.environ["SEEDANCE_DEFAULT_MODEL"] = "dreamina-seedance-2-5-260628"
+            os.environ["SEEDANCE_MODEL_FAMILY"] = "seedance_2_5"
+            os.environ.pop("SEEDANCE_MODEL_BINDINGS", None)
+            refresh_settings()
+            registry = refresh_capability_registry()
+
+            assert registry.validate_resolution("dreamina-seedance-2-5-260628", "480p") == "480p"
+            assert registry.validate_resolution("dreamina-seedance-2-5-260628", "720p") == "720p"
+            assert registry.validate_resolution("dreamina-seedance-2-5-260628", "1080p") == "1080p"
+            with pytest.raises(ValueError, match="not supported"):
+                registry.validate_resolution("dreamina-seedance-2-5-260628", "4k")
+        finally:
+            os.environ["SEEDANCE_DEFAULT_MODEL"] = old_default
+            refresh_settings()
+            refresh_capability_registry()
+
+
+class TestSeed3DCapabilities:
+    """Tests for the Seed3D capability registry."""
+
+    def test_hyper3d_default_resolution(self) -> None:
+        from modelark_mcp.config.env import get_settings
+
+        registry = get_capability_registry()
+        settings = get_settings()
+        caps = registry.get_seed3d_capabilities(default_model=settings.hyper3d_default_model)
+        assert isinstance(caps, Seed3DCapabilities)
+        assert caps.family is ModelFamily.SEED3D_HYPER3D
+        assert caps.supports_text_to_3d is True
+        assert caps.max_reference_images == 5
+
+    def test_hitem3d_default_resolution(self) -> None:
+        from modelark_mcp.config.env import get_settings
+
+        registry = get_capability_registry()
+        settings = get_settings()
+        caps = registry.get_seed3d_capabilities(default_model=settings.hitem3d_default_model)
+        assert isinstance(caps, Seed3DCapabilities)
+        assert caps.family is ModelFamily.SEED3D_HITEM3D
+        assert caps.supports_text_to_3d is False
+        assert caps.max_reference_images == 4
+
+    def test_unknown_seed3d_model_raises(self) -> None:
+        registry = get_capability_registry()
+        with pytest.raises(ValueError, match="not in the configured Seed3D"):
+            registry.get_seed3d_capabilities("not-a-real-model")

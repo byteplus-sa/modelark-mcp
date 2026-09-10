@@ -7,6 +7,7 @@ models live alongside their tool handlers in ``tools/``.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +21,27 @@ class SeedanceTaskStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     EXPIRED = "expired"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def _missing_(cls, value: object) -> SeedanceTaskStatus:
+        return cls.UNKNOWN
+
+
+class Seed3DTaskStatus(StrEnum):
+    """Task lifecycle states for 3D generation (identical to Seedance)."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    CANCELLED = "cancelled"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    EXPIRED = "expired"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def _missing_(cls, value: object) -> Seed3DTaskStatus:
+        return cls.UNKNOWN
 
 
 class SubtitleUtterance(BaseModel):
@@ -117,12 +139,44 @@ class SeedanceTaskSettings(BaseModel):
     resolution: str | None = Field(None, description="Output video resolution.")
     ratio: str | None = Field(None, description="Output aspect ratio (e.g. 16:9).")
     duration: int | str | None = Field(None, description="Video duration in seconds, or 'auto'.")
+    omni_reference_task_type: str | None = Field(
+        None,
+        description="Provider task type hint (e.g. auto, edit_video, extend_video).",
+    )
     generate_audio: bool | None = Field(None, description="Whether an audio track was generated.")
     return_last_frame: bool | None = Field(
         None, description="Whether the last frame was returned as a separate image."
     )
     service_tier: str | None = Field(None, description="Service tier used (default or flex).")
     priority: int | None = Field(None, description="Task priority (0-9).")
+
+
+class Seed3DTaskUsage(BaseModel):
+    """Usage/billing information for a completed Seed3D task."""
+
+    completion_tokens: int | None = Field(
+        default=None, description="Tokens consumed generating 3D."
+    )
+    total_tokens: int | None = Field(
+        default=None, description="Total tokens consumed (equals completion_tokens for 3D)."
+    )
+
+
+class Seed3DTaskSummary(BaseModel):
+    """Summary of a Seed3D task for list results."""
+
+    task_id: str = Field(..., description="Provider task ID.")
+    model: str = Field(..., description="Model ID used for generation.")
+    status: Seed3DTaskStatus = Field(..., description="Current task status.")
+    created_at: str = Field(..., description="ISO-8601 timestamp of task creation.")
+    updated_at: str = Field(..., description="ISO-8601 timestamp of last status update.")
+
+
+class Seed3DTaskError(BaseModel):
+    """Typed task failure returned by Seed3D."""
+
+    code: str = Field("", description="Provider error code.")
+    message: str = Field("", description="Error description.")
 
 
 class VariationResult(BaseModel):
@@ -147,4 +201,31 @@ class VariationSummary(BaseModel):
     failed: int = Field(..., description="Variations that failed.")
     variations: list[VariationResult] = Field(
         default_factory=list, description="Per-variation results (artifacts, errors, and metadata)."
+    )
+
+
+class UnderstandingUsage(BaseModel):
+    """Token usage for a Seed 2.1 multimodal understanding call."""
+
+    prompt_tokens: int = Field(..., description="Number of input (prompt) tokens consumed.")
+    completion_tokens: int = Field(
+        ..., description="Number of output (completion) tokens consumed."
+    )
+    total_tokens: int = Field(..., description="Total tokens consumed (prompt + completion).")
+
+
+class UnderstandingChoice(BaseModel):
+    """A single completion choice returned by the Seed 2.1 model."""
+
+    role: Literal["assistant"] = Field(
+        "assistant", description="Message role (always 'assistant')."
+    )
+    content: str = Field(..., description="The model's text answer.")
+    reasoning_content: str | None = Field(
+        None,
+        description="Chain-of-thought reasoning text. Present only when thinking was enabled.",
+    )
+    finish_reason: str = Field(
+        ...,
+        description="Why generation stopped: 'stop', 'length', 'tool_calls', or 'content_filter'.",
     )

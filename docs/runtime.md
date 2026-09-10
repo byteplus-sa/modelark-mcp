@@ -3,16 +3,20 @@
 The server lifespan owns a single `RuntimeServices` object
 (`src/modelark_mcp/runtime.py`) that is built once at startup and closed at
 shutdown. Every tool retrieves it via `get_runtime(ctx)`. This document
-describes the five operational services it provides: concurrency limiting,
-the daily budget ledger, Seedance task ownership, the persistence cache, and
-the provider retry policy.
+describes its operational services, including concurrency limiting, the daily
+budget ledger, provider-task and object-key ownership, persistence caching,
+per-task persistence single-flight, and the provider retry policy.
 
 All state lives in a single SQLite database at
 `<artifact_dir>/runtime.sqlite3` (default `artifact_dir` is `.artifacts`),
-shared by the ownership store and the budget ledger. The synchronous
-`sqlite3.Connection` behind each is guarded by a per-instance `asyncio.Lock`,
-so these stores are **single-process only** — horizontal scaling requires a
-distributed replacement.
+shared by the ownership stores, budget ledger, and task-artifact cache. The
+database is opened in WAL mode (`PRAGMA journal_mode=WAL`) with a
+`busy_timeout`; each store's
+synchronous `sqlite3.Connection` is guarded by a per-instance `asyncio.Lock`
+and every query is dispatched to a worker thread via `asyncio.to_thread`, so
+SQLite access never blocks the event loop. These stores are still
+**single-process only** — horizontal scaling requires a distributed
+replacement.
 
 ## `RuntimeServices` fields
 
@@ -22,25 +26,26 @@ distributed replacement.
 | `artifact_store` | `FilesystemArtifactStore` | `FilesystemArtifactStore(artifact_dir, ttl_seconds, downloader)` |
 | `safe_downloader` | `SafeDownloader` | `SafeDownloader(timeout, connect_timeout)` |
 | `ownership_store` | `SQLiteTaskOwnershipStore` | `SQLiteTaskOwnershipStore(database_path)` |
+| `object_key_ownership_store` | `SQLiteObjectKeyOwnershipStore` | `SQLiteObjectKeyOwnershipStore(database_path)` |
 | `budget_ledger` | `BudgetLedger` | `BudgetLedger(database_path, daily_limit_usd)` |
 | `provider_limiters` | `ProviderLimiters` | `ProviderLimiters(provider_limit, principal_limit)` |
-| `persistence_cache` | `TTLCache[str, dict[str, ArtifactRef \| None]]` | hard-coded `maxsize=10_000`, `ttl=86_400` |
+| `task_artifact_cache` | `TaskArtifactCache` | `SQLiteTaskArtifactCache(database_path, ttl_seconds, max_size)` |
+| `task_artifact_locks` | `TaskArtifactPersistenceLocks` | process-local lock registry |
 
-`close_runtime_services` closes exactly three subsystems in order:
-`artifact_store`, `ownership_store`, `budget_ledger`. The `SafeDownloader`
-is closed **indirectly** — `FilesystemArtifactStore.close()` calls
-`self._downloader.close()`. The provider/principal limiters have no close
-method (semaphores require no cleanup).
+`close_runtime_services` closes five subsystems in order: `artifact_store`,
+`ownership_store`, `object_key_ownership_store`, `budget_ledger`, and
+`task_artifact_cache`. The `SafeDownloader` is closed **indirectly** —
+`FilesystemArtifactStore.close()` calls `self._downloader.close()`. The
+provider/principal limiters and per-task lock registry have no close method.
 
 ## Concurrency limiters (`ProviderLimiters`)
 
 Two distinct layers, acquired together for every billable call:
 
-- **Provider-level** — one global `asyncio.Semaphore` per provider bucket.
-  There are exactly two buckets, `"modelark"` and `"seed-speech"`, each
-  independently sized to `provider_limit`. So the default cap is **5
-  concurrent ModelArk calls AND 5 concurrent Seed Speech calls**
-  (independent pools, not a shared 5).
+- **Provider-level** — one global `asyncio.Semaphore` per provider bucket:
+  `"modelark"`, `"seed-speech"`, `"vod-mediakit"`, `"tos"`, and `"s3"`.
+  Each is independently sized to `provider_limit`, so the default cap is five
+  concurrent calls per provider rather than five shared across all providers.
 - **Principal-level** — one `asyncio.Semaphore(principal_limit)` per
   principal, lazily created and stored in a `TTLCache` keyed by
   `"<tenant_id>\0<principal_id>"` (NUL-separated). Cache get/create is
@@ -50,10 +55,19 @@ Two distinct layers, acquired together for every billable call:
 the provider bucket semaphore and the principal's semaphore for the duration
 of the call.
 
+For a **local principal** (stdio transport, or HTTP local mode), the
+per-principal semaphore is **skipped**: a single trusted local caller is
+bounded only by the provider limit. Without this, the default
+`PRINCIPAL_MAX_CONCURRENCY=3` would silently cap *all* concurrent calls across
+every provider at 3 — below the per-provider limit of 5 — making parallel
+local generation appear to "serialize under load." The per-principal bound
+applies only to authenticated (JWT) HTTP principals, where distinct tenants
+must not starve each other.
+
 | Env var | Default | Constraint | Used as |
 |---|---|---|---|
 | `PROVIDER_MAX_CONCURRENCY` | `5` | `ge=1` | per-bucket provider limit |
-| `PRINCIPAL_MAX_CONCURRENCY` | `3` | `ge=1` | per-principal limit |
+| `PRINCIPAL_MAX_CONCURRENCY` | `3` | `ge=1` | per-principal limit (JWT HTTP principals only) |
 
 The per-principal semaphore cache defaults to `maxsize=10_000` and
 `ttl=86_400` (24h); idle principal semaphores expire after 24h. A `TTLCache`
@@ -64,6 +78,21 @@ cancel its waiters.
 > is created per batch by `run_variation_batch` (see [Parallel
 > variations](#parallel-variations)). It composes with — and is independent
 > of — these provider/principal limiters.
+
+## Artifact persistence single-flight
+
+`RuntimeServices.task_artifact_locks` is a process-local
+`TaskArtifactPersistenceLocks` registry keyed by `(provider, task_id)`. A lock
+entry exists only while a holder or waiter is active and is removed when its
+user count reaches zero. Enhancement polling uses it to recheck the durable
+task-artifact cache inside the critical section and share a just-created
+artifact with concurrent waiters, while different task IDs remain concurrent.
+Cache failures are best-effort: they emit safe warnings but do not erase a
+successful provider result or an artifact that was already created.
+
+This coordination is intentionally single-process, matching the current SQLite
+state backend. A future distributed state backend requires a distributed
+single-flight mechanism.
 
 ## Daily budget + cost estimation
 
@@ -126,31 +155,34 @@ per variation only — there is **no per-model or per-family cost table**.
 > (`standard`/`fast`/`mini`) are model-binding constructs defined in
 > `config/env.py`, **not** cost tiers. They do not affect the estimate.
 
-## Seedance task ownership (`SQLiteTaskOwnershipStore`)
+## Provider task ownership (`SQLiteTaskOwnershipStore`)
 
-Ownership of asynchronous Seedance task IDs, so one principal cannot read,
-cancel, or delete another's tasks. Schema:
+Ownership of asynchronous provider task IDs, so one principal cannot read,
+cancel, retrieve, or delete another's tasks. Schema:
 
 ```sql
 CREATE TABLE IF NOT EXISTS task_ownership (
-    task_id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    task_id TEXT NOT NULL,
     principal_id TEXT NOT NULL,
     tenant_id TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(provider, task_id)
 )
 ```
 
 | Method | Behavior |
 |---|---|
-| `record(task_id, owner)` | `INSERT ... ON CONFLICT(task_id) DO UPDATE` — re-recording **upserts** to the new owner (the closest thing to a transfer). |
-| `require_owner(task_id, owner)` | Row missing: if `owner.is_local` returns silently (local mode is permissive for unrecorded tasks), else `PermissionError`. Row present but mismatched: `PermissionError("Task is not owned by the current principal.")`. |
-| `list_task_ids(owner)` | returns all `task_id`s for `(principal_id, tenant_id)`. |
+| `record(provider, task_id, owner)` | `INSERT ... ON CONFLICT(provider, task_id) DO UPDATE` — re-recording **upserts** to the new owner. |
+| `require_owner(provider, task_id, owner)` | Row missing: if `owner.is_local` returns silently (local mode is permissive for unrecorded tasks), else `PermissionError`. Row present but mismatched: `PermissionError("Task is not owned by the current principal.")`. |
+| `list_task_ids(provider, owner)` | returns task IDs for the provider and `(principal_id, tenant_id)`. |
 | `ping()` | `SELECT 1` liveness probe (used by the `/ready` route). |
 | `close()` | closes the connection. |
 
-Every query is scoped by **both** `principal_id` **and** `tenant_id`, and
-the `is_local` shortcut only affects the missing-row branch — a row that
-exists and belongs to someone else still raises, even in local mode.
+Every lookup is scoped by `provider` and `task_id`; owner listings also require
+both `principal_id` and `tenant_id`. The `is_local` shortcut only affects the
+missing-row branch — a row that exists and belongs to someone else still raises,
+even in local mode.
 
 > This is distinct from **artifact ownership**, which is stored in
 > `.meta.json` sidecars next to the artifact bytes
@@ -158,12 +190,34 @@ exists and belongs to someone else still raises, even in local mode.
 
 ## Persistence cache
 
-`RuntimeServices.persistence_cache` is a `TTLCache(maxsize=10_000,
-ttl=86_400)` — hard-coded, not exposed via `Settings`. It caches provider
-task lookups → artifact references (`dict[str, ArtifactRef | None]`). The
-24h TTL matches the longest provider media-URL expiry window (24h for
-image/video; audio URLs expire in 2h), so resolved artifact references for a
-provider task ID are not re-resolved while still valid.
+`RuntimeServices.task_artifact_cache` is a `SQLiteTaskArtifactCache` backed by
+the same `runtime.sqlite3` database as the ownership store and budget ledger.
+Schema:
+
+```sql
+CREATE TABLE IF NOT EXISTS task_artifacts (
+    provider TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    artifacts_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(provider, task_id)
+)
+```
+
+It caches provider task lookups → artifact references (`dict[str, ArtifactRef | None]`).
+The TTL defaults to 86,400 seconds (24h), matching the longest provider media-URL
+expiry window (24h for image/video; audio URLs expire in 2h), so resolved artifact
+references for a provider task ID are not re-resolved while still valid. Entries
+older than `PERSISTENCE_CACHE_TTL_SECONDS` are lazily ignored on read. When the
+row count exceeds `PERSISTENCE_CACHE_MAX_SIZE`, the oldest entries are evicted.
+
+Unlike the previous in-memory `TTLCache`, the SQLite-backed cache **survives
+server restarts** — a restart no longer loses cached task→artifact mappings.
+
+| Env var | Default | Used as |
+|---|---|---|
+| `PERSISTENCE_CACHE_MAX_SIZE` | `10_000` | max rows before oldest eviction |
+| `PERSISTENCE_CACHE_TTL_SECONDS` | `86_400` | TTL in seconds; entries older than this are ignored on read |
 
 ## Retry policy (`providers/retry.py`)
 

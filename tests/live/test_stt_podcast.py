@@ -1,6 +1,6 @@
 """Live test for speech_to_text with the podcast sample file.
 
-Requires a valid SEED_SPEECH_ASR_API_KEY in .env and an audio file
+Requires a valid BYTEPLUS_SEED_SPEECH_API_KEY in .env and an audio file
 at out/pax_silica_podcast.mp3. Uses the FastMCP in-memory client transport.
 
 Run with:

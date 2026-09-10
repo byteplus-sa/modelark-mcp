@@ -33,7 +33,7 @@ class SeedSpeechGateway(BaseHttpGateway):
         connect_timeout: float | None = None,
     ) -> None:
         settings = get_settings()
-        self._api_key = api_key or settings.seed_audio_api_key
+        self._api_key = api_key or settings.seed_speech_api_key
         self._base_url = (base_url or settings.seed_audio_base_url).rstrip("/")
         self._timeout = timeout or settings.request_timeout_ms / 1000
         self._connect_timeout = connect_timeout or settings.connect_timeout_ms / 1000

@@ -1,6 +1,6 @@
 """Live test for speech_to_text with a real sample file.
 
-Requires a valid SEED_SPEECH_ASR_API_KEY in .env and an audio file
+Requires a valid BYTEPLUS_SEED_SPEECH_API_KEY in .env and an audio file
 at sample/mix_s01_v03.wav. Uses the FastMCP in-memory client transport.
 
 Run with:

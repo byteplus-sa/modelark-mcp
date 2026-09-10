@@ -1,6 +1,6 @@
 ---
 name: modelark-mcp
-description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, and video, transcribe speech to text, poll and manage Seedance tasks, upload reference media to object storage (TOS or S3), and fetch persisted artifacts.
+description: Guide for using the ModelArk Seed Multimodal MCP server to generate or edit images, audio, video, and 3D models (including Seedance 2.5, Hyper3D, Hitem3d, BytePlus VOD AI MediaKit enhancement, transcoding, subtitle burn-in/removal, and voice/background audio separation), understand images and videos through Seed 2.1, transcribe speech to text, manage asynchronous tasks, upload reference media, and fetch persisted artifacts.
 ---
 
 # ModelArk Seed Multimodal MCP Server
@@ -14,8 +14,25 @@ behind one server:
 - **Seed Audio** — full-scene audio generation with voice cloning, subtitles,
   and watermarking.
 - **Seedance** — asynchronous video generation with task-based lifecycle
-  (create, poll, list, cancel/delete).
+  (create, poll, list, cancel/delete). Supports two model generations: 2.5
+  (default, 30s, 30/10/10 refs, 480p/720p/1080p) and 2.0 (legacy, 15s, 9/3/3
+  refs, 480p–4K, Fast/Mini variants).
+- **Seed 3D** — asynchronous 3D model generation through ModelArk. Hyper3D
+  (text-to-3D and image-to-3D, up to 5 images, GLB/OBJ/USDZ/FBX/STL output)
+  and Hitem3d (image-to-3D only, 1–4 images, OBJ/GLB/STL/FBX/USDZ output).
+  Gated by `BYTEPLUS_MODELARK_3D_ENABLED`; disabled by default.
+- **Seed 2.1 Understanding** — multimodal video/image understanding and
+  reasoning through ModelArk Chat Completions; supports deep-thinking mode.
+  Use for OCR, scene analysis, content review, and as a visual reasoning
+  sub-agent.
 - **Speech-to-Text** — synchronous audio transcription via Seed Speech ASR.
+- **VOD AI MediaKit** — asynchronous video enhancement using the exact
+  common/professional/4K/high/24-fps profile with task polling and download,
+  asynchronous video transcoding
+  (codec, container, resolution, bitrate, frame rate) via a submit-then-poll
+  tool pair, subtitle burn-in and precision subtitle/text erasure via two
+  submit-then-poll pairs, and voice + background (or voice + music + sfx)
+  audio separation via a submit-then-poll tool pair.
 - **Artifacts** — durable media access after provider URLs expire.
 - **Object storage upload** — presigned URL generation for URL-only media
   workflows such as Seedance video references.
@@ -23,7 +40,8 @@ behind one server:
 The server is built on FastMCP v3 and runs locally via `stdio` or as a
 deployable Streamable HTTP service. Generated media is persisted to a local
 artifact store with stable `seed-media://` resource URIs that survive provider
-URL expiry (2 hours for audio, 24 hours for image/video).
+URL expiry (2 hours for audio, 24 hours for ModelArk image/video/3D and MediaKit
+outputs). MediaKit durable copies are best-effort.
 
 ## When To Use
 
@@ -31,8 +49,18 @@ Invoke this skill when the user wants to:
 
 - generate or edit an image;
 - generate audio, voice-clone from references, or request several variations;
-- create, poll, list, cancel, or delete Seedance video tasks;
+- create, poll, list, cancel, or delete Seedance video tasks (Seedance 2.0 and 2.5);
+- create, poll, list, cancel, or delete Hyper3D and Hitem3d 3D generation tasks (requires the 3D feature flag);
+- understand images or videos (OCR, scene analysis, content review), or use a
+  multimodal reasoning sub-agent;
 - transcribe audio or video into timestamped, speaker-diarized text;
+- enhance a public HTTPS video with the supported VOD AI MediaKit profile;
+- transcode a public HTTPS video (codec, container, resolution, bitrate, frame
+  rate) with the VOD AI MediaKit submit-then-poll tool pair;
+- burn an SRT/VTT/ASS file or inline timed subtitle cues into a public HTTPS
+  video, or remove hardcoded subtitles/on-screen text with MediaKit;
+- separate voice from background audio (or voice + music + sfx) for a public
+  HTTPS audio or video URL using the VOD AI MediaKit tool pair;
 - fetch a previously persisted artifact by ID;
 - upload local or Base64 media to object storage (TOS or S3) to obtain a
   presigned HTTPS URL;
@@ -49,14 +77,24 @@ gracefully degrades to whatever is configured.
 - `seed_media_get_artifact`
 - `seed-health://status` resource
 
-### Requires `BYTEPLUS_SEED_AUDIO_API_KEY`
+### Requires `BYTEPLUS_SEED_SPEECH_API_KEY`
 
 - `seed_audio_generate`
 - `seed_audio_generate_variations`
-
-### Requires `SEED_SPEECH_ASR_API_KEY`
-
 - `speech_to_text`
+
+### Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY`
+
+- `vod_enhance_video`
+- `vod_get_enhancement_task`
+- `vod_transcode_video`
+- `vod_get_transcode_task`
+- `vod_add_subtitles`
+- `vod_get_subtitle_addition_task`
+- `vod_remove_subtitles`
+- `vod_get_subtitle_removal_task`
+- `vod_separate_audio`
+- `vod_get_audio_separation`
 
 ### Requires `BYTEPLUS_MODELARK_API_KEY`
 
@@ -65,14 +103,33 @@ gracefully degrades to whatever is configured.
 - `seedream_generate_image_variations`
 - `seedance_create_task`
 - `seedance_create_task_variations`
-- `seedance_get_task`
-- `seedance_list_tasks`
-- `seedance_cancel_or_delete_task`
+- `seedance_get_task`               # shared: retrieves both 2.0 and 2.5 tasks
+- `seedance_list_tasks`             # shared: lists both 2.0 and 2.5 tasks
+- `seedance_cancel_or_delete_task`  # shared: acts on both 2.0 and 2.5 tasks
+- `seedance_2_5_create_task`
+- `seedance_2_5_create_task_variations`
+- `seed_understand`
+
+### Requires `BYTEPLUS_MODELARK_3D_ENABLED=true` (and `BYTEPLUS_MODELARK_API_KEY`)
+
+- `hyper3d_create_task`
+- `hyper3d_get_task`
+- `hyper3d_list_tasks`
+- `hyper3d_cancel_or_delete_task`
+- `hitem3d_create_task`
+- `hitem3d_get_task`
+- `hitem3d_list_tasks`
+- `hitem3d_cancel_or_delete_task`
+
+3D generation is **disabled by default**; it reuses the ModelArk API key and
+base URL but is gated by its own feature flag so it stays off unless
+explicitly enabled.
 
 ### Requires object storage credentials (TOS or S3)
 
 - `media_upload`
 - `media_presign`
+- `media_presign_batch`
 
 ---
 
@@ -90,8 +147,8 @@ Copy `.env.example` to `.env` and configure at minimum:
 
 ```bash
 BYTEPLUS_MODELARK_API_KEY=your-modelark-key   # required for Seedream + Seedance
-BYTEPLUS_SEED_AUDIO_API_KEY=your-audio-key    # required for Seed Audio
-SEED_SPEECH_ASR_API_KEY=your-asr-key          # required for Speech-to-Text
+BYTEPLUS_SEED_SPEECH_API_KEY=your-speech-key  # required for Seed Audio + Speech-to-Text
+BYTEPLUS_VOD_MEDIAKIT_API_KEY=your-mediakit-key # required for VOD enhancement, transcoding, and audio separation
 ```
 
 Optional object storage upload support (TOS default, S3 alternative):
@@ -144,9 +201,177 @@ Returns `SeedMediaGetArtifactOutput` with `artifact_id`, `media_type`,
 
 ---
 
+### VOD AI MediaKit
+
+Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY`. Auth scopes: `vod:enhance`,
+`vod:transcode`, `vod:subtitle:add`, `vod:subtitle:remove`, `vod:extract`,
+and `vod:read`.
+
+#### `vod_enhance_video`
+
+Enhance a public HTTPS video using the exact currently supported profile. The
+operation is asynchronous, mutating, non-idempotent, and open-world. Do
+not retry it automatically: a timeout may be ambiguous after provider work has
+started. Save the returned task ID and poll it with `vod_get_enhancement_task`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `video_url` | URL | Yes | Public HTTPS source; private/link-local targets rejected |
+| `scene` | `"common"` | No | Fixed current scene profile |
+| `tool_version` | `"professional"` | No | Fixed current enhancement profile |
+| `resolution` | `"4k"` | No | Fixed current output resolution |
+| `bitrate_level` | `"high"` | No | Fixed current bitrate profile |
+| `fps` | `24` | No | Fixed current frame rate |
+| `project` | string | No | Defaults to `default`; sent upstream as `Project` |
+| `input_duration_seconds` | number | No | Reserved; no price estimate is currently produced |
+| `persist` | boolean | No | Best-effort durable artifact copy; default `true` |
+
+The verified response is `status="accepted"` with a task ID. Poll that exact ID
+with `vod_get_enhancement_task`; do not substitute the transcode or
+audio-separation poll tools for enhancement results.
+If a completed response supplies `source_url`, retain it even when the best-effort
+copy fails. `persistence` is `not_applicable`, `persisted`, `failed`, or `not_requested`; durable
+video copies are capped at 200 MiB. `estimated_cost_usd` remains null until
+convenience-endpoint pricing and billing-unit mapping are confirmed.
+
+#### `vod_get_enhancement_task`
+
+Read-only poll of an enhancement task (`vod:read`). Requires the `task_id`
+returned by `vod_enhance_video`. Maps provider `running`→`processing`,
+`completed`→`succeeded`, and `failed`→`failed`, while requiring
+`task_type="enhance-video"`. On success, returns the 24-hour `source_url`,
+duration, resolution, frame rate, enhancement tier, and normalized timestamps.
+With `persist_output=true` (default), concurrent first polls share one durable
+artifact copy under the 200 MiB limit and cache it by task ID. Cache failures
+emit safe warnings without discarding an artifact that was already created.
+
+#### `vod_transcode_video`
+
+Submit an asynchronous video transcoding task. Mutating, non-idempotent,
+open-world. Do not retry the POST automatically (a timeout may be ambiguous).
+The request body and `video` object enums are verified from the official AI
+MediaKit API reference. Defaults reproduce the verified portrait-to-720x720
+letterbox profile (`scale_type=2`, `scale_width=720`, `scale_height=720`,
+`scale_mode=2`).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `video_url` | URL | Yes | Public HTTPS source; private/link-local targets rejected |
+| `container_format` | `"MP4"` \| `"FLV"` \| `"MPEGTS"` | No | Output container format; default `MP4` |
+| `video` | object | No | See fields below |
+| `persist` | boolean | No | Best-effort durable copy on later poll; default `true` |
+
+`video` fields: `codec` (`h264`/`h265`, default `h264`); `scale_type` (`0`/`1`/`2`,
+default `2`); `scale_mode` (`0`/`1`/`2`, default `2`); `scale_width`/`scale_height`
+(px [0,4320], only when `scale_type=2`, default 720); `scale_short`/`scale_long`
+(px [0,4320], only when `scale_type=1`); `bitrate_mode` (`crf`/`abr`/`cbr`, default
+`crf`); `bitrate_crf` ([0,51], default 25); `bitrate_kbps` (kbps [10,50000],
+default 2000); `fps_mode` (`vfr`/`cfr`, default `vfr`); `fps` ([1,240], unset keeps
+source rate); `is_hdr_to_sdr` (default `true`).
+
+Returns `status="accepted"` plus `task_id` and a heuristic
+`recommended_poll_after_ms`. Poll with `vod_get_transcode_task`.
+
+#### `vod_get_transcode_task`
+
+Read-only poll of a transcode task (`vod:read`). Requires the `task_id` returned
+by `vod_transcode_video`. Maps provider `running`→`processing`,
+`completed`→`succeeded`, `failed`→`failed` (the provider documents no
+queued/expired/cancelled statuses). On success, returns `source_url` (24-hour
+lifetime) plus optional `duration_seconds`/`resolution`/`video_codec` and
+normalized ISO-8601 `created_at`/`finished_at`/`source_expires_at`. With
+`persist_output=true` (default), the completed output is copied once into the
+durable artifact store (200 MiB cap) and cached by task ID so repeated polls do
+not re-download; a persistence failure never erases provider success. On
+failure, `error` carries the safe provider detail.
+
+#### `vod_add_subtitles` / `vod_get_subtitle_addition_task`
+
+Burn an SRT/VTT/ASS subtitle file or inline timed cues into a public HTTPS
+video. At least one of `subtitle_url` or `subtitles` is required; the file URL
+takes priority if both are present. Inline cues require nonblank
+`subtitle_text`, a nonnegative `start_time`, and a later `end_time`. Optional
+position, font size, RGBA color, and font identifier fields control styling.
+Submit with `vod:subtitle:add`, capture the task ID, then poll with `vod:read`.
+The poller requires `task_type="add-subtitle-to-video"` and can best-effort
+persist the completed MP4 when `persist_output=true`.
+
+#### `vod_remove_subtitles` / `vod_get_subtitle_removal_task`
+
+Use precision erasure on a public HTTPS video. The default `subtitle` mode
+targets dialogue subtitles; `text` mode is broader and may erase titles,
+labels, or watermarks. Optional normalized rectangles, selected/skipped time
+segments, and OCR subtitle thresholds constrain processing. Submit with
+`vod:subtitle:remove`, capture the task ID, then poll with `vod:read`. The
+poller requires `task_type="erase-video-subtitle-pro"` and shares the subtitle
+addition persistence contract.
+
+Both submission tools are non-idempotent mutations and are never retried after
+ambiguous transport failures. Use a stable `client_token` to reconcile such a
+submission. Callback and queue fields are supported. `project` and removal
+`model_version` are optional legacy endpoint extensions and are omitted by
+default. Completed provider URLs are always preserved when persistence is
+skipped or fails.
+
+---
+
+### VOD AI MediaKit audio separation
+
+Requires `BYTEPLUS_VOD_MEDIAKIT_API_KEY` (same Bearer key as enhancement and
+transcoding). Auth scopes: `vod:extract` (submit) and `vod:read` (poll).
+
+#### `vod_separate_audio`
+
+Submit an asynchronous voice and background audio separation task
+(`POST /api/v1/tools/separate-voice`). Mutating, non-idempotent, open-world —
+do not retry the POST automatically (timeout/5xx means ambiguous completion).
+The source is a public HTTPS URL (audio or video), exactly one of the two.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `audio_url` | URL | Exactly one of `audio_url`/`video_url` | Public HTTPS audio URL (mp3, m4a, wav) |
+| `video_url` | URL | Exactly one of `audio_url`/`video_url` | Public HTTPS video URL (mp4, flv, ts, avi, mov, wmv, mkv) |
+| `scene` | `"Audio"` \| `"Music"` \| `"Drama"` \| `"Narrate"` | No | Default `Audio`. `Audio`/`Music` = 2-track; `Drama`/`Narrate` = 3-track |
+| `output_format` | `"aac"` \| `"mp3"` \| `"wav"` \| `"m4a"` \| `"flac"` | No | Default `aac` |
+
+Returns `status="accepted"` plus `task_id`, `request_id`, and
+`provider_log_id`. Poll with `vod_get_audio_separation`.
+
+**Source URL liveness.** The provider downloads `audio_url`/`video_url`
+asynchronously after submission, so the URL must stay fetchable until the
+provider has downloaded it. A presigned URL (default 1800s / 30 min,
+configurable 60–604800s via `TOS_PRESIGN_TTL_SECONDS`/`S3_PRESIGN_TTL_SECONDS`)
+may expire before the provider fetches it, causing the task to fail. For VOD
+inputs, upload via `media_upload` with `expires_in_seconds` (e.g. 3600) or use
+a stable public URL.
+
+#### `vod_get_audio_separation`
+
+Read-only poll of a separation task (`vod:read`). Requires the `task_id`
+returned by `vod_separate_audio`. Maps provider `running`→`processing`,
+`completed`→`succeeded`, `failed`→`failed`. On success, `voice`, `background`,
+`music`, and `sfx` each carry the track's expiring `source_url` (24-hour
+lifetime) and, with `persist_output=true` (default), a durable `artifact`
+reference copied once and cached by task ID. A persistence failure never erases
+provider success. On failure, `error` carries the safe provider detail.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | string | Yes | Task ID returned by `vod_separate_audio` |
+| `persist_output` | boolean | No | Best-effort durable copy on first successful poll; default `true` |
+
+**Latency and transient failures.** A completed separation typically takes
+tens of seconds but can take minutes; keep polling until a terminal state
+rather than giving up after the first `processing` response. A provider
+`failed` result with `error.code` `AbilityProcessingError` /
+`InternalError` is usually transient — re-submit the same source rather than
+treating the input as invalid.
+
+---
+
 ### Seed Audio Tools
 
-Requires `BYTEPLUS_SEED_AUDIO_API_KEY`. Auth scope: `seed:audio:generate`.
+Requires `BYTEPLUS_SEED_SPEECH_API_KEY`. Auth scope: `seed:audio:generate`.
 
 #### `seed_audio_generate`
 
@@ -160,7 +385,7 @@ exclusive.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `text_prompt` | `str` | Yes | 1–3000 characters |
-| `audio_references` | `list[AudioReference]` | No | Up to 3 references (speaker ID, URL, or Base64) |
+| `audio_references` | `list[AudioReference]` | No | Up to 3 references (speaker ID, URL, or Base64). Base64 WAV is preflight-checked against the 30s limit. |
 | `image_reference` | `MediaSource` | No | Image for context-aware audio |
 | `output` | `AudioOutputOptions` | No | Format (wav/mp3/pcm/ogg), sample_rate, speech_rate, loudness_rate, pitch_rate, subtitle options |
 | `watermark` | `AudioWatermarkOptions` | No | Enable watermark and optional metadata |
@@ -229,6 +454,30 @@ failed, per-variation results with partial failure capture).
   "persist": true
 }
 ```
+
+---
+
+### Reusing uploaded references across shots (presign pattern)
+
+Presigned URLs expire after 30 minutes by default (1800s, configurable
+60–604800s via `TOS_PRESIGN_TTL_SECONDS`/`S3_PRESIGN_TTL_SECONDS`). When the
+same reference images or audio are used across multiple shots (e.g., character
+sheets reused across every scene), do **not** re-upload the same file each time.
+Instead:
+
+1. **Upload once** — call `media_upload` for each reference file and store
+   the returned `object_key` (e.g., in a project-level reference registry
+   like `task_ids.json` or a dedicated `ref_cache.json`).
+2. **Presign on demand** — before each new shot submission, call
+   `media_presign` with the stored `object_key` to get a fresh presigned
+   URL in seconds. No file re-upload, no duplicate storage cost.
+3. **Batch presign** — presign all needed references for a shot in one call
+   with `media_presign_batch` (pass the list of `object_keys`), then
+   immediately submit the Seedance task while the URLs are still valid.
+
+This reduces upload time from minutes (re-uploading 9–10 files per shot)
+to seconds (presigning 9–10 keys per shot) and avoids filling object
+storage with duplicate copies of the same reference images.
 
 ---
 
@@ -410,13 +659,14 @@ polling.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `prompt` | `str` | No | 1–32,000 characters. BytePlus recommends staying under 1,000 words for focus; that recommendation is not a hard API limit. |
-| `images` | `list[SeedanceImageInput]` | No | Up to 9 images with roles: `first_frame`, `last_frame`, `reference_image` |
-| `videos` | `list[SeedanceVideoInput]` | No | Up to 3 videos with role: `reference_video` |
-| `audios` | `list[SeedanceAudioInput]` | No | Up to 3 audios with role: `reference_audio` |
+| `images` | `list[SeedanceImageInput]` | No | Up to 9 images with roles: `first_frame`, `last_frame`, `reference_image`. Each entry may be a plain URL string or `{"url": ...}` (coerced to `role=reference_image`) |
+| `videos` | `list[SeedanceVideoInput]` | No | Up to 3 videos with role: `reference_video`. Each entry may be a plain URL string or `{"url": ...}` |
+| `audios` | `list[SeedanceAudioInput]` | No | Up to 3 audios with role: `reference_audio`. Each entry may be a plain URL string or `{"url": ...}` |
 | `model` | `str` | No | Model ID. Default: `dreamina-seedance-2-0-260128` (Standard). Fast and Mini IDs are configured via `SEEDANCE_MODEL_BINDINGS`. |
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` \| `"4k"` | No | |
-| `ratio` | `str` | No | Aspect ratio |
-| `duration` | `int` | No | -1 to 15 seconds |
+| `ratio` | `str` | No | Aspect ratio. For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
+| `duration` | `int` | No | -1 (auto) to 15 seconds. Ignored for edit tasks (auto-derived from input video) |
+| `omni_reference_task_type` | `str` | No | Task type hint (e.g. `edit_video`, `extend_video`). Default: `auto`. Note: 2.0 `edit_video` output caps at ~5s in practice. |
 | `generate_audio` | `bool` | No | Generate audio track |
 | `watermark` | `bool` | No | Provider watermark |
 | `return_last_frame` | `bool` | No | Include last frame image in output |
@@ -451,6 +701,29 @@ Returns `SeedanceCreateTaskOutput` with `task_id`, `status="queued"`, and
   "duration": 5
 }
 ```
+
+#### Auto-locked parameters by task type
+
+When the provider detects (or is hinted via `omni_reference_task_type`)
+that the task is video editing, extension, or first/last-frame generation,
+certain parameters are auto-derived from the input media and cannot be
+overridden:
+
+| Task type | Aspect ratio | Duration |
+|---|---|---|
+| Video editing | Locked to input video's ratio | Locked to input video's duration (±0.3s) |
+| Video extension | Locked to input video's ratio | Set freely |
+| First/last-frame generation | Locked to first image's ratio | Set freely |
+| Text-to-video / standard reference | Set freely | Set freely (or `-1` for auto) |
+
+For `extend_video`, any explicit `ratio` is client-stripped (logged as
+`seedance_ratio_stripped_for_extension`) to prevent the provider from
+rejecting the task with `InvalidParameter.TaskTypeConstraint`.
+
+Use `omni_reference_task_type` to force a specific task type when
+auto-detection is ambiguous (e.g. set to `"edit_video"` or
+`"extend_video"`). When omitted, the provider defaults to `"auto"` which
+infers the task type from the prompt and media inputs.
 
 #### `seedance_create_task_variations`
 
@@ -526,9 +799,352 @@ Returns `SeedanceCancelOrDeleteOutput`.
 
 ---
 
+### Seedance 2.5 (Video) Tools
+
+Requires `BYTEPLUS_MODELARK_API_KEY`. Same auth scopes as 2.0.
+
+Seedance 2.5 (`dreamina-seedance-2-5-260628`) is the newer, higher-capability model. Key differences from 2.0:
+
+| Capability | Seedance 2.0 | Seedance 2.5 |
+|---|---|---|
+| Max duration | 15s | 30s |
+| Max images | 9 | 30 |
+| Max videos | 3 | 10 |
+| Max audios | 3 | 10 |
+| Resolution | 480p, 720p, 1080p, 4K | 480p, 720p, 1080p |
+| Fast/Mini variants | Yes | No |
+| Structured editing | No | Subject replacement, background replacement, audio editing |
+| Forward/backward extension | No (manual `return_last_frame` chaining) | Yes (native) |
+| Keyframe sequences | No | Yes |
+
+**When to choose 2.5:** longer single-pass videos (up to 30s), richer multimodal references (30/10/10), structured editing, native extension, 1080p output.
+
+**When to choose 2.0:** 4K output resolution, Fast/Mini speed variants, lower cost per generation.
+
+#### `seedance_2_5_create_task`
+
+Create an asynchronous Seedance 2.5 video generation task.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | `str` | No | Text prompt (up to 32,000 chars). Optional when media inputs are provided. |
+| `images` | `list[SeedanceImageInput]` | No | Up to 30 images with roles: `first_frame`, `last_frame`, `reference_image`. Each entry may be a plain URL string or `{"url": ...}` |
+| `videos` | `list[SeedanceVideoInput]` | No | Up to 10 videos with role: `reference_video`. Each entry may be a plain URL string or `{"url": ...}` |
+| `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). Each entry may be a plain URL string or `{"url": ...}` |
+| `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
+| `resolution` | `"480p"` \| `"720p"` \| `"1080p"` | No | 2.5 supports 480p, 720p, and 1080p. 4k is not supported. |
+| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
+| `duration` | `int` | No | -1 (auto) to 30 seconds. Ignored for `edit_video` tasks (auto-derived from input video). |
+| `omni_reference_task_type` | `str` | No | Task type hint passed through to the provider. Common values: `auto` (default, provider auto-detects), `edit_video`, `extend_video`. The server does not restrict or validate this to a fixed enum for either 2.0 or 2.5; for `extend_video`, `ratio` is stripped client-side to prevent `InvalidParameter.TaskTypeConstraint`. |
+| `generate_audio` | `bool` | No | Whether to generate an audio track. |
+| `watermark` | `bool` | No | Apply AIGC watermark. |
+| `return_last_frame` | `bool` | No | Return the last frame as a separate image. |
+| `execution_expires_after` | `int` | No | Max execution time in seconds (3600–259200). |
+| `priority` | `int` | No | Task priority (0–9). |
+| `safety_identifier` | `str` | No | Content safety tracking ID (max 64 chars). |
+
+Returns `Seedance25CreateTaskOutput` with `task_id`, `status="queued"`, and `recommended_poll_after_ms`.
+
+> **Audio-only input:** Unlike Seedance 2.0, 2.5 supports audio as the sole
+> media input — a single BGM, voice, or sound-effect track can drive visual
+> pacing, beat matching, and lip-sync without any image or video reference.
+
+**Example — 30s text-to-video with native audio:**
+
+```json
+{
+  "prompt": "A cinematic 30-second scene...",
+  "model": "dreamina-seedance-2-5-260628",
+  "resolution": "720p",
+  "ratio": "16:9",
+  "duration": 30,
+  "generate_audio": true
+}
+```
+
+#### `seedance_2_5_create_task_variations`
+
+Create multiple Seedance 2.5 video tasks in parallel. Inherits all parameters from `seedance_2_5_create_task` and adds `variations` (1–5) and `variation_prompts`.
+
+> **Shared lifecycle tools:** `seedance_get_task`, `seedance_list_tasks`, and
+> `seedance_cancel_or_delete_task` work with both 2.0 and 2.5 task IDs. Use
+> them the same way regardless of which create tool produced the task.
+
+---
+
+### Seed 3D (Hyper3D + Hitem3d) Tools
+
+Requires `BYTEPLUS_MODELARK_3D_ENABLED=true` (and `BYTEPLUS_MODELARK_API_KEY`).
+Auth scopes: `hyper3d:create`, `hyper3d:read`, `hyper3d:delete`, `hitem3d:create`,
+`hitem3d:read`, `hitem3d:delete`.
+
+3D generation is **asynchronous**. You create a task, then poll for completion.
+Tasks use the same lifecycle states as Seedance:
+`queued → running → succeeded | failed | cancelled | expired`.
+
+Two model families are supported:
+
+- **Hyper3D** (`hyper3d-gen2-260112`) — text-to-3D and image-to-3D. Accepts a
+  text prompt and/or up to 5 reference images. Supports seeds, PBR/Shaded/All/None
+  materials, Raw/Quad mesh modes, custom polygon counts, HD textures, bounding-box
+  conditioning, T-Pose, and subdivision levels. Output formats: GLB, OBJ, USDZ,
+  FBX, STL.
+- **Hitem3d** (`hitem3d-2-0-251223`) — image-to-3D only. Requires 1–4 reference
+  images. Supports resolution selection (1536/1536pro), custom face counts
+  (100K–2M), geometry-only or geometry+texture modes, and multi-view bitmap
+  marking. Output formats: OBJ, GLB, STL, FBX, USDZ.
+
+#### `hyper3d_create_task`
+
+Create an asynchronous Hyper3D 3D generation task. Supports text-to-3D (prompt
+required) and image-to-3D (1–5 images).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | `str` | No* | Text prompt (English, max 400 chars). *Required for text-to-3D when no images are provided. |
+| `images` | `list[Seed3DImageInput]` | No | Reference images for image-to-3D. Max 5. |
+| `model` | `str` | No | Model ID. Omit for the configured Hyper3D default. |
+| `seed` | `int` | No | Random seed for reproducible generation (0–65535). |
+| `callback_url` | `str` | No | Optional callback URL notified on status changes. |
+| `material` | `"PBR"` \| `"Shaded"` \| `"All"` \| `"None"` | No | Material type. PBR (default). |
+| `mesh_mode` | `"Raw"` \| `"Quad"` | No | Mesh shape. Raw (triangles) or Quad (default). |
+| `quality_override` | `int` | No | Custom polygon count (Raw: 500–1M, Quad: 1000–200K). |
+| `addons` | `"HighPack"` | No | Texture enhancement. HighPack provides 4K textures. |
+| `use_original_alpha` | `bool` | No | Preserve transparent areas of the input image. |
+| `bbox_condition` | `list[int]` | No | Bounding box `[width, height, length]` (3 ints). |
+| `ta_pose` | `bool` | No | Force T-Pose/A-Pose for humanoid models. |
+| `subdivision_level` | `"high"` \| `"medium"` \| `"low"` | No | Polygon count level. Ignored when `quality_override` is set. |
+| `file_format` | `"glb"` \| `"obj"` \| `"usdz"` \| `"fbx"` \| `"stl"` | No | Output 3D file format. Defaults to `glb`. |
+| `hd_texture` | `bool` | No | Enable HD textures. |
+
+Returns `Seed3DCreateTaskOutput` with `task_id`, `status="queued"`, and
+`recommended_poll_after_ms` (5000ms).
+
+**Example — text-to-3D:**
+
+```json
+{
+  "prompt": "A medieval castle with tall towers and a drawbridge",
+  "file_format": "glb",
+  "material": "PBR"
+}
+```
+
+**Example — image-to-3D with PBR materials:**
+
+```json
+{
+  "images": [
+    { "kind": "url", "url": "https://cdn.example.com/character.png" }
+  ],
+  "material": "PBR",
+  "mesh_mode": "Quad",
+  "file_format": "glb"
+}
+```
+
+#### `hitem3d_create_task`
+
+Create an asynchronous Hitem3d 3D generation task. Image-to-3D only; requires
+1–4 reference images.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `images` | `list[Seed3DImageInput]` | Yes | Reference images for image-to-3D. 1–4 required. |
+| `model` | `str` | No | Model ID. Omit for the configured Hitem3d default. |
+| `callback_url` | `str` | No | Optional callback URL notified on status changes. |
+| `resolution` | `"1536"` \| `"1536pro"` | No | Model resolution. 1536 (default) or 1536pro. |
+| `face` | `int` | No | Custom model face count (100000–2000000). |
+| `file_format` | `"obj"` \| `"glb"` \| `"stl"` \| `"fbx"` \| `"usdz"` | No | Output 3D file format. Defaults to `obj`. |
+| `request_type` | `1` \| `3` | No | 1 = geometry only, 3 = geometry + texture (default). |
+| `multi_images_bit` | `str` | No | Bitmap marking which views are present, in order front/back/left/right (e.g. `"1010"` = front + left). Max 4 chars. |
+
+Returns `Seed3DCreateTaskOutput` with `task_id`, `status="queued"`, and
+`recommended_poll_after_ms` (5000ms).
+
+**Example — image-to-3D with multiple views:**
+
+```json
+{
+  "images": [
+    { "kind": "url", "url": "https://cdn.example.com/front.png" },
+    { "kind": "url", "url": "https://cdn.example.com/left.png" }
+  ],
+  "multi_images_bit": "1010",
+  "resolution": "1536pro",
+  "file_format": "glb"
+}
+```
+
+#### `hyper3d_get_task` / `hitem3d_get_task`
+
+Retrieve the status and output of a 3D generation task. On first successful
+retrieval with `persist_output=true` (default), copies the provider's 24-hour
+file URL (zip package of the 3D file) into durable artifact storage so the
+`seed-media://` resource remains available after expiry.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | `str` | Yes | Task ID from the create tool |
+| `persist_output` | `bool` | No (default `true`) | Persist the 3D file to artifact store on first success |
+
+Returns `Seed3DTaskOutput` with `task_id`, `model`, `created_at`, `updated_at`,
+`status`, optional `error`, optional `file: ArtifactRef` (on success), and
+optional `usage`.
+
+#### `hyper3d_list_tasks` / `hitem3d_list_tasks`
+
+List recent 3D generation tasks (previous 7 days, provider limitation). Supports
+filtering by status, task IDs, and model.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `page` | `int` | No | 1–500 |
+| `page_size` | `int` | No | 1–100 |
+| `status` | `Seed3DTaskStatus` | No | Filter by status |
+| `task_ids` | `list[str]` | No | Filter by specific task IDs |
+| `model` | `str` | No | Filter by model ID |
+
+Returns `Seed3DTaskPage` with paginated task summaries.
+
+#### `hyper3d_cancel_or_delete_task` / `hitem3d_cancel_or_delete_task`
+
+Cancel a queued task or delete a terminal task. **Destructive** — requires
+explicit confirmation.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | `str` | Yes | Task to act on |
+| `mode` | `"cancel"` \| `"delete"` | Yes | Action to perform |
+| `expected_status` | `Seed3DTaskStatus` | Yes | Must match current status |
+| `confirm` | `Literal[true]` | Yes | Must be `true` |
+
+- `mode=cancel` + `expected_status=queued`: Cancel a pending task.
+- `mode=delete` + `expected_status=succeeded|failed|expired`: Delete a completed task.
+
+Returns `Seed3DCancelOrDeleteOutput`.
+
+---
+
+### Seed 2.1 Multimodal Understanding
+
+Requires `BYTEPLUS_MODELARK_API_KEY`. Auth scope: `understanding:read`.
+
+The default model is `dola-seed-2-1-turbo-260628` (Seed 2.1 Turbo).
+`dola-seed-evolving` (the latest Seed-series Pro-tier model) is also a
+recognized built-in ID — set `SEED_UNDERSTANDING_DEFAULT_MODEL=dola-seed-evolving`
+to opt in; its family auto-resolves to `pro` so no explicit
+`SEED_UNDERSTANDING_MODEL_FAMILY` is required. Other custom model IDs can be
+registered via `SEED_UNDERSTANDING_MODEL_BINDINGS`.
+
+#### `seed_understand`
+
+Understand images and videos, or reason about a task, through the Seed 2.1
+multimodal model via ModelArk Chat Completions. Supports deep-thinking
+(chain-of-thought) reasoning when `thinking=true`. Use this for:
+
+- **Video understanding** — describe, summarize, or answer questions about video content
+- **Image understanding / OCR** — extract text, describe scenes, analyze visual content
+- **Multimodal reasoning** — combine text + images + videos for complex analysis
+- **As a reasoning sub-agent** — delegate analysis tasks that need visual context
+
+Video inputs must be HTTPS URLs (Base64 not supported by the chat endpoint).
+Upload local videos via `media_upload` first.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | `str` | Yes | 1–32,000 characters. The question or task for the model. |
+| `images` | `list[UnderstandingImageInput]` | No | Up to 32 images (URL or Base64) |
+| `videos` | `list[UnderstandingVideoInput]` | No | Up to 32 videos (URL only, no Base64) |
+| `system` | `str` | No | Optional system instruction (max 32,000 chars) |
+| `model` | `str` | No | Override the configured Seed 2.1 model ID |
+| `thinking` | `bool` | No (default `false`) | Enable deep-thinking chain-of-thought reasoning |
+| `reasoning_effort` | `"low"` \| `"medium"` \| `"high"` | No | Only when `thinking=true` |
+| `temperature` | `float` | No | 0.0–2.0. Lower = more deterministic |
+| `max_tokens` | `int` | No | 1–32768 |
+| `top_p` | `float` | No | 0.0–1.0 nucleus sampling |
+| `repetition_penalty` | `float` | No | 0.0–2.0 (Ark-only parameter) |
+
+Returns `SeedUnderstandOutput` with `model`, `completion_id`, `choices`
+(each with `content` and optional `reasoning_content`), `usage`
+(prompt_tokens, completion_tokens, total_tokens), and `request_id`.
+
+**Example — image OCR / understanding:**
+
+```json
+{
+  "prompt": "Extract all text visible in this image and describe the scene.",
+  "images": [
+    { "kind": "url", "url": "https://cdn.example.com/document.png" }
+  ]
+}
+```
+
+**Example — video understanding with deep thinking:**
+
+```json
+{
+  "prompt": "Analyze this product demo video. What are the key features shown? Are there any UI issues or bugs visible? Rate the overall production quality.",
+  "videos": [
+    { "kind": "url", "url": "https://cdn.example.com/demo.mp4" }
+  ],
+  "thinking": true,
+  "reasoning_effort": "high",
+  "max_tokens": 4096
+}
+```
+
+**Example — multimodal reasoning as a sub-agent:**
+
+```json
+{
+  "prompt": "Compare the UI in screenshot 1 with the design spec in screenshot 2. List all differences in spacing, color, and typography.",
+  "images": [
+    { "kind": "url", "url": "https://cdn.example.com/screenshot.png" },
+    { "kind": "url", "url": "https://cdn.example.com/design-spec.png" }
+  ],
+  "system": "You are a meticulous UI/UX reviewer. Be specific about pixel-level differences."
+}
+```
+
+**Deep-thinking mode:** When `thinking=true`, the model produces
+chain-of-thought reasoning visible in `choices[].reasoning_content`. Use
+`reasoning_effort` to control depth:
+
+| Level | When to Use | Latency |
+|---|---|---|
+| `low` | Quick checks, simple OCR, basic descriptions | Fastest |
+| `medium` | Balanced analysis, moderate comparisons | Moderate |
+| `high` | Deep analysis, complex reasoning, detailed reviews | Slowest |
+
+Keep `thinking=false` for simple extraction, description, or lookup tasks
+where speed matters more than reasoning depth.
+
+**Prompt engineering tips:**
+
+- **Specify output format** — ask for JSON, markdown tables, or numbered lists
+  to get structured results
+- **Use system instructions** for role and constraints (e.g., "You are a
+  senior data analyst. Be thorough and systematic.")
+- **Break complex tasks into steps** — make focused calls (extract, then
+  analyze, then summarize) instead of one massive prompt
+- **Ask for timestamps** when referencing specific video moments
+- **For multi-language OCR**, mention expected languages in the prompt
+
+**Limitations:**
+
+- Video Base64 is not supported — upload via `media_upload` first
+- 32 media parts max (images + videos combined)
+- Synchronous call — blocks until the model responds (long videos with
+  deep-thinking can take 30+ seconds)
+- No streaming — the full response is returned at once
+- No artifact persistence — understanding returns text, not media
+
+---
+
 ### Speech-to-Text
 
-Requires `SEED_SPEECH_ASR_API_KEY`. Auth scope: `seed:asr:transcribe`.
+Requires `BYTEPLUS_SEED_SPEECH_API_KEY`. Auth scope: `seed:asr:transcribe`.
 
 #### `speech_to_text`
 
@@ -568,12 +1184,23 @@ Returns `SpeechToTextOutput` with `result: TranscriptionResult` and optional
 
 Transcription output is text — no artifact persistence needed.
 
+**ASR error code `20000003` (silent audio).** Seed Speech ASR reports task
+state in the `X-Api-Status-Code` header: `20000000` = success, `20000001` /
+`20000002` = still processing, and `20000003` = terminal failure meaning
+**silent audio — no human speech was detected**. The tool surfaces this as
+`Seed Speech ASR query failed with status code 20000003` with
+`retryable=false`. It is not transient — retrying the same task will not help.
+Verify the audio actually contains speech and matches the declared
+`audio_format`: for `wav`/`raw` the gateway assumes 16 kHz, 16-bit, mono PCM,
+and a mismatch decodes to silence or garbage. Re-submit with corrected audio.
+
 ---
 
 ### Object Storage Upload
 
 Requires object storage credentials (TOS or S3). No auth scope in stdio mode.
-In JWT mode: `media:upload` for `media_upload`, `media:presign` for `media_presign`.
+In JWT mode: `media:upload` for `media_upload`, `media:presign` for `media_presign`
+and `media_presign_batch`.
 
 #### `media_upload`
 
@@ -588,6 +1215,7 @@ which cannot be inlined as Base64.
 | `data` | `str` | No* | Base64-encoded media bytes. Mutually exclusive with `file_path`. |
 | `file_path` | `str` | No* | Absolute path to a local file. stdio transport only. Mutually exclusive with `data`. |
 | `key_prefix` | `str` | No | Object key prefix (default `references`). Alphanumeric, `-`, `_`, `/` only. |
+| `expires_in_seconds` | `int` | No | Presigned URL validity in seconds (60–604800). Defaults to the configured presign TTL. Use a long value (e.g. 3600) for uploads destined for VOD tools, which fetch the source asynchronously. |
 
 Returns `MediaUploadOutput` with `url`, `expires_at`, `object_key`, `bytes`.
 
@@ -620,6 +1248,7 @@ reference's presigned URL has expired or is about to expire.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `object_key` | `str` | Yes | Object key returned by a prior `media_upload` call |
+| `expires_in_seconds` | `int` | No | Presigned URL validity in seconds (60–604800). Defaults to the configured presign TTL. Use a long value (e.g. 3600) when renewing for VOD tools, which fetch the source asynchronously. |
 
 Returns `MediaPresignOutput` with `url`, `expires_at`, `object_key`.
 
@@ -628,6 +1257,37 @@ Returns `MediaPresignOutput` with `url`, `expires_at`, `object_key`.
 ```json
 {
   "object_key": "references/video/abc-123-def"
+}
+```
+
+JWT scope: `media:presign`.
+
+#### `media_presign_batch`
+
+Generate fresh presigned HTTPS GET URLs for many existing objects in a single
+call (TOS or S3). Use this when preparing multiple references for one shot —
+e.g. presigning 30 Seedance 2.5 reference images — instead of calling
+`media_presign` once per key. Failures are reported per key: each failing key
+returns `code` (`INVALID_KEY`, `NOT_OWNED`, `INTERNAL`, or a provider error
+code) and `error` while the rest succeed.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `object_keys` | `list[str]` | Yes | Object keys returned by prior `media_upload` calls (1–100 entries) |
+| `expires_in_seconds` | `int` | No | Presigned URL validity (60–604800) applied to every key. Defaults to the configured presign TTL. |
+
+Returns `MediaPresignBatchOutput` with `items` (per-key `object_key`, `url`,
+`expires_at`, `code`, `error`, `request_id`), `succeeded`, and `failed`.
+
+**Example — presign a batch of references:**
+
+```json
+{
+  "object_keys": [
+    "references/image/char-sheet-1",
+    "references/image/char-sheet-2",
+    "references/audio/bgm-track"
+  ]
 }
 ```
 
@@ -644,15 +1304,17 @@ The server exposes two MCP resources:
 Retrieves a persisted media artifact by its UUID. Requires `artifacts:read`
 scope in JWT mode. Returns the media content with the correct MIME type.
 
-Artifacts are the durable, locally-persisted copies of generated media. Provider
-URLs expire (2h for audio, 24h for image/video), but artifacts survive for 7
+Artifacts are the durable, locally-persisted copies of generated media. Known
+provider URLs expire (2h for audio, 24h for ModelArk image/video/3D), but
+artifacts survive for 7
 days (configurable via `ARTIFACT_TTL_SECONDS`). Always use `persist=true` (the
 default) and reference the returned `ArtifactRef.uri` for long-lived access.
 
 ### `seed-health://status`
 
 Returns a health summary with no authentication required. Lists which products
-are configured (ModelArk, Seed Audio, Seed Speech ASR, object storage), the
+are configured (ModelArk, Seed 3D, Seed Audio, Seed Speech ASR, VOD AI MediaKit,
+object storage), the
 artifact backend, and the active transport.
 
 ---
@@ -665,13 +1327,15 @@ The server normalizes three distinct BytePlus API surfaces:
 
 | Provider | Auth | Base URL | Products |
 |---|---|---|---|
-| **ModelArk** | `Authorization: Bearer <key>` | `https://ark.ap-southeast.bytepluses.com/api/v3` | Seedream, Seedance |
-| **Seed Speech (TTS)** | `X-Api-Key: <key>` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Audio |
-| **Seed Speech (ASR)** | `X-Api-Key: <key>` (separate key) | `https://voice.ap-southeast-1.bytepluses.com` | Speech-to-Text |
+| **ModelArk** | `Authorization: Bearer <key>` | `https://ark.ap-southeast.bytepluses.com/api/v3` | Seedream, Seedance, Seed 3D (Hyper3D + Hitem3d), Seed 2.1 Understanding |
+| **Seed Speech** | `X-Api-Key: <key>` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Audio, Speech-to-Text |
+| **VOD AI MediaKit** | `Authorization: Bearer <key>` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | Video enhancement, transcode, subtitle burn-in/removal, audio separation |
 
-ModelArk and Seed Speech ASR use separate API keys even though ASR shares the
-host with TTS. Tools for a product are only registered when its provider API
-key is set.
+One Seed Speech key covers both Seed Audio and ASR — the provider distinguishes
+them by `X-Api-Resource-Id`, not by the key. ModelArk uses a separate Bearer
+key that covers Seedream, Seedance, Seed 3D, and Seed 2.1 Understanding (3D
+requires an additional feature flag). VOD AI MediaKit uses a third Bearer key.
+Tools for a product are only registered when its provider API key is set.
 
 ### Runtime Services
 
@@ -681,28 +1345,36 @@ Each server process maintains shared runtime services:
   ownership metadata and TTL-based cleanup.
 - **Budget Ledger** — SQLite-backed per-principal daily spend tracking.
 - **Task Ownership Store** — SQLite-backed task ID to principal mapping for
-  Seedance ownership enforcement.
-- **Provider Limiters** — Dual-layer concurrency control: per-provider (default
-  5) and per-principal (default 3) semaphores.
+  Seedance and Seed 3D ownership enforcement.
+- **Provider Limiters** — Concurrency control: a per-provider semaphore
+  (default 5) for every call, plus a per-principal semaphore (default 3) that
+  bounds authenticated JWT HTTP principals only. Local principals (stdio and
+  HTTP-local) are bounded solely by the provider limit.
 - **Safe Downloader** — SSRF-safe URL downloads with IP pinning and redirect
   validation.
 
 ### Model Capability Registry
 
 The server validates inputs against known model capabilities before spending
-quota. Six model families, with these default model IDs:
+quota. Eleven model families, with these default model IDs:
 
 | Family | Default Model ID | Key Traits |
 |---|---|---|
 | **Seedream Pro** | `dola-seedream-5-0-pro-260628` | 10 refs, no batch, PNG/JPEG |
 | **Seedream Lite** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, PNG/JPEG |
 | **Seedream 4.x** | *(configured via `SEEDREAM_MODEL_BINDINGS`)* | 14 refs, batch, streaming, JPEG only |
+| **Seedance 2.5** | `dreamina-seedance-2-5-260628` | 30 imgs / 10 vids / 10 audios, 480p / 720p / 1080p, up to 30s, structured editing + extension |
 | **Seedance 2 Standard** | `dreamina-seedance-2-0-260128` | 9 imgs / 3 vids / 3 audios, 480p–4K, 0–15s |
 | **Seedance 2 Fast** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
 | **Seedance 2 Mini** | *(configured via `SEEDANCE_MODEL_BINDINGS`)* | 480p, 720p only |
+| **Seed 2.1 Turbo** | `dola-seed-2-1-turbo-260628` (default) | 256K context, images + videos, deep-thinking |
+| **Seed 2.1 Pro** | `dola-seed-evolving` (recognized built-in; opt-in via `SEED_UNDERSTANDING_DEFAULT_MODEL`) | 256K context, images + videos, deep-thinking |
+| **Hyper3D** | `hyper3d-gen2-260112` | Text-to-3D + image-to-3D (5 imgs), GLB/OBJ/USDZ/FBX/STL, seeds, PBR materials |
+| **Hitem3d** | `hitem3d-2-0-251223` | Image-to-3D only (1–4 imgs), OBJ/GLB/STL/FBX/USDZ, resolution + face control |
 
-Custom model IDs must be explicitly bound via `SEEDREAM_MODEL_BINDINGS` or
-`SEEDANCE_MODEL_BINDINGS` JSON. When a client omits the `model` parameter, the
+Custom model IDs must be explicitly bound via `SEEDREAM_MODEL_BINDINGS`,
+`SEEDANCE_MODEL_BINDINGS`, `SEED_UNDERSTANDING_MODEL_BINDINGS`, or
+`SEED3D_MODEL_BINDINGS` JSON. When a client omits the `model` parameter, the
 default model for that product is used.
 
 ---
@@ -719,7 +1391,7 @@ default model for that product is used.
 
 ### Seedance Async Workflow
 
-1. Call `seedance_create_task` to create a task.
+1. Call `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5) to create a task.
 2. Immediately persist the returned `task_id`, request parameters, prompt hash,
    and intended output path to the shot manifest before polling.
 3. Poll `seedance_get_task` with the persisted `task_id` until the status is terminal.
@@ -733,11 +1405,42 @@ default model for that product is used.
 6. Optionally call `seedance_list_tasks` to browse recent tasks.
 7. Call `seedance_cancel_or_delete_task` only when cleanup is explicitly wanted.
 
+> **Choosing 2.0 vs 2.5:** Use `seedance_2_5_create_task` when you need
+> 30-second generation, 50 multimodal references, structured editing, or
+> native extension. Use `seedance_create_task` for 4K or lower
+> cost per task. The get/list/cancel tools are shared — `seedance_get_task`,
+> `seedance_list_tasks`, and `seedance_cancel_or_delete_task` work with
+> task IDs from either version.
+
+### Seed 3D Async Workflow
+
+1. Ensure `BYTEPLUS_MODELARK_3D_ENABLED=true` is set, along with
+   `BYTEPLUS_MODELARK_API_KEY`.
+2. Call `hyper3d_create_task` (text-to-3D or image-to-3D) or
+   `hitem3d_create_task` (image-to-3D only) to create a task.
+3. Persist the returned `task_id` before polling.
+4. Poll `hyper3d_get_task` or `hitem3d_get_task` with the `task_id` until the
+   status is terminal (`succeeded`, `failed`, `cancelled`, `expired`).
+   Respect the `recommended_poll_after_ms` (5000ms) from creation.
+5. On success, the 3D file (zip package) is automatically persisted to the
+   artifact store with a 24-hour source URL backup. The durable artifact
+   survives provider URL expiry.
+6. Call `hyper3d_list_tasks` or `hitem3d_list_tasks` to browse recent tasks.
+7. Call `hyper3d_cancel_or_delete_task` or `hitem3d_cancel_or_delete_task`
+   only when cleanup is explicitly wanted.
+
+> **Choosing Hyper3D vs Hitem3d:** Use `hyper3d_create_task` for text-to-3D
+> or when you need seeds, PBR materials, or custom mesh modes. Use
+> `hitem3d_create_task` for image-to-3D with multi-view inputs and resolution
+> control. The get/list/cancel tools are family-specific — use the
+> `hyper3d_*` tools for Hyper3D task IDs and `hitem3d_*` tools for Hitem3d
+> task IDs.
+
 ### URL-only Video References
 
 1. If the user has Base64 video or a local video file, call `media_upload`.
-2. Pass the returned presigned HTTPS URL into `seedance_create_task` as a
-   video reference.
+2. Pass the returned presigned HTTPS URL into `seedance_create_task` or
+   `seedance_2_5_create_task` as a video reference.
 
 ### Speech-to-Text Transcription
 
@@ -785,7 +1488,7 @@ Use variation tools when you want to give the user multiple options:
 
 - `seedream_generate_image_variations` — up to 10 distinct images in one call.
 - `seed_audio_generate_variations` — up to 5 audio clips in one call.
-- `seedance_create_task_variations` — up to 5 parallel video tasks.
+- `seedance_create_task_variations` (2.0) / `seedance_2_5_create_task_variations` (2.5) — up to 5 parallel video tasks.
 
 Each variation is independent. Partial failures are captured — if 4 of 5
 succeed, the tool returns 4 results and 1 error. The `VariationSummary` reports
@@ -826,10 +1529,24 @@ The server retries only explicitly retryable, non-ambiguous errors:
 - Timeouts are NOT retried (the operation may have succeeded server-side).
 - Provider errors with `retryable=true` are retried.
 
+Exception: MediaKit mutation submissions (`vod_enhance_video`,
+`vod_transcode_video`, `vod_add_subtitles`, `vod_remove_subtitles`, and
+`vod_separate_audio`)
+are never automatically retried. Their POSTs are non-idempotent and a transport
+failure may have ambiguous completion. `vod_get_enhancement_task`,
+`vod_get_transcode_task`, both subtitle poll tools, and
+`vod_get_audio_separation` (read-only GET polls)
+ARE retried on provider-marked
+retryable errors such as HTTP 429.
+
 For Seedance task polling, a local watcher timeout is not a generation failure.
 Resume `seedance_get_task` with the existing task ID. Only create a new task
 after the previous task reaches a terminal state and the user requests another
 take.
+
+For Seed 3D task polling, the same principle applies — resume
+`hyper3d_get_task` or `hitem3d_get_task` with the existing task ID after a
+local timeout. Do not submit a replacement task.
 
 For `speech_to_text`, the synchronous call blocks until transcription completes
 or the `SEED_SPEECH_ASR_POLL_MAX_SECONDS` cap is reached. A timeout does not
@@ -845,14 +1562,17 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 | Symptom | Cause | Resolution |
 |---|---|---|
-| Tool not appearing | Missing API key | Set the corresponding `BYTEPLUS_*` or `SEED_SPEECH_ASR_*` env var |
+| Tool not appearing | Missing API key | Set the corresponding `BYTEPLUS_*` env var |
 | Model not found | Unbound custom model ID | Add to `*_MODEL_BINDINGS` JSON |
 | URL expired | Provider URL TTL elapsed | Use `persist=true` and reference `ArtifactRef.uri` |
 | Auth error (JWT mode) | Missing or invalid token | Check JWT configuration and scopes |
 | Budget rejected | Daily limit exceeded | Wait for UTC day rollover or increase budget |
 | `speech_to_text` timeout | ASR poll cap reached | Increase `SEED_SPEECH_ASR_POLL_MAX_SECONDS` or provide shorter audio |
-| `media_upload` / `media_presign` not available | Missing TOS/S3 credentials | Set `TOS_*` or `S3_*` env vars and `OBJECT_STORAGE_BACKEND` |
-| Presigned URL expired | TTL elapsed (default 30 min) | Call `media_presign` with the `object_key` to generate a fresh URL |
+| `speech_to_text` error code `20000003` | Silent audio — no speech detected, or a format mismatch (e.g. non-16 kHz/16-bit/mono WAV) decoded to silence | Verify the audio contains speech and matches the declared `audio_format`; re-submit with corrected audio |
+| `media_upload` / `media_presign` / `media_presign_batch` not available | Missing TOS/S3 credentials | Set `TOS_*` or `S3_*` env vars and `OBJECT_STORAGE_BACKEND` |
+| Presigned URL expired | TTL elapsed (default 30 min) | Call `media_presign` (single key) or `media_presign_batch` (many keys) with the `object_key` to generate a fresh URL |
+| 3D tools not appearing | `BYTEPLUS_MODELARK_3D_ENABLED` not set or ModelArk key missing | Set `BYTEPLUS_MODELARK_3D_ENABLED=true` and ensure `BYTEPLUS_MODELARK_API_KEY` is configured |
+| 3D task failed with `AbilityProcessingError` | Transient provider error | Re-submit the same task; do not treat the input as invalid |
 
 ---
 
@@ -863,7 +1583,8 @@ Set to `0` (default) for record-only mode with no enforcement.
    durable access.
 
 2. **Poll with backoff for Seedance.** Use the `recommended_poll_after_ms`
-   from `seedance_create_task` output. Don't poll faster than the interval — it
+   from `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5) output. Don't
+   poll faster than the interval — it
    wastes quota and can hit rate limits.
 
 3. **Make polling resumable.** Save the task ID and request metadata before the
@@ -903,11 +1624,67 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 12. **Use `media_upload` for URL-only workflows.** Seedance video references
     are URL-only. When starting with a local or Base64 video, upload it first
-    and pass the presigned URL into `seedance_create_task`.
+    and pass the presigned URL into `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5).
 
-13. **`speech_to_text` is synchronous.** It blocks until transcription completes
+13. **Reuse references with `media_presign` — do not re-upload.** Presigned URLs
+    expire after 30 minutes by default, but the underlying object persists in TOS/S3.
+    Upload each reference file once, store the `object_key`, and call
+    `media_presign` (single key) or `media_presign_batch` (many keys at once)
+    to get a fresh URL for each new shot. This avoids re-uploading the same
+    character/location/prop sheets for every scene.
+
+14. **`speech_to_text` is synchronous.** It blocks until transcription completes
     or the poll cap is reached. Provide appropriately sized audio and plan for
     the blocking duration.
+
+15. **Use `seed_understand` for multimodal reasoning.** It can analyze images
+    (OCR, scene description), videos (content analysis, UI review), and
+    reason across multiple media inputs. Enable `thinking=true` for complex
+    analysis. Video Base64 is not supported — upload via `media_upload` first.
+
+16. **Choose the right Seedance model.** Use 2.0 (`seedance_create_task`)
+    for 4K or lower cost. Use 2.5 (`seedance_2_5_create_task`) for
+    30-second generation, 50 references, timestamp editing, 1080p output, or
+    multi-round extension. The get/list/cancel tools are shared.
+
+17. **Treat MediaKit persistence separately from the provider result.** Keep the
+    returned `source_url` whenever a MediaKit video task reports success.
+    Prefer persistence, but inspect
+    `persistence` and `persistence_issue`: the 200 MiB limit or a
+    safe-download/storage failure can prevent the durable copy without
+    invalidating the provider result. Do not resubmit after an ambiguous
+    timeout, and do not present `estimated_cost_usd` as available.
+
+18. **Enhancement is submit-then-poll.** Call `vod_enhance_video`, capture the
+    returned `task_id`, then poll with `vod_get_enhancement_task` until the
+    status is `succeeded` or `failed`. Persist the result before its 24-hour
+    source URL expires.
+
+19. **Transcode is submit-then-poll.** Call `vod_transcode_video`, capture the
+    returned `task_id`, then poll with `vod_get_transcode_task` until the
+    status is `succeeded` or `failed`. The default profile is portrait-to-720x720
+    letterbox; set `video.codec`, `scale_*`, `bitrate_*`, `fps`, and
+    `container_format` to target a specific output. Do not retry the POST after
+    an ambiguous timeout — re-poll the task ID instead.
+
+20. **Subtitle operations are submit-then-poll.** Use `vod_add_subtitles` for
+    burn-in and `vod_remove_subtitles` for hardcoded subtitle/text erasure, then
+    poll with the matching task tool. Prefer `subtitle` removal mode unless the
+    broader visual effect of `text` mode is intentional. Reuse `client_token`
+    when reconciling an ambiguous submission.
+
+21. **Choose the right 3D model.** Use `hyper3d_create_task` for text-to-3D or
+    when you need seeds, PBR materials, custom mesh modes, or HD textures. Use
+    `hitem3d_create_task` for image-to-3D with multi-view inputs (front/back/
+    left/right) and resolution control (1536/1536pro). The get/list/cancel tools
+    are family-specific — use `hyper3d_*` for Hyper3D task IDs and `hitem3d_*`
+    for Hitem3d task IDs.
+
+22. **3D output is a zip package.** The provider returns a 24-hour file URL
+    containing a zip of the 3D file. On first successful poll with
+    `persist_output=true` (default), the file is copied to the artifact store.
+    Use the returned `ArtifactRef.uri` for durable access after the provider
+    URL expires.
 
 ---
 
@@ -915,14 +1692,22 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 ### Provider Credentials
 
-- `BYTEPLUS_MODELARK_API_KEY` — enables Seedream and Seedance
-- `BYTEPLUS_SEED_AUDIO_API_KEY` — enables Seed Audio (TTS)
-- `SEED_SPEECH_ASR_API_KEY` — enables Speech-to-Text (ASR)
+- `BYTEPLUS_MODELARK_API_KEY` — enables Seedream, Seedance, Seed 3D (with flag), and Seed 2.1 Understanding
+- `BYTEPLUS_SEED_SPEECH_API_KEY` — enables Seed Audio (TTS) and Speech-to-Text (ASR)
+- `BYTEPLUS_VOD_MEDIAKIT_API_KEY` — enables VOD AI MediaKit enhancement, transcoding, subtitle operations, and audio separation
 - `BYTEPLUS_MODELARK_BASE_URL` — override ModelArk data-plane host
 - `BYTEPLUS_SEED_AUDIO_BASE_URL` — override Seed Audio host
 - `SEED_SPEECH_ASR_BASE_URL` — override ASR host
+- `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` — override the VOD AI MediaKit HTTPS API base
 - `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` — seconds between ASR query polls (default 3)
 - `SEED_SPEECH_ASR_POLL_MAX_SECONDS` — maximum total seconds to wait for ASR result (default 600)
+
+### 3D Generation
+
+- `BYTEPLUS_MODELARK_3D_ENABLED` — feature flag for Hyper3D + Hitem3d tools (default `false`; reuses ModelArk key)
+- `HYPER3D_DEFAULT_MODEL` — default Hyper3D model ID (default `hyper3d-gen2-260112`)
+- `HITEM3D_DEFAULT_MODEL` — default Hitem3d model ID (default `hitem3d-2-0-251223`)
+- `SEED3D_MODEL_BINDINGS` — JSON array of 3D model bindings
 
 ### Model Selection
 
@@ -932,6 +1717,9 @@ Set to `0` (default) for record-only mode with no enforcement.
 - `SEEDANCE_MODEL_FAMILY`
 - `SEEDREAM_MODEL_BINDINGS`
 - `SEEDANCE_MODEL_BINDINGS`
+- `SEED_UNDERSTANDING_DEFAULT_MODEL`
+- `SEED_UNDERSTANDING_MODEL_FAMILY`
+- `SEED_UNDERSTANDING_MODEL_BINDINGS`
 
 Use bindings when a custom model ID is not one of the built-in defaults.
 
@@ -940,22 +1728,41 @@ Use bindings when a custom model ID is not one of the built-in defaults.
 - `MCP_TRANSPORT` or `FASTMCP_TRANSPORT`
 - `MCP_HOST` or `FASTMCP_HOST`
 - `MCP_PORT` or `FASTMCP_PORT`
+- `MCP_ALLOWED_ORIGINS`
+- `MCP_ALLOWED_HOSTS`
 - `MCP_AUTH_MODE`
 - `MCP_JWT_JWKS_URI`
 - `MCP_JWT_ISSUER`
 - `MCP_JWT_AUDIENCE`
 - `MCP_TENANT_CLAIM`
+- `MCP_JWT_CLOCK_SKEW_SECONDS`
+- `MCP_JWT_PROVIDE_DISCOVERY`
+- `MCP_PUBLIC_BASE_URL`
+- `MCP_JWT_SCOPES_SUPPORTED`
+
+### HTTP Rate Limiting and Readiness
+
+- `RATE_LIMIT_RPM`
+- `RATE_LIMIT_BURST`
+- `RATE_LIMIT_TRUST_PROXY_HEADERS`
+- `READINESS_CHECK_PROVIDERS`
+- `READINESS_PROVIDER_TIMEOUT_SECONDS`
 
 ### Persistence and Runtime
 
 - `ARTIFACT_BACKEND`
 - `ARTIFACT_DIR`
 - `ARTIFACT_TTL_SECONDS`
+- `STATE_BACKEND`
+- `ARTIFACT_SWEEP_INTERVAL_SECONDS`
+- `STATE_PRUNE_MAX_AGE_DAYS`
 - `MCP_INLINE_MEDIA_MAX_BYTES`
 - `MCP_HTTP_MAX_BODY_BYTES`
 - `PROVIDER_MAX_CONCURRENCY`
 - `PRINCIPAL_MAX_CONCURRENCY`
 - `DAILY_BUDGET_USD`
+- `PERSISTENCE_CACHE_MAX_SIZE`
+- `PERSISTENCE_CACHE_TTL_SECONDS`
 - `MODELARK_LOG_LEVEL`
 
 ### Object Storage

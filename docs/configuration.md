@@ -7,16 +7,25 @@ Settings. Copy `.env.example` to `.env`. Empty values are ignored.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream and Seedance; sent as Bearer auth |
-| `BYTEPLUS_SEED_AUDIO_API_KEY` | empty | Enables Seed Audio; sent as `X-Api-Key` |
+| `BYTEPLUS_MODELARK_API_KEY` | empty | Enables Seedream, Seedance, and Seed 2.1 understanding; sent as Bearer auth |
+| `BYTEPLUS_SEED_SPEECH_API_KEY` | empty | Enables Seed Audio and speech-to-text; sent as `X-Api-Key` |
+| `BYTEPLUS_VOD_MEDIAKIT_API_KEY` | empty | Enables MediaKit enhancement, transcode, subtitle burn-in/removal, audio-separation, and poll tools; sent as Bearer auth |
 | `BYTEPLUS_MODELARK_BASE_URL` | AP Southeast ModelArk URL | HTTPS data-plane base URL |
 | `BYTEPLUS_SEED_AUDIO_BASE_URL` | AP Southeast Seed Speech URL | HTTPS service base URL |
+| `BYTEPLUS_VOD_MEDIAKIT_BASE_URL` | `https://mediakit.ap-southeast-1.bytepluses.com/api/v1` | HTTPS VOD AI MediaKit convenience-endpoint base URL |
 | `SEEDREAM_DEFAULT_MODEL` | `dola-seedream-5-0-pro-260628` | Default image model/endpoint ID |
 | `SEEDANCE_DEFAULT_MODEL` | `dreamina-seedance-2-0-260128` | Default video model/endpoint ID |
+| `SEED_UNDERSTANDING_DEFAULT_MODEL` | `dola-seed-2-1-turbo-260628` | Default understanding model/endpoint ID. Set to `dola-seed-evolving` to use the latest Pro-tier model (auto-resolves to family `pro`, no `SEED_UNDERSTANDING_MODEL_FAMILY` needed) |
 | `SEEDREAM_MODEL_FAMILY` | empty | Family for a custom default: `pro`, `lite`, or `4x` |
-| `SEEDANCE_MODEL_FAMILY` | empty | Family for a custom default: `standard`, `fast`, or `mini` |
+| `SEEDANCE_MODEL_FAMILY` | empty | Family for a custom default: `standard`, `fast`, `mini`, or `seedance_2_5` |
+| `SEED_UNDERSTANDING_MODEL_FAMILY` | empty | Family for a custom default: `pro` or `turbo` |
 | `SEEDREAM_MODEL_BINDINGS` | empty | JSON list of `{model_id, family}` bindings |
 | `SEEDANCE_MODEL_BINDINGS` | empty | JSON list of `{model_id, family}` bindings |
+| `SEED_UNDERSTANDING_MODEL_BINDINGS` | empty | JSON list of `{model_id, family}` bindings |
+| `BYTEPLUS_MODELARK_3D_ENABLED` | `false` | Feature flag for 3D generation (Hyper3D + Hitem3d); reuses the ModelArk key, disabled by default |
+| `HYPER3D_DEFAULT_MODEL` | `hyper3d-gen2` | Default Hyper3D model/endpoint ID |
+| `HITEM3D_DEFAULT_MODEL` | `hitem3d-2-0` | Default Hitem3d model/endpoint ID |
+| `SEED3D_MODEL_BINDINGS` | empty | JSON list of `{model_id, family}` bindings (`hyper3d` or `hitem3d`) |
 
 The two built-in default IDs have known families. A custom ID must be bound
 explicitly; the server does not infer capabilities from substrings in an ID.
@@ -28,7 +37,10 @@ SEEDREAM_MODEL_BINDINGS=[{"model_id":"my-image-endpoint","family":"pro"}]
 ```
 
 Credentials are startup-only. If a provider key is absent, its tools are not
-registered.
+registered. Specifically, `vod_enhance_video` is registered independently
+when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is non-empty; it does not require the
+ModelArk key. Provider base URLs must use HTTPS, include a hostname, and must
+not contain embedded credentials.
 
 ## Transport and authentication
 
@@ -39,12 +51,21 @@ registered.
 | `MCP_PORT` | `3000` | HTTP listen port |
 | `MCP_ALLOWED_HOSTS` | loopback hosts | Comma-separated accepted Host headers |
 | `MCP_ALLOWED_ORIGINS` | empty | Comma-separated accepted browser Origins |
-| `MCP_HTTP_MAX_BODY_BYTES` | `10485760` | Maximum HTTP request body |
+| `MCP_HTTP_MAX_BODY_BYTES` | `314572800` (300 MiB) | Maximum HTTP request body; sized to inline the largest supported Base64 media upload (200 MiB video inflates ~4/3x). A smaller value logs a warning at startup (large inlined uploads will 413). |
+| `READINESS_CHECK_PROVIDERS` | `false` | When true, `/ready` also checks provider connectivity |
+| `READINESS_PROVIDER_TIMEOUT_SECONDS` | `2.0` | Per-provider timeout for readiness checks |
+| `RATE_LIMIT_RPM` | `0` | Max HTTP requests per minute per client IP; 0 disables |
+| `RATE_LIMIT_BURST` | `0` | Token bucket burst size; 0 defaults to `RATE_LIMIT_RPM` |
+| `RATE_LIMIT_TRUST_PROXY_HEADERS` | `false` | Trust the first `X-Forwarded-For` entry for rate-limit keys; enable only behind a trusted proxy |
 | `MCP_AUTH_MODE` | `local` | `local` or `jwt` |
 | `MCP_JWT_JWKS_URI` | empty | HTTPS JWKS endpoint for JWT verification |
 | `MCP_JWT_ISSUER` | empty | Required token issuer |
 | `MCP_JWT_AUDIENCE` | empty | Required token audience |
 | `MCP_TENANT_CLAIM` | `tenant_id` | Claim used for tenant isolation |
+| `MCP_JWT_CLOCK_SKEW_SECONDS` | `30` | Tolerated clock skew (seconds) for JWT `nbf` (not-before) validation |
+| `MCP_JWT_PROVIDE_DISCOVERY` | `false` | When true in JWT mode, serve RFC 9728 OAuth Protected Resource Metadata so MCP clients can discover the authorization server |
+| `MCP_PUBLIC_BASE_URL` | empty | Public HTTPS base URL of this server; required when `MCP_JWT_PROVIDE_DISCOVERY=true` |
+| `MCP_JWT_SCOPES_SUPPORTED` | empty | Comma-separated scopes advertised in Protected Resource Metadata |
 
 `FASTMCP_TRANSPORT`, `FASTMCP_HOST`, and `FASTMCP_PORT` are accepted as
 aliases for the corresponding `MCP_*` transport settings.
@@ -57,21 +78,28 @@ claim. Tool scopes are enforced by FastMCP:
 - `seed:audio:generate`
 - `seedream:generate`
 - `seedance:create`, `seedance:read`, `seedance:delete`
+- `understanding:read`
+- `vod:enhance`
+- `vod:transcode`
+- `vod:subtitle:add`
+- `vod:subtitle:remove`
+- `vod:read`
+- `vod:extract`
 - `media:upload`
 - `media:presign`
 - `artifacts:read`
 
 ## Seed Speech ASR (STT)
 
-The `speech_to_text` tool is registered when `SEED_SPEECH_ASR_API_KEY` is
-set — STT uses a dedicated ASR key, distinct from the TTS key. It submits
-audio via HTTP, polls until transcription is complete, and returns the
-complete `TranscriptionResult` in a single synchronous call. Audio input
-accepts URL, Base64, or local file path (stdio only).
+The `speech_to_text` tool is registered when `BYTEPLUS_SEED_SPEECH_API_KEY` is
+set — the same key that enables Seed Audio (TTS). It submits audio via HTTP,
+polls until transcription is complete, and returns the complete
+`TranscriptionResult` in a single synchronous call. Audio input accepts URL,
+Base64, or local file path (stdio only).
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SEED_SPEECH_ASR_API_KEY` | empty | Enables speech-to-text; sent as `X-Api-Key` header |
+| `BYTEPLUS_SEED_SPEECH_API_KEY` | empty | Enables Seed Audio + speech-to-text; sent as `X-Api-Key` header |
 | `SEED_SPEECH_ASR_BASE_URL` | `https://voice.ap-southeast-1.bytepluses.com` | Seed Speech ASR HTTP host |
 | `SEED_SPEECH_ASR_POLL_INTERVAL_SECONDS` | `3.0` | Seconds between ASR query polls |
 | `SEED_SPEECH_ASR_POLL_MAX_SECONDS` | `600.0` | Maximum total seconds to wait for ASR result |
@@ -79,6 +107,50 @@ accepts URL, Base64, or local file path (stdio only).
 JWT tool scope for speech-to-text:
 
 - `seed:asr:transcribe`
+
+## VOD AI MediaKit
+
+`vod_enhance_video` is registered when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is
+set. The initial tool intentionally exposes only the exact
+`common`/`professional`/`4k`/`high`/24-fps profile and serializes the project
+label upstream as case-sensitive `Project`. Submission returns an asynchronous
+task ID for `vod_get_enhancement_task`; the poll tool returns and best-effort
+persists completed outputs. The submit POST is not retried automatically.
+Convenience-endpoint pricing is not yet confirmed, so the tool does not emit a
+cost estimate.
+
+`vod_transcode_video` and `vod_get_transcode_task` are also registered when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. `vod_transcode_video` submits an async
+transcoding task (codec, container format, scaling, bitrate, frame rate, HDR);
+`vod_get_transcode_task` polls it and best-effort persists the completed output.
+The transcode request/status contract is verified from the official AI MediaKit
+API reference; the output URL hostname (`*.byteplusvod.com`) is confirmed and
+trusted for durable persistence. `queue_id`/`Project` request params remain
+unverified and are not exposed.
+
+`vod_add_subtitles` / `vod_get_subtitle_addition_task` and
+`vod_remove_subtitles` / `vod_get_subtitle_removal_task` use the same API key.
+Addition accepts a public HTTPS SRT, VTT, or ASS file or inline timed cues and
+burns them into the output video. Removal defaults to dialogue-subtitle mode;
+the broader `text` mode may also erase titles, labels, or watermarks. Both
+submit asynchronously, use `client_token` to reconcile ambiguous submissions,
+and preserve the provider URL when optional durable persistence is skipped or
+fails. The optional `project` and removal `model_version` fields are legacy
+convenience-endpoint extensions and are omitted unless explicitly supplied.
+
+## VOD AI MediaKit audio separation
+
+`vod_separate_audio` and `vod_get_audio_separation` are registered when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set, sharing the same Bearer-authenticated
+convenience surface as enhancement and transcoding.
+
+`vod_separate_audio` submits a `POST /api/v1/tools/separate-voice` task from a
+public HTTPS `audio_url` or `video_url` (exactly one) plus an optional `scene`
+(`Audio` default, `Music`, `Drama`, `Narrate`) and `output_format` (`aac`
+default, `mp3`, `wav`, `m4a`, `flac`). `vod_get_audio_separation` polls
+`GET /api/v1/tasks/{task_id}` and returns each separated track's expiring
+`source_url` (valid 24 hours) plus a durable `artifact` reference when
+best-effort persistence succeeds.
 
 ## Object storage (TOS or S3, optional)
 
@@ -121,13 +193,18 @@ S3-compatible storage.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ARTIFACT_BACKEND` | `filesystem` | Only implemented backend |
+| `ARTIFACT_BACKEND` | `filesystem` | `filesystem` (local disk) or `object_storage` (TOS/S3) |
+| `STATE_BACKEND` | `sqlite` | Task ownership/budget/cache backend; only `sqlite` (single instance) is implemented |
 | `ARTIFACT_DIR` | `~/.modelark-mcp/artifacts` | Media, metadata, ownership, and budget state |
 | `ARTIFACT_TTL_SECONDS` | `604800` | Artifact retention, in seconds |
+| `ARTIFACT_SWEEP_INTERVAL_SECONDS` | `3600` | Interval between background artifact/state expiry sweeps |
+| `STATE_PRUNE_MAX_AGE_DAYS` | `30` | Max age for ownership/budget/cache rows before pruning |
 | `MCP_INLINE_MEDIA_MAX_BYTES` | `8388608` | Maximum inline MCP media size |
 | `PROVIDER_MAX_CONCURRENCY` | `5` | Process-wide slots per provider |
 | `PRINCIPAL_MAX_CONCURRENCY` | `3` | Shared slots per authenticated principal |
 | `DAILY_BUDGET_USD` | `0` | Per-principal UTC daily estimate limit; zero records only |
+| `PERSISTENCE_CACHE_MAX_SIZE` | `10000` | Max cached provider task IDs in artifact-resolution cache |
+| `PERSISTENCE_CACHE_TTL_SECONDS` | `86400` | TTL for cached task-to-artifact mappings (seconds) |
 
 The filesystem backend enforces principal and tenant ownership. It is suitable
 for one process. Multiple replicas require shared artifact, task-ownership,

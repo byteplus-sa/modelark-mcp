@@ -7,11 +7,20 @@ from pydantic import ValidationError
 
 from modelark_mcp.domain.media import AudioReference, MediaSource, MediaSourceKind
 from modelark_mcp.tools.seed_audio_generate import SeedAudioGenerateInput
+from modelark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
+from modelark_mcp.tools.seedance_2_5_create_task_variations import Seedance25VariationsInput
 from modelark_mcp.tools.seedance_cancel_or_delete_task import (
     SeedanceCancelOrDeleteInput,
 )
 from modelark_mcp.tools.seedance_create_task import SeedanceCreateTaskInput
 from modelark_mcp.tools.seedance_create_task_variations import SeedanceVariationsInput
+from modelark_mcp.tools.seedream_edit_image import (
+    EditCoordinate,
+    SeedreamEditInput,
+    _coordinate_markup,
+)
+from modelark_mcp.tools.seedream_generate_image import SeedreamGenerateInput
+from modelark_mcp.tools.seedream_generate_image_variations import SeedreamVariationsInput
 
 
 class TestSeedAudioGenerateInput:
@@ -68,6 +77,15 @@ class TestSeedanceCreateTaskInput:
             videos=[SeedanceVideoInput(url="https://example.com/dog.mp4")],
         )
         assert len(inp.videos or []) == 1
+
+    def test_blocked_ip_video_url_raises_sanitized_error(self) -> None:
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        with pytest.raises(ValidationError) as exc_info:
+            SeedanceVideoInput(url="https://10.0.0.1/dog.mp4")
+        message = str(exc_info.value)
+        assert "Invalid media URL." in message
+        assert "resolves to blocked" not in message
 
     def test_text_only_valid(self) -> None:
         inp = SeedanceCreateTaskInput(prompt="Just text")
@@ -162,6 +180,41 @@ class TestSeedanceCreateTaskInput:
                 videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
             )
 
+    def test_ratio_stripped_for_extend_video(self) -> None:
+        """Ratio is stripped for extend_video to prevent InvalidParameter.TaskTypeConstraint."""
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceCreateTaskInput(
+            prompt="extend this video",
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            omni_reference_task_type="extend_video",
+            ratio="16:9",
+        )
+        assert inp.ratio is None
+
+    def test_ratio_preserved_for_edit_video(self) -> None:
+        """Ratio is not stripped for edit_video."""
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceCreateTaskInput(
+            prompt="edit this video",
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            omni_reference_task_type="edit_video",
+            ratio="16:9",
+        )
+        assert inp.ratio == "16:9"
+
+    def test_ratio_preserved_for_auto_task_type(self) -> None:
+        """Ratio is not stripped when omni_reference_task_type is omitted."""
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceCreateTaskInput(
+            prompt="generate a video",
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            ratio="16:9",
+        )
+        assert inp.ratio == "16:9"
+
 
 class TestSeedanceCancelOrDeleteInput:
     """Tests for Seedance cancel/delete input validation."""
@@ -210,4 +263,116 @@ class TestSeedanceVariationsInput:
                 variation_prompts=["x" * 32001],
                 variations=1,
                 videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            )
+
+    def test_prompt_at_max_length_valid(self) -> None:
+        inp = SeedanceVariationsInput(prompt="x" * 32000, variations=1)
+        assert len(inp.prompt or "") == 32000
+
+    def test_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            SeedanceVariationsInput(prompt="x" * 32001, variations=1)
+
+    def test_inherits_ratio_stripping_for_extend_video(self) -> None:
+        """Variations input inherits ratio stripping from base model."""
+        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+
+        inp = SeedanceVariationsInput(
+            variations=2,
+            variation_prompts=["extend clip a", "extend clip b"],
+            videos=[SeedanceVideoInput(url="https://example.com/v.mp4")],
+            omni_reference_task_type="extend_video",
+            ratio="9:16",
+        )
+        assert inp.ratio is None
+
+
+class TestSeedance25CreateTaskInput:
+    """Tests for Seedance 2.5 create task prompt-length validation."""
+
+    def test_prompt_at_max_length_valid(self) -> None:
+        inp = Seedance25CreateTaskInput(prompt="x" * 32000)
+        assert len(inp.prompt or "") == 32000
+
+    def test_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            Seedance25CreateTaskInput(prompt="x" * 32001)
+
+
+class TestSeedance25VariationsInput:
+    """Tests for Seedance 2.5 variations prompt-length validation."""
+
+    def test_prompt_at_max_length_valid(self) -> None:
+        inp = Seedance25VariationsInput(prompt="x" * 32000, variations=1)
+        assert len(inp.prompt or "") == 32000
+
+    def test_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            Seedance25VariationsInput(prompt="x" * 32001, variations=1)
+
+    def test_variation_prompt_at_max_length_valid(self) -> None:
+        inp = Seedance25VariationsInput(variation_prompts=["x" * 32000], variations=1)
+        assert len(inp.variation_prompts[0]) == 32000
+
+    def test_variation_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            Seedance25VariationsInput(variation_prompts=["x" * 32001], variations=1)
+
+
+class TestSeedreamPromptLength:
+    """Tests for Seedream prompt length validation (4,000 characters)."""
+
+    def test_generate_prompt_at_max_length_valid(self) -> None:
+        inp = SeedreamGenerateInput(prompt="x" * 4000)
+        assert len(inp.prompt) == 4000
+
+    def test_generate_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            SeedreamGenerateInput(prompt="x" * 4001)
+
+    def test_variations_prompt_at_max_length_valid(self) -> None:
+        inp = SeedreamVariationsInput(prompt="x" * 4000, variations=1)
+        assert len(inp.prompt or "") == 4000
+
+    def test_variations_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            SeedreamVariationsInput(prompt="x" * 4001, variations=1)
+
+    def test_variation_prompt_at_max_length_valid(self) -> None:
+        inp = SeedreamVariationsInput(variation_prompts=["x" * 4000], variations=1)
+        assert len(inp.variation_prompts[0]) == 4000
+
+    def test_variation_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            SeedreamVariationsInput(variation_prompts=["x" * 4001], variations=1)
+
+    def _edit_image(self) -> MediaSource:
+        return MediaSource(kind=MediaSourceKind.url, url="https://example.com/img.png")
+
+    def test_edit_prompt_at_max_length_with_markup_valid(self) -> None:
+        point = EditCoordinate(x=500, y=500)
+        markup_len = len(_coordinate_markup(point, None))
+        inp = SeedreamEditInput(
+            prompt="x" * (4000 - markup_len - 1),
+            images=[self._edit_image()],
+            point=point,
+        )
+        assert len(inp.prompt) + markup_len + 1 == 4000
+
+    def test_edit_prompt_with_markup_too_long_raises(self) -> None:
+        point = EditCoordinate(x=500, y=500)
+        markup_len = len(_coordinate_markup(point, None))
+        with pytest.raises(ValidationError):
+            SeedreamEditInput(
+                prompt="x" * (4000 - markup_len),
+                images=[self._edit_image()],
+                point=point,
+            )
+
+    def test_edit_prompt_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            SeedreamEditInput(
+                prompt="x" * 4001,
+                images=[self._edit_image()],
+                point=EditCoordinate(x=500, y=500),
             )

@@ -31,7 +31,23 @@ The verifier is constructed with these settings (all required in JWT mode):
 | `jwks_uri` | `MCP_JWT_JWKS_URI` | must be `https://` with a hostname |
 | `issuer` | `MCP_JWT_ISSUER` | non-empty |
 | `audience` | `MCP_JWT_AUDIENCE` | non-empty |
+| `clock_skew_seconds` | `MCP_JWT_CLOCK_SKEW_SECONDS` | `0..300` (default `30`) |
 | `ssrf_safe` | — | hard-coded `True` |
+
+The verifier is `StrictJWTVerifier`, pinned to RS256. Tokens missing an `exp`
+claim are rejected, and a token whose `nbf` claim is still in the future
+(beyond the configured clock skew) is rejected.
+
+### OAuth discovery (optional)
+
+By default JWT mode is a bare verifier with no OAuth discovery — suitable for
+internal machine-to-machine clients that already know how to obtain tokens.
+Set `MCP_JWT_PROVIDE_DISCOVERY=true` (plus `MCP_PUBLIC_BASE_URL`) to wrap the
+verifier in FastMCP's `RemoteAuthProvider`, which serves RFC 9728 OAuth
+Protected Resource Metadata at `/.well-known/oauth-protected-resource` and
+advertises the scopes in `MCP_JWT_SCOPES_SUPPORTED`. This makes the server
+discoverable by spec-compliant MCP clients. The bare-verifier mode is
+unchanged when the flag is off.
 
 ### Principal and tenant extraction
 
@@ -77,16 +93,28 @@ tool → scope mapping is wired in `server.py::register_tools`:
 | `seedance:read` | `seedance_get_task`, `seedance_list_tasks` |
 | `seedance:delete` | `seedance_cancel_or_delete_task` |
 | `seed:asr:transcribe` | `speech_to_text` |
+| `vod:enhance` | `vod_enhance_video` |
+| `vod:transcode` | `vod_transcode_video` |
+| `vod:subtitle:add` | `vod_add_subtitles` |
+| `vod:subtitle:remove` | `vod_remove_subtitles` |
+| `vod:read` | All MediaKit task polling tools |
+| `vod:extract` | `vod_separate_audio` |
 | `media:upload` | `media_upload` |
-| `media:presign` | `media_presign` |
+| `media:presign` | `media_presign`, `media_presign_batch` |
 | `artifacts:read` | MCP resource `seed-media://artifacts/{artifact_id}` |
 
 The `seed-health://status` resource and the `/health`, `/ready`, `/metrics`
-routes are **not** scope-protected at the FastMCP layer. Seed Audio tools are
-registered only when `BYTEPLUS_SEED_AUDIO_API_KEY` is set; Seedream/Seedance
-tools only when `BYTEPLUS_MODELARK_API_KEY` is set; speech-to-text tools only
-when `SEED_SPEECH_ASR_API_KEY` is set. The `media_upload` and `media_presign`
-tools are registered only when object storage credentials are set (TOS:
+routes are **not** scope-protected at the FastMCP layer. Seed Audio and
+speech-to-text tools are registered only when `BYTEPLUS_SEED_SPEECH_API_KEY`
+is set; Seedream/Seedance tools only when `BYTEPLUS_MODELARK_API_KEY` is set;
+`vod_enhance_video`, `vod_get_enhancement_task`,
+`vod_transcode_video`, `vod_get_transcode_task`, `vod_add_subtitles`,
+`vod_get_subtitle_addition_task`, `vod_remove_subtitles`,
+`vod_get_subtitle_removal_task`, `vod_separate_audio`, and
+`vod_get_audio_separation` only when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set. The `media_upload`, `media_presign`,
+and `media_presign_batch` tools are registered only when object storage
+credentials are set (TOS:
 `TOS_ACCESS_KEY` / `TOS_SECRET_KEY` / `TOS_BUCKET`, or S3:
 `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` with
 `OBJECT_STORAGE_BACKEND=s3`).
@@ -101,6 +129,18 @@ individual objects. Object keys are server-generated UUIDs under a
 caller-supplied prefix; `key_prefix` is sanitized to alphanumeric, `-`, `_`,
 and `/`. File-path input is restricted to the `stdio` transport to prevent
 remote file reads over HTTP.
+
+Uploaded object keys are recorded in the SQLite `object_key_ownership`
+ledger keyed by `(principal_id, tenant_id)`. `media_presign` and
+`media_presign_batch` verify the caller owns each key before minting a read
+URL; a remote principal cannot re-presign another tenant's object. In `LOCAL`
+mode, unrecorded keys remain presignable by the single local principal. A
+successful `record` or `require_owner` refreshes the row's `created_at`
+timestamp, so regularly presigned keys are not expired by the state sweeper.
+Rows are pruned by the background state sweeper after
+`STATE_PRUNE_MAX_AGE_DAYS` (default `30`) of inactivity; a long-lived key
+that has not been presigned within that window must be re-uploaded before it
+can be presigned again by a remote principal.
 
 ## Host / Origin protection
 
@@ -124,13 +164,31 @@ shipped in `security/`. Wired for HTTP transport only.
 
 | Env var | Default | Notes |
 |---|---|---|
-| `MCP_HTTP_MAX_BODY_BYTES` | `10_485_760` (10 MiB), `ge=1` | rejects oversized bodies |
+| `MCP_HTTP_MAX_BODY_BYTES` | `314_572_800` (300 MiB), `ge=1` | rejects oversized bodies; sized to inline the largest supported Base64 media upload (200 MiB video inflates ~4/3x) |
 
 Behavior: reads `Content-Length`; if `> max_bytes` → `413 "Request body too
 large"`; on unparseable `Content-Length` → `400`. It also wraps `receive` to
 enforce the limit on streamed bodies; if the response has already started,
 it re-raises `RequestBodyTooLarge` (the connection errors out rather than
 sending a clean 413 mid-stream).
+
+## Rate limiting (`security/http_middleware.py`)
+
+`RateLimitMiddleware` (ASGI) — a per-client-IP token bucket rate limiter,
+wired for HTTP transport only when `RATE_LIMIT_RPM > 0`. Disabled by default.
+
+| Env var | Default | Notes |
+|---|---|---|
+| `RATE_LIMIT_RPM` | `0` (disabled) | Maximum HTTP requests per minute per client IP |
+| `RATE_LIMIT_BURST` | `0` (defaults to `RATE_LIMIT_RPM`) | Token bucket burst capacity |
+
+Behavior: each client IP gets an in-memory token bucket. The refill rate is
+`rpm / 60` tokens per second. Each request consumes one token. When the
+bucket is empty, the middleware returns `429 "Rate limit exceeded"` with a
+`Retry-After` header indicating the seconds until the next token is
+available, plus `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and
+`X-RateLimit-Reset` headers so well-behaved clients can self-throttle. The
+bucket dict is protected by an `asyncio.Lock`.
 
 ## SSRF-safe downloader (`security/safe_downloader.py`)
 
@@ -159,7 +217,16 @@ two-layer SSRF defense. Constructor defaults: `timeout=120.0s`,
 
 `FilesystemArtifactStore` restricts `copy_from_trusted_url` to provider hosts
 via suffix allowlist: `.bytepluses.com`, `.byteplus.com`, `.bytedance.com`,
-`.bytednsdoc.com`, `.volces.com`, `.tos-ap-southeast.bytepluses.com`.
+`.bytednsdoc.com`, `.volces.com`, `.byteplusvod.com`,
+`.tos-ap-southeast.bytepluses.com`.
+
+For VOD AI MediaKit, video processing and artifact persistence are separate
+outcomes. The tool always preserves a successful provider output URL for the
+authorized caller, then best-effort downloads it through this SSRF-safe path.
+Outputs above the 200 MiB video limit or failing host/MIME/download/storage
+checks return `persistence="failed"` without changing provider success into a
+provider failure. Full source URLs and credentials are excluded from logs and
+safe error messages.
 
 ## URL policy (`security/url_policy.py`)
 
@@ -172,13 +239,15 @@ Exception: `UrlValidationError(ValueError)`.
   `allow_http=True`. `file://` is never allowed.
 - **No credentials in URLs** (`userinfo` rejected).
 - **Hostname** is IDNA-encoded → ASCII → lowercased.
-- **Ports:** any explicit port is accepted syntactically; there is no
-  per-port allowlist. Default is 443 (https) / 80 (http).
+- **Ports:** only `443` (https) and `80` (http) are allowed; any other
+  explicit port is rejected. Default is 443 (https) / 80 (http).
 - **DNS + IP denial:** `resolve_public_addresses` resolves the hostname
-  (or uses a literal IP directly), then denies any address that is
-  `is_private`, `is_loopback`, `is_link_local`, `is_multicast`,
-  `is_reserved`, or `is_unspecified`. For IPv6, embedded IPv4 transition
-  formats (`ipv4_mapped`, `sixtofour`, `teredo[1]`) are recursively checked.
+  (or uses a literal IP directly), then denies any address that is not
+  globally reachable — `is_private`, `is_loopback`, `is_link_local`,
+  `is_multicast`, `is_reserved`, `is_unspecified`, or `not is_global` (which
+  additionally covers CGNAT shared space `100.64.0.0/10`). For IPv6, embedded
+  IPv4 transition formats (`ipv4_mapped`, `sixtofour`, `teredo[1]`) are
+  recursively checked.
 
 `validate_url` combines syntax validation + DNS resolution and returns a
 `ValidatedUrl(url, parsed, hostname, port, addresses)`.
@@ -207,6 +276,13 @@ Allowed MIME types:
 
 `check_base64_size` estimates decoded size as `(len(stripped) * 3) // 4`
 (without full decode); `decode_base64_safely` validates then decodes.
+`check_audio_duration_from_base64` decodes WAV (RIFF) headers and enforces
+`audio_max_seconds` for Base64 audio references; non-WAV formats (MP3, PCM,
+OGG) cannot be measured without a full decoder and are skipped — the
+provider enforces the limit server-side for those. This preflight is
+best-effort: it trusts the declared `data` chunk size, so a crafted header
+with an under-reported size could bypass it. The provider enforces the
+30-second limit server-side regardless.
 
 > `MCP_INLINE_MEDIA_MAX_BYTES` (default 8 MiB) lives in `config/env.py`, not
 > here. It caps **inline MCP media returned to the client**; the per-type
@@ -217,9 +293,15 @@ Allowed MIME types:
 - `truststore.inject_into_ssl()` runs at module import in `server.py` and
   `__main__.py`, so Python uses the macOS Keychain for TLS verification.
 - Provider base URLs (`BYTEPLUS_MODELARK_BASE_URL`,
-  `BYTEPLUS_SEED_AUDIO_BASE_URL`) are validated at settings load: must be
+  `BYTEPLUS_SEED_AUDIO_BASE_URL`, `BYTEPLUS_VOD_MEDIAKIT_BASE_URL`) are
+  validated at settings load: must be
   `https://` with a hostname and no embedded credentials; trailing slash
   stripped.
+- VOD AI MediaKit requests are authenticated with
+  `Authorization: Bearer ${BYTEPLUS_VOD_MEDIAKIT_API_KEY}`; the key is never
+  logged, returned, or accepted as a tool argument.
+- Inline `subtitle_text` is treated as sensitive content and is redacted from
+  structured logs together with prompt, subtitle, media URL, and credential fields.
 
 ## Settings caching
 

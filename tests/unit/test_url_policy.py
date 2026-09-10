@@ -86,3 +86,25 @@ class TestUrlValidation:
     def test_ipv4_mapped_private_ipv6_is_rejected(self) -> None:
         with pytest.raises(UrlValidationError, match="blocked IP"):
             validate_url("https://[::ffff:127.0.0.1]/image.png")
+
+    def test_cgnat_shared_space_is_blocked(self) -> None:
+        with pytest.raises(UrlValidationError, match="blocked IP"):
+            validate_url("https://100.64.0.1/image.png")
+
+    def test_non_standard_port_is_rejected(self) -> None:
+        with pytest.raises(UrlValidationError, match="port"):
+            validate_url(
+                "https://example.com:8443/image.png",
+                resolver=lambda _host, _port: ("93.184.216.34",),
+            )
+
+    def test_https_443_and_http_80_are_allowed(self) -> None:
+        validate_url(
+            "https://example.com:443/image.png",
+            resolver=lambda _host, _port: ("93.184.216.34",),
+        )
+        validate_url(
+            "http://example.com:80/image.png",
+            allow_http=True,
+            resolver=lambda _host, _port: ("93.184.216.34",),
+        )

@@ -8,67 +8,27 @@ cannot be the sole media input.
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import Literal
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field, model_validator
 
 from modelark_mcp.config.env import get_settings
-from modelark_mcp.config.model_capabilities import get_capability_registry
-from modelark_mcp.domain.artifacts import MediaType
+from modelark_mcp.config.model_capabilities import ModelFamily, get_capability_registry
 from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.domain.media import MediaSource
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.modelark.seedance import SeedanceService
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
-from modelark_mcp.security.url_policy import validate_url
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
-
-# ---------------------------------------------------------------------------
-# Input / Output models
-# ---------------------------------------------------------------------------
-
-
-class SeedanceImageInput(MediaSource):
-    """Image input with an optional role for Seedance."""
-
-    MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.IMAGE
-    role: Literal["first_frame", "last_frame", "reference_image"] | None = Field(
-        None,
-        description="Role of this image: first_frame, last_frame, or reference_image. If omitted, provider default applies.",
-    )
-
-
-class SeedanceVideoInput(BaseModel):
-    """Video reference input for Seedance."""
-
-    kind: Literal["url"] = Field(
-        "url",
-        description="Media source kind. Always 'url' for video references.",
-    )
-    url: str = Field(..., description="HTTPS URL of the reference video.")
-    role: Literal["reference_video"] = Field(
-        "reference_video",
-        description="Role of this input. Always 'reference_video'.",
-    )
-
-    @model_validator(mode="after")
-    def validate_video_url(self) -> SeedanceVideoInput:
-        validate_url(self.url)
-        return self
-
-
-class SeedanceAudioInput(MediaSource):
-    """Audio reference input for Seedance."""
-
-    MEDIA_CATEGORY: ClassVar[MediaType] = MediaType.AUDIO
-    role: Literal["reference_audio"] = Field(
-        "reference_audio",
-        description="Role of this input. Always 'reference_audio'.",
-    )
+from modelark_mcp.tools._seedance_shared import (
+    SeedanceAudioInput,
+    SeedanceImageInput,
+    SeedanceVideoInput,
+    strip_ratio_for_video_extension,
+)
 
 
 class SeedanceCreateTaskInput(BaseModel):
@@ -78,22 +38,36 @@ class SeedanceCreateTaskInput(BaseModel):
         None,
         min_length=1,
         max_length=32000,
-        description="Text prompt describing the video to generate (up to 32,000 characters). Optional when media inputs are provided.",
+        description="Text prompt describing the video to generate (1-32,000 characters). Optional when media inputs are provided.",
     )
     images: list[SeedanceImageInput] | None = Field(
         None,
-        description="Reference images with optional roles (first_frame, last_frame, reference_image). Max 9.",
+        description=(
+            "Reference images with optional roles (first_frame, last_frame, reference_image). "
+            'Max 9. Each entry may be a plain URL string or {"url": "https://..."}; '
+            "these are coerced to role=reference_image."
+        ),
     )
-    videos: list[SeedanceVideoInput] | None = Field(None, description="Reference videos. Max 3.")
+    videos: list[SeedanceVideoInput] | None = Field(
+        None,
+        description=(
+            'Reference videos. Max 3. Each entry may be a plain URL string or {"url": "https://..."}.'
+        ),
+    )
     audios: list[SeedanceAudioInput] | None = Field(
         None,
-        description="Reference audio for audio-driven generation. Max 3. Cannot be the sole media input.",
+        description=(
+            "Reference audio for audio-driven generation. Max 3. Cannot be the sole media input. "
+            'Each entry may be a plain URL string or {"url": "https://..."}.'
+        ),
     )
     model: str | None = Field(
         None,
         description=(
             "Model ID. Available: 'dreamina-seedance-2-0-260128' (Standard, default, 480p-4K, 9 imgs/3 vids/3 audios). "
-            "Fast and Mini model IDs are configured via SEEDANCE_MODEL_BINDINGS. Omit to use the default."
+            "Fast and Mini model IDs are configured via SEEDANCE_MODEL_BINDINGS. "
+            "For Seedance 2.5 (30s duration, 30 imgs/10 vids/10 audios), use seedance_2_5_create_task instead. "
+            "Omit to use the default."
         ),
     )
     resolution: Literal["480p", "720p", "1080p", "4k"] | None = Field(
@@ -101,19 +75,40 @@ class SeedanceCreateTaskInput(BaseModel):
     )
     ratio: str | None = Field(
         None,
-        description="Output aspect ratio (e.g. '16:9', '9:16'). Must be supported by the selected model.",
+        description=(
+            "Output aspect ratio (e.g. '16:9', '9:16'). Must be supported by the selected model. "
+            "Video extension (extend_video): ratio must be omitted — it auto-locks to the source "
+            "video; any value is stripped to prevent InvalidParameter.TaskTypeConstraint. "
+            "Video editing (edit_video): ratio is auto-derived from the input video. "
+            "For first/last-frame tasks, the ratio locks to the first image."
+        ),
     )
     duration: int | None = Field(
         None,
         ge=-1,
         le=15,
-        description="Video duration in seconds (-1 for auto). Max 15. Must be within the selected model's supported range.",
+        description=(
+            "Video duration in seconds (-1 for auto). Max 15. Must be within the selected "
+            "model's supported range. Ignored for video editing tasks — the duration is "
+            "auto-derived from the input video (within ~0.3s)."
+        ),
+    )
+    omni_reference_task_type: str | None = Field(
+        None,
+        description=(
+            "Task type hint for the provider. The provider defaults to 'auto' which "
+            "auto-detects from the prompt and media. Set explicitly to force a specific "
+            "task type (e.g. 'edit_video', 'extend_video') when auto-detection is "
+            "ambiguous. When set, ratio and duration may be auto-derived from input "
+            "media depending on the task type. For extend_video, ratio is stripped "
+            "(auto-locks to source) to prevent InvalidParameter.TaskTypeConstraint."
+        ),
     )
     generate_audio: bool | None = Field(
         None, description="Whether to generate an audio track for the video."
     )
     watermark: bool | None = Field(
-        None, description="Whether to apply an AIGC watermark to the video."
+        False, description="Whether to apply an AIGC watermark to the video."
     )
     return_last_frame: bool | None = Field(
         None, description="Whether to return the last frame as a separate image output."
@@ -165,6 +160,12 @@ class SeedanceCreateTaskInput(BaseModel):
             raise ValueError(f"Too many reference audios: {len(self.audios)}. Maximum is 3.")
         return self
 
+    @model_validator(mode="after")
+    def validate_ratio_for_extension(self) -> SeedanceCreateTaskInput:
+        """Strip ratio for video extension tasks to prevent InvalidParameter.TaskTypeConstraint."""
+        self.ratio = strip_ratio_for_video_extension(self.omni_reference_task_type, self.ratio)
+        return self
+
 
 class SeedanceCreateTaskOutput(BaseModel):
     """Output model for ``seedance_create_task``."""
@@ -204,6 +205,12 @@ async def seedance_create_task(
 
     registry = get_capability_registry()
     caps = registry.get_video_capabilities(input.model)
+
+    if caps.family is ModelFamily.SEEDANCE_2_5:
+        raise ValueError(
+            f"Model '{input.model}' is a Seedance 2.5 model. "
+            f"Use seedance_2_5_create_task for Seedance 2.5 models."
+        )
 
     # Validate model-specific capabilities.
     registry.validate_resolution(input.model, input.resolution)
@@ -259,11 +266,12 @@ async def seedance_create_task(
         execution_expires_after=input.execution_expires_after,
         priority=input.priority,
         safety_identifier=input.safety_identifier,
+        omni_reference_task_type=input.omni_reference_task_type,
     )
 
     await ctx.report_progress(progress=50, total=100)
 
-    estimated_cost = log_cost_estimate(product="video", variations=1)
+    estimated_cost = log_cost_estimate(product="video", variations=1, model_id=caps.model_id)
 
     service = SeedanceService()
     try:
@@ -280,7 +288,7 @@ async def seedance_create_task(
     finally:
         await service.close()
 
-    await get_runtime(ctx).ownership_store.record(task_id, get_principal(ctx))
+    await get_runtime(ctx).ownership_store.record("modelark", task_id, get_principal(ctx))
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

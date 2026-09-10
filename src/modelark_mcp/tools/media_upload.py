@@ -23,7 +23,7 @@ from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.object_storage import make_object_storage_gateway
 from modelark_mcp.providers.retry import call_with_retry
-from modelark_mcp.runtime import billed_provider_slot
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.security.media_policy import (
     MediaLimits,
     check_base64_size,
@@ -60,6 +60,16 @@ class MediaUploadInput(BaseModel):
         None,
         description=(
             "Optional object key prefix (default 'references'). Alphanumeric, '-', '_', '/' only."
+        ),
+    )
+    expires_in_seconds: int | None = Field(
+        None,
+        ge=60,
+        le=604800,
+        description=(
+            "Presigned URL validity in seconds (60-604800). Defaults to the configured presign "
+            "TTL. VOD tools fetch source URLs asynchronously, so use a long TTL (e.g. 3600) for "
+            "uploads destined for VOD enhancement, transcoding, subtitle, or audio-separation tools."
         ),
     )
 
@@ -140,7 +150,7 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
             )
         path = Path(input.file_path).expanduser().resolve()
         if not path.is_file():
-            raise ValueError(f"File not found: {input.file_path}")
+            raise ValueError("File not found.")
         file_size = path.stat().st_size
         if file_size > max_bytes:
             raise ValueError(
@@ -183,14 +193,19 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
                         key=key, data=data_bytes, mime_type=input.mime_type
                     )
                 )
-            url = await gateway.presign_get(key=key)
+            if input.expires_in_seconds is not None:
+                url = await gateway.presign_get(key=key, expires=input.expires_in_seconds)
+            else:
+                url = await gateway.presign_get(key=key)
+            await get_runtime(ctx).object_key_ownership_store.record(key, get_principal(ctx))
     except ProviderError as exc:
         await ctx.error(f"Media upload failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await gateway.close()
 
-    expires_at = (datetime.now(UTC) + timedelta(seconds=settings.presign_ttl_seconds)).isoformat()
+    ttl = input.expires_in_seconds or settings.presign_ttl_seconds
+    expires_at = (datetime.now(UTC) + timedelta(seconds=ttl)).isoformat()
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

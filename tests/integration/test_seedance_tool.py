@@ -109,6 +109,33 @@ class TestSeedanceCreateTaskTool:
         assert captured_content[0].type == "text"
         assert captured_content[0].text == "just text"
 
+    async def test_create_task_passes_omni_reference_task_type(
+        self,
+        test_env: None,
+        fake_ctx: FakeContext,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        captured_request: list[Any] = []
+
+        async def mock_create(self: SeedanceService, request: Any) -> tuple[str, str | None]:
+            captured_request.append(request)
+            return "task-edit-001", "req-edit"
+
+        monkeypatch.setattr(SeedanceService, "create_task", mock_create)
+        monkeypatch.setattr(SeedanceService, "close", _mock_close)
+
+        result = await seedance_create_task(
+            SeedanceCreateTaskInput(
+                prompt="edit the background of this video",
+                videos=[SeedanceVideoInput(url="https://example.com/source.mp4")],
+                omni_reference_task_type="edit_video",
+            ),
+            fake_ctx,
+        )
+
+        assert isinstance(result, SeedanceCreateTaskOutput)
+        assert captured_request[0].omni_reference_task_type == "edit_video"
+
     async def test_create_task_prompt_with_video_and_audio_succeeds(
         self,
         test_env: None,
@@ -215,8 +242,7 @@ class TestSeedanceGetTaskTool:
         temp_store: Any,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # Clear persistence cache before test.
-        fake_ctx.lifespan_context["runtime"].persistence_cache.clear()
+        await fake_ctx.lifespan_context["runtime"].task_artifact_cache.clear()
 
         task = SeedanceTaskResponse(
             id="task-succ",
@@ -269,8 +295,8 @@ class TestSeedanceGetTaskTool:
         temp_store: Any,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        persistence_cache = fake_ctx.lifespan_context["runtime"].persistence_cache
-        persistence_cache.clear()
+        task_artifact_cache = fake_ctx.lifespan_context["runtime"].task_artifact_cache
+        await task_artifact_cache.clear()
 
         # Pre-populate cache to simulate a previous get call.
         from datetime import UTC, datetime
@@ -286,7 +312,9 @@ class TestSeedanceGetTaskTool:
             sha256="abc123",
             created_at=datetime.now(UTC).isoformat(),
         )
-        persistence_cache["task-cached"] = {"video": cached_ref, "last_frame": None}
+        await task_artifact_cache.set(
+            "modelark", "task-cached", {"video": cached_ref, "last_frame": None}
+        )
 
         task = SeedanceTaskResponse(
             id="task-cached",
@@ -312,7 +340,7 @@ class TestSeedanceGetTaskTool:
         assert result.video is not None
         assert result.video.id == "cached-video-id"
 
-        fake_ctx.lifespan_context["runtime"].persistence_cache.clear()
+        await fake_ctx.lifespan_context["runtime"].task_artifact_cache.clear()
 
     async def test_get_failed_task_with_error(
         self,

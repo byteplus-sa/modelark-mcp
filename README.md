@@ -6,7 +6,7 @@ generation through a typed, safe tool surface.
 
 ## What It Does
 
-The server provides a conditional MCP tool surface across four BytePlus
+The server provides a conditional MCP tool surface across several BytePlus
 products plus artifact access and an optional media upload helper:
 
 | Product | Tools | Description |
@@ -14,15 +14,22 @@ products plus artifact access and an optional media upload helper:
 | **Seed Audio** | `seed_audio_generate`, `seed_audio_generate_variations` | Full-scene audio generation through Seed Speech |
 | **Seedream** | `seedream_generate_image`, `seedream_edit_image`, `seedream_generate_image_variations` | Image generation and editing through ModelArk |
 | **Seedance** | `seedance_create_task`, `seedance_create_task_variations`, `seedance_get_task`, `seedance_list_tasks`, `seedance_cancel_or_delete_task` | Async video generation and task management through ModelArk |
+| **Hyper3D / Hitem3d** | `hyper3d_*`, `hitem3d_*` task tools | Async 3D model generation through ModelArk (gated by `BYTEPLUS_MODELARK_3D_ENABLED`, disabled by default) |
+| **Seed 2.1 Understanding** | `seed_understand` | Multimodal video/image understanding and reasoning through ModelArk Chat Completions |
 | **Speech-to-Text** | `speech_to_text` | Synchronous audio transcription through Seed Speech ASR (HTTP) |
+| **VOD AI MediaKit** | `vod_enhance_video`, `vod_get_enhancement_task` | Submit and poll asynchronous AI enhancement for the exact common/professional/4K/high/24-fps profile |
+| **VOD AI MediaKit Transcode** | `vod_transcode_video`, `vod_get_transcode_task` | Submit and poll async video transcoding (codec, container, resolution, bitrate, frame rate) |
+| **VOD AI MediaKit Subtitles** | `vod_add_subtitles`, `vod_get_subtitle_addition_task`, `vod_remove_subtitles`, `vod_get_subtitle_removal_task` | Burn SRT/VTT/ASS or inline cues into video, or remove hardcoded subtitles and recognized on-screen text |
+| **VOD Audio Separation** | `vod_separate_audio`, `vod_get_audio_separation` | Submit and poll voice + background (or voice + music + sfx) audio separation via the VOD AI MediaKit (`separate-voice`) |
 | **Artifacts** | `seed_media_get_artifact` | Retrieve persisted media inline by artifact ID |
-| **Object storage** (optional) | `media_upload`, `media_presign` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL; renew expired URLs without re-uploading |
+| **Object storage** (optional) | `media_upload`, `media_presign`, `media_presign_batch` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL; renew expired URLs without re-uploading; batch-presign many keys in one call |
 
 Key features:
 
-- **Durable artifacts** — all generated media is persisted locally so MCP
-  resources remain usable after provider URLs expire (2h audio, 24h
-  image/video)
+- **Durable artifacts** — generated media is persisted locally so MCP
+  resources remain usable after known provider URL lifetimes (2h audio, 24h
+  ModelArk image/video); VOD MediaKit persistence is best-effort and capped at
+  200 MiB, and completed enhancement URLs have a confirmed 24-hour lifetime
 - **Parallel variations** — generate N independent variations in a single
   call with `asyncio.gather`, partial failures captured per variation
 - **Per-variation seeds** — Seedream supports reproducible generation with
@@ -35,9 +42,10 @@ Key features:
 - **Security** — DNS-pinned SSRF-safe downloads, tenant/principal ownership,
   scoped JWT auth for network HTTP, Host/Origin protection, and body limits
 - **Runtime controls** — shared provider/principal concurrency, daily budget
-  reservations, safe retries, task ownership, readiness, metrics, and tracing
-- **459 offline tests** — unit, contract, integration, HTTP security, E2E, and
-  MCP conformance with 88.08% branch coverage
+  reservations, safe retries, task ownership, readiness with optional provider
+  health checks, per-IP HTTP rate limiting, metrics, and tracing
+- **1,090 offline tests** — unit, contract, integration, HTTP security, E2E, and
+  MCP conformance with 88% branch coverage
 
 ## Supported Input Modalities
 
@@ -51,11 +59,15 @@ accepts as reference input:
 | `seedance_create_task` | Image | ✓ | ✓ | — | `first_frame` · `last_frame` · `reference_image` | 9 | — |
 | `seedance_create_task` | Video | ✓ | — | — | `reference_video` | 3 | URL only |
 | `seedance_create_task` | Audio | ✓ | ✓ | — | `reference_audio` | 3 | Not sole input |
+| `seedance_2_5_create_task` | Image | ✓ | ✓ | — | `first_frame` · `last_frame` · `reference_image` | 30 | — |
+| `seedance_2_5_create_task` | Video | ✓ | — | — | `reference_video` | 10 | URL only |
+| `seedance_2_5_create_task` | Audio | ✓ | ✓ | — | `reference_audio` | 10 | Not sole input |
 | `seed_audio_generate` | Audio | ✓ | ✓ | ✓ | — | 3 | Exclusive w/ image |
 | `seed_audio_generate` | Image | ✓ | ✓ | — | — | 1 | Exclusive w/ audio |
 
 > The `_variations` siblings (`seedream_generate_image_variations`,
-> `seedance_create_task_variations`, `seed_audio_generate_variations`) accept
+> `seedance_create_task_variations`, `seedance_2_5_create_task_variations`,
+> `seed_audio_generate_variations`) accept
 > the same input modalities as their base tools.
 
 > [!NOTE]
@@ -70,7 +82,7 @@ accepts as reference input:
 
 ## Architecture
 
-The server uses two provider gateways behind one normalized domain layer, a
+The server uses dedicated provider gateways behind one normalized domain layer, a
 lifespan-owned runtime for concurrency/budget/ownership, and a durable
 artifact store. See [docs/architecture.md](docs/architecture.md) for the full
 overview.
@@ -86,7 +98,7 @@ flowchart TB
     TR[TRAE IDE]
   end
   subgraph Server["ModelArk MCP Server (FastMCP)"]
-    Tools["Tools<br/>Seedream · Seedance · Seed Audio · Artifacts · Object storage"]
+    Tools["Tools<br/>Seedream · Seedance · Seed Audio · VOD AI MediaKit · Artifacts · Object storage"]
     Domain["Domain layer<br/>models · capability registry · errors"]
     Runtime["Runtime services<br/>concurrency · budget · ownership · retry"]
     Store["Artifact store<br/>filesystem + .meta.json"]
@@ -96,6 +108,7 @@ flowchart TB
   subgraph Providers["BytePlus"]
     MA["ModelArk gateway<br/>Bearer auth"]
     SS["Seed Speech gateway<br/>X-Api-Key"]
+    VOD["VOD AI MediaKit gateway<br/>Bearer auth"]
   end
   Client <-->|"stdio / HTTP"| Tools
   Tools --> Domain
@@ -158,8 +171,8 @@ cp .env.example .env
 # Run the server
 make start
 
-# Or run the verification script to test your credentials
-uv run python scripts/verify_phase0.py
+# Or validate your environment configuration
+make check-env
 ```
 
 ## Configuration
@@ -168,7 +181,8 @@ Edit `.env` with your BytePlus credentials:
 
 ```dotenv
 BYTEPLUS_MODELARK_API_KEY=your_modelark_key
-BYTEPLUS_SEED_AUDIO_API_KEY=your_seed_audio_key  # pragma: allowlist secret
+BYTEPLUS_SEED_SPEECH_API_KEY=your_seed_speech_key  # pragma: allowlist secret
+BYTEPLUS_VOD_MEDIAKIT_API_KEY=your_vod_mediakit_key
 SEEDREAM_DEFAULT_MODEL=dola-seedream-5-0-pro-260628
 SEEDANCE_DEFAULT_MODEL=dreamina-seedance-2-0-260128
 ```
@@ -177,7 +191,12 @@ If a credential is absent, the server skips registering that product's
 tools. `seed_media_get_artifact` is always available, provider tools appear only
 when their credentials are configured, `media_upload` and `media_presign` appear
 only when object storage credentials (TOS or S3) are configured, and
-`speech_to_text` appears only when `SEED_SPEECH_ASR_API_KEY` is set.
+`speech_to_text` appears only when `BYTEPLUS_SEED_SPEECH_API_KEY` is set.
+`vod_enhance_video`, `vod_get_enhancement_task`, `vod_transcode_video`,
+`vod_get_transcode_task`, `vod_add_subtitles`, `vod_get_subtitle_addition_task`,
+`vod_remove_subtitles`, `vod_get_subtitle_removal_task`, `vod_separate_audio`,
+and `vod_get_audio_separation` appear only when
+`BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set.
 
 See [Configuration](docs/configuration.md) for the full environment
 variable reference.
@@ -196,7 +215,7 @@ The server runs as a `stdio` process. Configure it in your MCP client:
       "args": ["--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
       }
     }
   }
@@ -216,7 +235,7 @@ args = ["--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark
 
 [mcp_servers.modelark-seed.env]
 BYTEPLUS_MODELARK_API_KEY = "your_modelark_key"
-BYTEPLUS_SEED_AUDIO_API_KEY = "your_seed_audio_key"
+BYTEPLUS_SEED_SPEECH_API_KEY = "your_seed_speech_key"
 ```
 
 ### OpenCode
@@ -235,7 +254,7 @@ top-level `mcp` key with `type: "local"` and `command` as an array:
       "enabled": true,
       "environment": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
       }
     }
   }
@@ -257,7 +276,7 @@ TRAE uses the standard `mcpServers` JSON shape, added either via
       "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "modelark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
       }
     }
   }
@@ -286,7 +305,7 @@ then paste:
       "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "modelark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
-        "BYTEPLUS_SEED_AUDIO_API_KEY": "your_seed_audio_key"
+        "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
       }
     }
   }
@@ -389,7 +408,7 @@ See the project configuration for license details.
 ## Status
 
 All three provider surfaces and both transports are implemented. The local
-release gate passes 459 offline tests at 88.08% branch coverage, Ruff formatting
+release gate passes 631 offline tests at 88% branch coverage, Ruff formatting
 and lint, strict mypy, Bandit/secret scans, and package build. Dependency audit
 and container health are enforced by CI. Remote HTTP requires JWT configuration
 and is intentionally fail-closed.

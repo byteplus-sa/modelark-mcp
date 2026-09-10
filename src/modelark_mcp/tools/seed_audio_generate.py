@@ -183,7 +183,7 @@ async def seed_audio_generate(
     settings = get_settings()
     if not settings.has_seed_audio:
         raise ValueError(
-            "BYTEPLUS_SEED_AUDIO_API_KEY is not configured. "
+            "BYTEPLUS_SEED_SPEECH_API_KEY is not configured. "
             "Set it in .env to enable Seed Audio tools."
         )
 

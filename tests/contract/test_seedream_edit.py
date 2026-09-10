@@ -134,13 +134,9 @@ class TestSeedreamEditInput:
 
 
 class TestBuildEditPrompt:
-    def _ref_images(self) -> list[MediaSource]:
-        return [MediaSource(kind=MediaSourceKind.url, url="https://example.com/img.png")]
-
     def test_point_prompt(self) -> None:
         result = _build_edit_prompt(
             instruction="Replace the object with a crown.",
-            images=self._ref_images(),
             point=EditCoordinate(x=520, y=460),
             bbox=None,
         )
@@ -150,7 +146,6 @@ class TestBuildEditPrompt:
     def test_bbox_prompt(self) -> None:
         result = _build_edit_prompt(
             instruction="Replace with a garden.",
-            images=self._ref_images(),
             point=None,
             bbox=EditBbox(x1=120, y1=180, x2=640, y2=760),
         )
@@ -160,7 +155,6 @@ class TestBuildEditPrompt:
     def test_point_and_bbox_prompt(self) -> None:
         result = _build_edit_prompt(
             instruction="Replace the object with a crown.",
-            images=self._ref_images(),
             point=EditCoordinate(x=50, y=50),
             bbox=EditBbox(x1=179, y1=283, x2=796, y2=986),
         )
@@ -171,7 +165,6 @@ class TestBuildEditPrompt:
     def test_bbox_before_point_in_prompt(self) -> None:
         result = _build_edit_prompt(
             instruction="edit",
-            images=self._ref_images(),
             point=EditCoordinate(x=100, y=200),
             bbox=EditBbox(x1=10, y1=20, x2=30, y2=40),
         )

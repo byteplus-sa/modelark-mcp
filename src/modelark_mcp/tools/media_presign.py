@@ -20,10 +20,27 @@ from modelark_mcp.domain.errors import ProviderError
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.object_storage import make_object_storage_gateway
 from modelark_mcp.providers.retry import call_with_retry
-from modelark_mcp.runtime import billed_provider_slot
+from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._errors import provider_error_result
 
 _OBJECT_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-_/]*$")
+
+
+def validate_object_key(v: str) -> str:
+    """Validate an object key for presign/upload reuse.
+
+    Keys must contain only alphanumeric characters, ``-``, ``_``, and ``/``;
+    must not start with ``/`` or ``-``; and must not contain empty path
+    segments (``//`` or a trailing ``/``).
+    """
+    if not v or not _OBJECT_KEY_PATTERN.match(v):
+        raise ValueError(
+            "object_key must contain only alphanumeric characters, '-', '_', and '/', "
+            "and must not start with '/' or '-'."
+        )
+    if "//" in v or v.endswith("/"):
+        raise ValueError("object_key must not contain empty path segments.")
+    return v
 
 
 class MediaPresignInput(BaseModel):
@@ -35,18 +52,21 @@ class MediaPresignInput(BaseModel):
             "Object key returned by a prior media_upload call (e.g. 'references/video/<uuid>')."
         ),
     )
+    expires_in_seconds: int | None = Field(
+        None,
+        ge=60,
+        le=604800,
+        description=(
+            "Presigned URL validity in seconds (60-604800). Defaults to the configured presign "
+            "TTL. VOD tools fetch source URLs asynchronously, so use a long TTL (e.g. 3600) when "
+            "renewing a URL for vod_separate_audio, vod_transcode_video, or vod_enhance_video."
+        ),
+    )
 
     @field_validator("object_key")
     @classmethod
     def _validate_object_key(cls, v: str) -> str:
-        if not v or not _OBJECT_KEY_PATTERN.match(v):
-            raise ValueError(
-                "object_key must contain only alphanumeric characters, '-', '_', and '/', "
-                "and must not start with '/' or '-'."
-            )
-        if "//" in v or v.endswith("/"):
-            raise ValueError("object_key must not contain empty path segments.")
-        return v
+        return validate_object_key(v)
 
 
 class MediaPresignOutput(BaseModel):
@@ -84,14 +104,25 @@ async def media_presign(input: MediaPresignInput, ctx: Context) -> MediaPresignO
             product="presign",
             estimated_cost_usd=0.0,
         ):
-            url = await call_with_retry(lambda: gateway.presign_get(key=input.object_key))
+            await get_runtime(ctx).object_key_ownership_store.require_owner(
+                input.object_key, get_principal(ctx)
+            )
+            if input.expires_in_seconds is not None:
+                url = await call_with_retry(
+                    lambda: gateway.presign_get(
+                        key=input.object_key, expires=input.expires_in_seconds
+                    )
+                )
+            else:
+                url = await call_with_retry(lambda: gateway.presign_get(key=input.object_key))
     except ProviderError as exc:
         await ctx.error(f"Presign failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await gateway.close()
 
-    expires_at = (datetime.now(UTC) + timedelta(seconds=settings.presign_ttl_seconds)).isoformat()
+    ttl = input.expires_in_seconds or settings.presign_ttl_seconds
+    expires_at = (datetime.now(UTC) + timedelta(seconds=ttl)).isoformat()
 
     await ctx.report_progress(progress=100, total=100)
     log_info("media_presign_complete", object_key=input.object_key)
