@@ -184,7 +184,9 @@ store — shared state across mounts requires passing the same `session_state_st
 12. **Background tasks** — install `fastmcp[tasks]`, register `TasksExtension`, and
     use `task=True` or `TaskConfig` only on tools.
 
-### Deprecations (still work, emit warnings)
+### Removed v3 Compatibility APIs
+
+Replace these v3-era APIs before running on v4; the old forms no longer work:
 
 - `mount(prefix="x")` → `mount(namespace="x")`
 - `import_server(sub)` → `mount(sub)`
@@ -352,7 +354,7 @@ supported. See [Sampling](https://gofastmcp.com/servers/sampling).
 
 ## Background Tasks (v4 extension)
 
-Protocol-native background tasks (SEP-1686) powered by Docket. Requires:
+Protocol-native background tasks (SEP-2663) powered by Docket. Requires:
 
 ```bash
 pip install "fastmcp[tasks]"
@@ -495,7 +497,7 @@ def public_api(): ...
 @api_server.tool(tags=["admin"])
 def admin_api(): ...
 
-# Mount with namespace (prefix= is deprecated to namespace=)
+# Mount with namespace (`prefix=` was removed in v4)
 main.mount(api_server, namespace="api")  # Tools become: api_public_api
 # main.mount(api_server, namespace="api", exclude_tags=["admin"])  # Filter
 
