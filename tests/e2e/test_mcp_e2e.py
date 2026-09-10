@@ -134,7 +134,7 @@ class TestToolDiscovery:
         async with Client(mcp) as client:
             tools = await client.list_tools()
             tool = next(t for t in tools if t.name == "seedream_generate_image")
-            schema = tool.inputSchema
+            schema = tool.input_schema
             assert schema is not None
             assert "properties" in schema
             assert "input" in schema["properties"]
@@ -144,7 +144,7 @@ class TestToolDiscovery:
         async with Client(mcp) as client:
             tools = await client.list_tools()
             tool = next(t for t in tools if t.name == "seedream_generate_image")
-            schema = tool.outputSchema
+            schema = tool.output_schema
             assert schema is not None
             assert "artifacts" in schema["properties"]
             assert "model" in schema["properties"]
@@ -157,8 +157,8 @@ class TestResourceTemplates:
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
         async with Client(mcp) as client:
             templates = await client.list_resource_templates()
-            artifact_tmpl = next(t for t in templates if "artifacts" in t.uriTemplate)
-            assert "artifact_id" in artifact_tmpl.uriTemplate
+            artifact_tmpl = next(t for t in templates if "artifacts" in t.uri_template)
+            assert "artifact_id" in artifact_tmpl.uri_template
 
     async def test_health_resource_registered(self, e2e_server: object) -> None:
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
@@ -239,7 +239,7 @@ class TestSeedreamGenerateImageE2E:
         item = content[0]
         assert hasattr(item, "blob")
         assert base64.b64decode(item.blob) == raw_bytes
-        assert item.mimeType == "image/png"
+        assert item.mime_type == "image/png"
 
     async def test_provider_error_returns_error_result(self, e2e_server: object) -> None:
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]

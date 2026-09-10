@@ -37,7 +37,7 @@ behind one server:
 - **Object storage upload** — presigned URL generation for URL-only media
   workflows such as Seedance video references.
 
-The server is built on FastMCP v3 and runs locally via `stdio` or as a
+The server is built on FastMCP v4 and runs locally via `stdio` or as a
 deployable Streamable HTTP service. Generated media is persisted to a local
 artifact store with stable `seed-media://` resource URIs that survive provider
 URL expiry (2 hours for audio, 24 hours for ModelArk image/video/3D and MediaKit
