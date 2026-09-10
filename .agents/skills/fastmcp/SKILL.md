@@ -481,8 +481,8 @@ Hook hierarchy: `on_message` (all) → `on_request`/`on_notification` →
 
 ## Server Composition
 
-Use `mount()` (dynamic) for live runtime links. `import_server()` is deprecated to
-`mount()`. Tags can filter which components are included.
+Use `mount()` (dynamic) for live runtime links. FastMCP v4 removed
+`import_server()`. Tags can filter which components are included.
 
 ```python
 from fastmcp import FastMCP
@@ -879,12 +879,12 @@ method, call it in the lifespan.
 **Fix:** `ErrorHandlingMiddleware` → `TimingMiddleware` → `LoggingMiddleware` →
 `RateLimitingMiddleware` → `ResponseCachingMiddleware`.
 
-### Error 30: Import vs Mount Confusion
+### Error 30: Removed `import_server()`
 
 **Error:** Subserver changes not reflected, or unexpected tool namespacing.
-**Cause:** Using `import_server()` when `mount()` was needed (or vice versa).
-**Fix:** Both now map to `mount()` in v3 (dynamic, live link, runtime delegation).
-`import_server()` is deprecated.
+**Cause:** Using the v3-only `import_server()` API.
+**Fix:** Use `mount()` for dynamic, live links and runtime delegation. FastMCP v4
+removed `import_server()`.
 
 ### Error 31: Host/Origin Guard After v3.4.3
 
@@ -963,7 +963,7 @@ For stdio-only hosts connecting to remote servers, use the `fastmcp-remote` brid
 10. Persistent storage (`FileTreeStore`/`RedisStore`) for OAuth/caching in production.
 11. Server lifespans run once per server instance (not per session).
 12. Middleware order: errors → timing → logging → rate limiting → caching.
-13. Composition: `mount(namespace="x")` (dynamic); `import_server()` deprecated.
+13. Composition: `mount(namespace="x")` (dynamic); v4 removed `import_server()`.
 14. OAuth security: consent screens + encrypted storage + JWT signing + PKCE.
 15. Comprehensive docstrings (LLMs read these!).
 16. Environment variables for config (never hardcode secrets).
