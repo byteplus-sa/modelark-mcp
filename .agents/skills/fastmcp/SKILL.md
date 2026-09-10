@@ -1,9 +1,9 @@
 ---
 name: fastmcp
-description: Build production-grade MCP (Model Context Protocol) servers, clients, and apps in Python with FastMCP v3. Use when creating or editing FastMCP servers — tools, resources, prompts, providers, transforms, middleware, auth, background tasks, sampling, deployment, or migrating from v2. Covers v3.4.x architecture and prevents common v3 errors.
+description: Build production-grade MCP (Model Context Protocol) servers, clients, and apps in Python with FastMCP v4. Use when creating or editing FastMCP servers, upgrading from v3, or working with tools, resources, prompts, providers, transforms, middleware, auth, background tasks, sampling, or deployment.
 ---
 
-# FastMCP v3 — Build MCP Servers, Clients, and Apps in Python
+# FastMCP v4 — Build MCP Servers, Clients, and Apps in Python
 
 FastMCP is the standard Python framework for building Model Context Protocol (MCP)
 applications. MCP is the open protocol that connects LLMs to tools and data; FastMCP
@@ -22,7 +22,8 @@ Three pillars:
 - **Clients** — connect to any MCP server (local or remote, programmatic or CLI) with full protocol support.
 - **Apps** — give tools interactive UIs rendered directly in the conversation.
 
-> **Current version: `v3.4.4` (July 9, 2026).** This skill targets `fastmcp>=3.4,<4`.
+> **Verified version: `v4.0.3` (September 4, 2026).** This skill targets
+> `fastmcp>=4.0,<5`.
 > Docs reflect the `main` branch; features are marked with version badges (e.g.
 > `New in version: 3.0.0`). Verify unreleased features against live docs.
 
@@ -56,7 +57,7 @@ if __name__ == "__main__":
     mcp.run()
 ```
 
-> **v3 note:** Decorators (`@mcp.tool`, `@mcp.resource`, `@mcp.prompt`) no longer
+> **v3/v4 note:** Decorators (`@mcp.tool`, `@mcp.resource`, `@mcp.prompt`) no longer
 > require parentheses, and they return the **original function**, not a component
 > object. Code that accesses `.name` / `.description` on the decorated result will
 > crash. Set `FASTMCP_DECORATOR_MODE=object` for v2 compat (itself deprecated).
@@ -79,6 +80,22 @@ FASTMCP_LOG_LEVEL=DEBUG fastmcp dev server.py
 # Install to Claude Desktop / Cursor / Gemini
 fastmcp install server.py
 ```
+
+## What's New in v4 (vs v3)
+
+FastMCP v4 is based on MCP Python SDK v2. Most v3 applications upgrade without
+changes, but direct protocol-model attribute access must use Python
+`snake_case`; JSON wire payloads remain camelCase. The release also removes
+previously deprecated APIs and moves FastMCP's internal client transport to
+`httpx2`. Application-owned `httpx` clients are unaffected.
+
+Before upgrading, search for deprecated context sampling/root methods, old
+constructor parameters, FastMCP-internal `httpx` exception handling, and
+camelCase protocol-model attributes. Run protocol discovery and transport smoke
+tests in addition to unit tests.
+
+Official upgrade guide:
+<https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3>
 
 ## What's New in v3 (vs v2)
 
@@ -189,20 +206,29 @@ uv add --upgrade fastmcp
 Pin in `requirements.txt` / `pyproject.toml`:
 
 ```
-fastmcp>=3.4.0,<4
+fastmcp>=4.0,<5
 ```
 
-For most servers, updating the import is all you need:
+Most v3 servers upgrade to v4 without code changes. MCP Python SDK v2 model
+attributes use `snake_case`; update direct attribute access such as
+`inputSchema` to `input_schema`. FastMCP's internal HTTP stack uses `httpx2`,
+while HTTP calls made by application tools continue to use the application's
+chosen client.
+
+For most servers, the import remains unchanged:
 
 ```python
-# v2.x and v3.x compatible
+# v3.x and v4.x compatible
 from fastmcp import FastMCP
 
 mcp = FastMCP("server")
 # ... rest of code works the same
 ```
 
-Full migration guide: <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-2>
+Migration guides:
+
+- v3 to v4: <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3>
+- v2 to v3: <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-2>
 
 ## Core Concepts
 
@@ -949,8 +975,9 @@ For stdio-only hosts connecting to remote servers, use the `fastmcp-remote` brid
 14. OAuth security: consent screens + encrypted storage + JWT signing + PKCE.
 15. Comprehensive docstrings (LLMs read these!).
 16. Environment variables for config (never hardcode secrets).
-17. Pin versions: `fastmcp>=3.4.0,<4` (patch versions are safe; minor versions may
-    break — see [Releases](https://gofastmcp.com/development/releases.md)).
+17. Pin versions within the tested major line: `fastmcp>=4.0,<5`.
+18. In MCP SDK v2 protocol models, use Python `snake_case` attributes while
+    preserving camelCase in JSON wire payloads.
 
 ## References
 
@@ -959,12 +986,13 @@ For stdio-only hosts connecting to remote servers, use the `fastmcp-remote` brid
 - **MCP spec:** <https://modelcontextprotocol.io>
 - **Changelog:** <https://gofastmcp.com/changelog.md>
 - **Migration (v2 → v3):** <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-2.md>
+- **Migration (v3 → v4):** <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3.md>
 - **Context7:** `/prefecthq/fastmcp`
 - **Releases policy:** <https://gofastmcp.com/development/releases.md>
 
 ### Package Versions
 
-- `fastmcp>=3.4.0,<4` (PyPI; latest `v3.4.4`, 2026-07-09)
+- `fastmcp>=4.0,<5` (verified with `v4.0.3`, 2026-09-04)
 - Python `>=3.10`
 - Dependencies: `httpx`, `pydantic`, `py-key-value-aio`, `mcp` SDK
 - Optional: `fastmcp[tasks]`, `py-key-value-aio[redis]`
@@ -976,5 +1004,5 @@ For stdio-only hosts connecting to remote servers, use the `fastmcp-remote` brid
 
 ---
 
-_Last updated: 2026-07-20. Verified against FastMCP v3.4.4 and the official
-`gofastmcp.com` documentation (live pages fetched 2026-07-20)._
+_Last updated: 2026-09-10. Verified against FastMCP v4.0.3 and the official
+`gofastmcp.com` v3-to-v4 upgrade guide._
