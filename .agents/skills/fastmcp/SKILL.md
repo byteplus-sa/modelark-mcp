@@ -60,7 +60,8 @@ if __name__ == "__main__":
 > **v3/v4 note:** Decorators (`@mcp.tool`, `@mcp.resource`, `@mcp.prompt`) no longer
 > require parentheses, and they return the **original function**, not a component
 > object. Code that accesses `.name` / `.description` on the decorated result will
-> crash. Set `FASTMCP_DECORATOR_MODE=object` for v2 compat (itself deprecated).
+> crash. In v4, access component metadata through the server; the old decorator
+> compatibility mode has been removed.
 
 ### Run It
 
@@ -174,14 +175,14 @@ store — shared state across mounts requires passing the same `session_state_st
    `include_fastmcp_meta` removed (always included).
 8. **Env var** — `FASTMCP_SHOW_CLI_BANNER` renamed to `FASTMCP_SHOW_SERVER_BANNER`.
 9. **Decorators return functions** — `@mcp.tool` returns the original function, not a
-   component object. `FASTMCP_DECORATOR_MODE=object` for v2 compat (deprecated).
+   component object. Access component metadata through the server.
 10. **OAuth storage** — Default OAuth client storage changed from `DiskStore` to
     `FileTreeStore` (CVE-2025-69872 pickle deserialization vulnerability in diskcache).
     Clients re-register automatically on first connection.
 11. **Repo move** — `jlowin/fastmcp` → `PrefectHQ/fastmcp`. Update git remotes and
     `git+https://...` dependency URLs.
-12. **Background tasks** — `task=True` / `TaskConfig` now an optional dependency:
-    `pip install "fastmcp[tasks]"`.
+12. **Background tasks** — install `fastmcp[tasks]`, register `TasksExtension`, and
+    use `task=True` or `TaskConfig` only on tools.
 
 ### Deprecations (still work, emit warnings)
 
@@ -318,19 +319,16 @@ are async; each request gets a fresh context object.
 
 ### Elicitation (User Input)
 
-```python
-from fastmcp import FastMCP, Context
+On modern `2026-07-28` connections, use the multi-round guard pattern: return an
+`InputRequiredResult` that describes the required input, then resume when the
+client calls the tool again with the answer. Taking confirmation as an explicit
+tool argument is simpler when the caller can provide it directly.
 
-mcp = FastMCP()
-
-@mcp.tool
-async def confirm_action(action: str, ctx: Context) -> dict:
-    result = await ctx.request_elicitation(
-        prompt=f"Confirm {action}?",
-        response_type=str,
-    )
-    return {"status": "completed" if result.lower() == "yes" else "cancelled"}
-```
+`ctx.elicit(prompt, response_type=...)` remains available only on legacy
+handshake-era connections and requires an explicit `response_type`. A default
+FastMCP v4 client negotiates the modern protocol, where `ctx.elicit()` raises.
+See [Elicitation](https://gofastmcp.com/servers/elicitation#which-approach-to-use)
+before choosing between the two protocol shapes.
 
 ### Progress Reporting
 
@@ -346,24 +344,13 @@ async def batch_import(file_path: str, ctx: Context) -> dict:
 
 ### Sampling (LLM calls from tools)
 
-```python
-from fastmcp import FastMCP, Context
+FastMCP v4 removes `ctx.sample()` and `ctx.sample_step()`. Call an LLM directly
+from the server when the application owns the model. When the purpose is to use
+the caller's model, return an `InputRequiredResult` carrying a sampling request
+and resume on the next tool call. Client-side `sampling_handler=` remains
+supported. See [Sampling](https://gofastmcp.com/servers/sampling).
 
-mcp = FastMCP()
-
-@mcp.tool
-async def summarize(content: str, ctx: Context) -> str:
-    """Generate a summary of the provided content."""
-    result = await ctx.sample(f"Please summarize this:\n\n{content}")
-    return result.text or ""
-```
-
-`ctx.sample()` returns a `SamplingResult` with `.text`, `.result`, and `.history`.
-Supports `system_prompt`, `temperature`, `max_tokens`, `model_preferences`, and
-multi-turn `SamplingMessage` lists. For agentic sampling with tools, see the
-[Sampling docs](https://gofastmcp.com/servers/sampling.md).
-
-## Background Tasks (v3, optional extra)
+## Background Tasks (v4 extension)
 
 Protocol-native background tasks (SEP-1686) powered by Docket. Requires:
 
@@ -371,15 +358,18 @@ Protocol-native background tasks (SEP-1686) powered by Docket. Requires:
 pip install "fastmcp[tasks]"
 ```
 
-Add `task=True` (or `TaskConfig`) to any decorator. Background tasks require async
-functions.
+Register `TasksExtension`, then add `task=True` (or `TaskConfig`) to a tool.
+Background tasks require async functions; `task=` is not valid on resources or
+prompts in v4.
 
 ```python
 import asyncio
 from fastmcp import FastMCP
-from fastmcp.server.tasks import TaskConfig
+from fastmcp.utilities.tasks import TaskConfig
+from fastmcp_tasks import TasksExtension
 
 mcp = FastMCP("MyServer")
+mcp.add_extension(TasksExtension())
 
 @mcp.tool(task=True)  # Supports both sync and background execution (mode="optional")
 async def slow_computation(duration: int) -> str:
@@ -778,8 +768,8 @@ coercion.
 
 **Error:** `AttributeError: 'function' object has no attribute 'name'`
 **Cause:** v3 decorators return the original function, not a component object.
-**Fix:** Access component metadata via the server (`list_tools()`) or set
-`FASTMCP_DECORATOR_MODE=object` for v2 compat (deprecated — migrate instead).
+**Fix:** Access component metadata via the server (`list_tools()`). FastMCP v4
+removed the old decorator compatibility mode.
 
 ### Error 14: OpenAPI Timeout (v3)
 
