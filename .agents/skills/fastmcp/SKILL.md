@@ -1,9 +1,9 @@
 ---
 name: fastmcp
-description: Build production-grade MCP (Model Context Protocol) servers, clients, and apps in Python with FastMCP v3. Use when creating or editing FastMCP servers — tools, resources, prompts, providers, transforms, middleware, auth, background tasks, sampling, deployment, or migrating from v2. Covers v3.4.x architecture and prevents common v3 errors.
+description: Build production-grade MCP (Model Context Protocol) servers, clients, and apps in Python with FastMCP v4. Use when creating or editing FastMCP servers, upgrading from v3, or working with tools, resources, prompts, providers, transforms, middleware, auth, background tasks, sampling, or deployment.
 ---
 
-# FastMCP v3 — Build MCP Servers, Clients, and Apps in Python
+# FastMCP v4 — Build MCP Servers, Clients, and Apps in Python
 
 FastMCP is the standard Python framework for building Model Context Protocol (MCP)
 applications. MCP is the open protocol that connects LLMs to tools and data; FastMCP
@@ -22,7 +22,8 @@ Three pillars:
 - **Clients** — connect to any MCP server (local or remote, programmatic or CLI) with full protocol support.
 - **Apps** — give tools interactive UIs rendered directly in the conversation.
 
-> **Current version: `v3.4.4` (July 9, 2026).** This skill targets `fastmcp>=3.4,<4`.
+> **Verified version: `v4.0.3` (September 4, 2026).** This skill targets
+> `fastmcp>=4.0,<5`.
 > Docs reflect the `main` branch; features are marked with version badges (e.g.
 > `New in version: 3.0.0`). Verify unreleased features against live docs.
 
@@ -56,10 +57,11 @@ if __name__ == "__main__":
     mcp.run()
 ```
 
-> **v3 note:** Decorators (`@mcp.tool`, `@mcp.resource`, `@mcp.prompt`) no longer
+> **v3/v4 note:** Decorators (`@mcp.tool`, `@mcp.resource`, `@mcp.prompt`) no longer
 > require parentheses, and they return the **original function**, not a component
 > object. Code that accesses `.name` / `.description` on the decorated result will
-> crash. Set `FASTMCP_DECORATOR_MODE=object` for v2 compat (itself deprecated).
+> crash. In v4, access component metadata through the server; the old decorator
+> compatibility mode has been removed.
 
 ### Run It
 
@@ -79,6 +81,22 @@ FASTMCP_LOG_LEVEL=DEBUG fastmcp dev server.py
 # Install to Claude Desktop / Cursor / Gemini
 fastmcp install server.py
 ```
+
+## What's New in v4 (vs v3)
+
+FastMCP v4 is based on MCP Python SDK v2. Most v3 applications upgrade without
+changes, but direct protocol-model attribute access must use Python
+`snake_case`; JSON wire payloads remain camelCase. The release also removes
+previously deprecated APIs and moves FastMCP's internal client transport to
+`httpx2`. Application-owned `httpx` clients are unaffected.
+
+Before upgrading, search for deprecated context sampling/root methods, old
+constructor parameters, FastMCP-internal `httpx` exception handling, and
+camelCase protocol-model attributes. Run protocol discovery and transport smoke
+tests in addition to unit tests.
+
+Official upgrade guide:
+<https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3>
 
 ## What's New in v3 (vs v2)
 
@@ -157,16 +175,18 @@ store — shared state across mounts requires passing the same `session_state_st
    `include_fastmcp_meta` removed (always included).
 8. **Env var** — `FASTMCP_SHOW_CLI_BANNER` renamed to `FASTMCP_SHOW_SERVER_BANNER`.
 9. **Decorators return functions** — `@mcp.tool` returns the original function, not a
-   component object. `FASTMCP_DECORATOR_MODE=object` for v2 compat (deprecated).
+   component object. Access component metadata through the server.
 10. **OAuth storage** — Default OAuth client storage changed from `DiskStore` to
     `FileTreeStore` (CVE-2025-69872 pickle deserialization vulnerability in diskcache).
     Clients re-register automatically on first connection.
 11. **Repo move** — `jlowin/fastmcp` → `PrefectHQ/fastmcp`. Update git remotes and
     `git+https://...` dependency URLs.
-12. **Background tasks** — `task=True` / `TaskConfig` now an optional dependency:
-    `pip install "fastmcp[tasks]"`.
+12. **Background tasks** — install `fastmcp[tasks]`, register `TasksExtension`, and
+    use `task=True` or `TaskConfig` only on tools.
 
-### Deprecations (still work, emit warnings)
+### Removed v3 Compatibility APIs
+
+Replace these v3-era APIs before running on v4; the old forms no longer work:
 
 - `mount(prefix="x")` → `mount(namespace="x")`
 - `import_server(sub)` → `mount(sub)`
@@ -189,20 +209,29 @@ uv add --upgrade fastmcp
 Pin in `requirements.txt` / `pyproject.toml`:
 
 ```
-fastmcp>=3.4.0,<4
+fastmcp>=4.0,<5
 ```
 
-For most servers, updating the import is all you need:
+Most v3 servers upgrade to v4 without code changes. MCP Python SDK v2 model
+attributes use `snake_case`; update direct attribute access such as
+`inputSchema` to `input_schema`. FastMCP's internal HTTP stack uses `httpx2`,
+while HTTP calls made by application tools continue to use the application's
+chosen client.
+
+For most servers, the import remains unchanged:
 
 ```python
-# v2.x and v3.x compatible
+# v3.x and v4.x compatible
 from fastmcp import FastMCP
 
 mcp = FastMCP("server")
 # ... rest of code works the same
 ```
 
-Full migration guide: <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-2>
+Migration guides:
+
+- v3 to v4: <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3>
+- v2 to v3: <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-2>
 
 ## Core Concepts
 
@@ -292,19 +321,16 @@ are async; each request gets a fresh context object.
 
 ### Elicitation (User Input)
 
-```python
-from fastmcp import FastMCP, Context
+On modern `2026-07-28` connections, use the multi-round guard pattern: return an
+`InputRequiredResult` that describes the required input, then resume when the
+client calls the tool again with the answer. Taking confirmation as an explicit
+tool argument is simpler when the caller can provide it directly.
 
-mcp = FastMCP()
-
-@mcp.tool
-async def confirm_action(action: str, ctx: Context) -> dict:
-    result = await ctx.request_elicitation(
-        prompt=f"Confirm {action}?",
-        response_type=str,
-    )
-    return {"status": "completed" if result.lower() == "yes" else "cancelled"}
-```
+`ctx.elicit(prompt, response_type=...)` remains available only on legacy
+handshake-era connections and requires an explicit `response_type`. A default
+FastMCP v4 client negotiates the modern protocol, where `ctx.elicit()` raises.
+See [Elicitation](https://gofastmcp.com/servers/elicitation#which-approach-to-use)
+before choosing between the two protocol shapes.
 
 ### Progress Reporting
 
@@ -320,40 +346,32 @@ async def batch_import(file_path: str, ctx: Context) -> dict:
 
 ### Sampling (LLM calls from tools)
 
-```python
-from fastmcp import FastMCP, Context
+FastMCP v4 removes `ctx.sample()` and `ctx.sample_step()`. Call an LLM directly
+from the server when the application owns the model. When the purpose is to use
+the caller's model, return an `InputRequiredResult` carrying a sampling request
+and resume on the next tool call. Client-side `sampling_handler=` remains
+supported. See [Sampling](https://gofastmcp.com/servers/sampling).
 
-mcp = FastMCP()
+## Background Tasks (v4 extension)
 
-@mcp.tool
-async def summarize(content: str, ctx: Context) -> str:
-    """Generate a summary of the provided content."""
-    result = await ctx.sample(f"Please summarize this:\n\n{content}")
-    return result.text or ""
-```
-
-`ctx.sample()` returns a `SamplingResult` with `.text`, `.result`, and `.history`.
-Supports `system_prompt`, `temperature`, `max_tokens`, `model_preferences`, and
-multi-turn `SamplingMessage` lists. For agentic sampling with tools, see the
-[Sampling docs](https://gofastmcp.com/servers/sampling.md).
-
-## Background Tasks (v3, optional extra)
-
-Protocol-native background tasks (SEP-1686) powered by Docket. Requires:
+Protocol-native background tasks (SEP-2663) powered by Docket. Requires:
 
 ```bash
 pip install "fastmcp[tasks]"
 ```
 
-Add `task=True` (or `TaskConfig`) to any decorator. Background tasks require async
-functions.
+Register `TasksExtension`, then add `task=True` (or `TaskConfig`) to a tool.
+Background tasks require async functions; `task=` is not valid on resources or
+prompts in v4.
 
 ```python
 import asyncio
 from fastmcp import FastMCP
-from fastmcp.server.tasks import TaskConfig
+from fastmcp.utilities.tasks import TaskConfig
+from fastmcp_tasks import TasksExtension
 
 mcp = FastMCP("MyServer")
+mcp.add_extension(TasksExtension())
 
 @mcp.tool(task=True)  # Supports both sync and background execution (mode="optional")
 async def slow_computation(duration: int) -> str:
@@ -463,8 +481,8 @@ Hook hierarchy: `on_message` (all) → `on_request`/`on_notification` →
 
 ## Server Composition
 
-Use `mount()` (dynamic) for live runtime links. `import_server()` is deprecated to
-`mount()`. Tags can filter which components are included.
+Use `mount()` (dynamic) for live runtime links. FastMCP v4 removed
+`import_server()`. Tags can filter which components are included.
 
 ```python
 from fastmcp import FastMCP
@@ -479,7 +497,7 @@ def public_api(): ...
 @api_server.tool(tags=["admin"])
 def admin_api(): ...
 
-# Mount with namespace (prefix= is deprecated to namespace=)
+# Mount with namespace (`prefix=` was removed in v4)
 main.mount(api_server, namespace="api")  # Tools become: api_public_api
 # main.mount(api_server, namespace="api", exclude_tags=["admin"])  # Filter
 
@@ -752,8 +770,8 @@ coercion.
 
 **Error:** `AttributeError: 'function' object has no attribute 'name'`
 **Cause:** v3 decorators return the original function, not a component object.
-**Fix:** Access component metadata via the server (`list_tools()`) or set
-`FASTMCP_DECORATOR_MODE=object` for v2 compat (deprecated — migrate instead).
+**Fix:** Access component metadata via the server (`list_tools()`). FastMCP v4
+removed the old decorator compatibility mode.
 
 ### Error 14: OpenAPI Timeout (v3)
 
@@ -861,12 +879,12 @@ method, call it in the lifespan.
 **Fix:** `ErrorHandlingMiddleware` → `TimingMiddleware` → `LoggingMiddleware` →
 `RateLimitingMiddleware` → `ResponseCachingMiddleware`.
 
-### Error 30: Import vs Mount Confusion
+### Error 30: Removed `import_server()`
 
 **Error:** Subserver changes not reflected, or unexpected tool namespacing.
-**Cause:** Using `import_server()` when `mount()` was needed (or vice versa).
-**Fix:** Both now map to `mount()` in v3 (dynamic, live link, runtime delegation).
-`import_server()` is deprecated.
+**Cause:** Using the v3-only `import_server()` API.
+**Fix:** Use `mount()` for dynamic, live links and runtime delegation. FastMCP v4
+removed `import_server()`.
 
 ### Error 31: Host/Origin Guard After v3.4.3
 
@@ -945,12 +963,13 @@ For stdio-only hosts connecting to remote servers, use the `fastmcp-remote` brid
 10. Persistent storage (`FileTreeStore`/`RedisStore`) for OAuth/caching in production.
 11. Server lifespans run once per server instance (not per session).
 12. Middleware order: errors → timing → logging → rate limiting → caching.
-13. Composition: `mount(namespace="x")` (dynamic); `import_server()` deprecated.
+13. Composition: `mount(namespace="x")` (dynamic); v4 removed `import_server()`.
 14. OAuth security: consent screens + encrypted storage + JWT signing + PKCE.
 15. Comprehensive docstrings (LLMs read these!).
 16. Environment variables for config (never hardcode secrets).
-17. Pin versions: `fastmcp>=3.4.0,<4` (patch versions are safe; minor versions may
-    break — see [Releases](https://gofastmcp.com/development/releases.md)).
+17. Pin versions within the tested major line: `fastmcp>=4.0,<5`.
+18. In MCP SDK v2 protocol models, use Python `snake_case` attributes while
+    preserving camelCase in JSON wire payloads.
 
 ## References
 
@@ -959,12 +978,13 @@ For stdio-only hosts connecting to remote servers, use the `fastmcp-remote` brid
 - **MCP spec:** <https://modelcontextprotocol.io>
 - **Changelog:** <https://gofastmcp.com/changelog.md>
 - **Migration (v2 → v3):** <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-2.md>
+- **Migration (v3 → v4):** <https://gofastmcp.com/getting-started/upgrading/from-fastmcp-3.md>
 - **Context7:** `/prefecthq/fastmcp`
 - **Releases policy:** <https://gofastmcp.com/development/releases.md>
 
 ### Package Versions
 
-- `fastmcp>=3.4.0,<4` (PyPI; latest `v3.4.4`, 2026-07-09)
+- `fastmcp>=4.0,<5` (verified with `v4.0.3`, 2026-09-04)
 - Python `>=3.10`
 - Dependencies: `httpx`, `pydantic`, `py-key-value-aio`, `mcp` SDK
 - Optional: `fastmcp[tasks]`, `py-key-value-aio[redis]`
@@ -976,5 +996,5 @@ For stdio-only hosts connecting to remote servers, use the `fastmcp-remote` brid
 
 ---
 
-_Last updated: 2026-07-20. Verified against FastMCP v3.4.4 and the official
-`gofastmcp.com` documentation (live pages fetched 2026-07-20)._
+_Last updated: 2026-09-10. Verified against FastMCP v4.0.3 and the official
+`gofastmcp.com` v3-to-v4 upgrade guide._
