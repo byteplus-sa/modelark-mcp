@@ -266,8 +266,9 @@ started. Poll the MCP task ID through `tasks/result`, then pass its provider
 | `input_duration_seconds` | number | No | Reserved; no price estimate is currently produced |
 | `persist` | boolean | No | Best-effort durable artifact copy; default `true` |
 
-The verified response is `status="accepted"` with a task ID. Poll that exact ID
-with `vod_get_enhancement_task`; do not substitute the transcode or
+The verified response is `status="accepted"` inside the MCP task result. Use
+the provider `task_id` from `tasks/result` and poll that exact ID with
+`vod_get_enhancement_task`; do not substitute the transcode or
 audio-separation poll tools for enhancement results.
 If a completed response supplies `source_url`, retain it even when the best-effort
 copy fails. `persistence` is `not_applicable`, `persisted`, `failed`, or `not_requested`; durable
@@ -276,8 +277,8 @@ convenience-endpoint pricing and billing-unit mapping are confirmed.
 
 #### `vod_get_enhancement_task`
 
-Read-only poll of an enhancement task (`vod:read`). Requires the `task_id`
-returned by `vod_enhance_video`. Maps provider `running`→`processing`,
+Read-only poll of an enhancement task (`vod:read`). Requires the provider
+`task_id` from the `tasks/result` output of `vod_enhance_video`. Maps provider `running`→`processing`,
 `completed`→`succeeded`, and `failed`→`failed`, while requiring
 `task_type="enhance-video"`. On success, returns the 24-hour `source_url`,
 duration, resolution, frame rate, enhancement tier, and normalized timestamps.
@@ -315,8 +316,8 @@ Returns `status="accepted"` plus `task_id` and a heuristic
 
 #### `vod_get_transcode_task`
 
-Read-only poll of a transcode task (`vod:read`). Requires the `task_id` returned
-by `vod_transcode_video`. Maps provider `running`→`processing`,
+Read-only poll of a transcode task (`vod:read`). Requires the provider `task_id`
+from the `tasks/result` output of `vod_transcode_video`. Maps provider `running`→`processing`,
 `completed`→`succeeded`, `failed`→`failed` (the provider documents no
 queued/expired/cancelled statuses). On success, returns `source_url` (24-hour
 lifetime) plus optional `duration_seconds`/`resolution`/`video_codec` and
@@ -391,8 +392,8 @@ a stable public URL.
 
 #### `vod_get_audio_separation`
 
-Read-only poll of a separation task (`vod:read`). Requires the `task_id`
-returned by `vod_separate_audio`. Maps provider `running`→`processing`,
+Read-only poll of a separation task (`vod:read`). Requires the provider
+`task_id` from the `tasks/result` output of `vod_separate_audio`. Maps provider `running`→`processing`,
 `completed`→`succeeded`, `failed`→`failed`. On success, `voice`, `background`,
 `music`, and `sfx` each carry the track's expiring `source_url` (24-hour
 lifetime) and, with `persist_output=true` (default), a durable `artifact`
@@ -401,8 +402,8 @@ provider success. On failure, `error` carries the safe provider detail.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Task ID returned by `vod_separate_audio` |
-| `persist_output` | boolean | No | Best-effort durable copy on first successful poll; default `true` |
+| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of `vod_separate_audio` |
+| `persist_output` | boolean | No | Best-effort durable copy on first successful poll; default `true` (requires task-augmented execution) |
 
 **Latency and transient failures.** A completed separation typically takes
 tens of seconds but can take minutes; keep polling until a terminal state
@@ -691,8 +692,8 @@ queued -> running -> succeeded | failed | cancelled | expired
 
 #### `seedance_create_task`
 
-Create an async video generation task. Returns a task ID for subsequent
-polling.
+Create an async video generation task. The required MCP task result contains
+the provider task ID for subsequent polling.
 
 **Constraints:**
 - At least one of `prompt`, `images`, or `videos` is required.
@@ -1029,8 +1030,8 @@ file URL (zip package of the 3D file) into durable artifact storage so the
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | `str` | Yes | Task ID from the create tool |
-| `persist_output` | `bool` | No (default `true`) | Persist the 3D file to artifact store on first success |
+| `task_id` | `str` | Yes | Provider task ID from the `tasks/result` output of the create tool |
+| `persist_output` | `bool` | No (default `true`) | Persist the 3D file to artifact store on first success; requires task-augmented execution |
 
 Returns `Seed3DTaskOutput` with `task_id`, `model`, `created_at`, `updated_at`,
 `status`, optional `error`, optional `file: ArtifactRef` (on success), and
@@ -1650,9 +1651,9 @@ Set to `0` (default) for record-only mode with no enforcement.
    poll faster than the interval — it
    wastes quota and can hit rate limits.
 
-3. **Make polling resumable.** Save the task ID and request metadata before the
-   first poll. A process timeout must continue the existing task, not create a
-   duplicate.
+3. **Make polling resumable.** Save the MCP task ID and the provider task ID
+   from `tasks/result` with request metadata before the first poll. A process
+   timeout must continue the existing task, not create a duplicate.
 
 4. **Use variation tools for choice.** When the user needs options (e.g., "show
    me a few versions"), use a variation tool rather than calling the single
@@ -1735,8 +1736,9 @@ Set to `0` (default) for record-only mode with no enforcement.
     an ambiguous timeout — re-poll the task ID instead.
 
 20. **Subtitle operations are submit-then-poll.** Use `vod_add_subtitles` or
-    `vod_remove_subtitles` as an MCP background task, then
-    poll with the matching task tool. Prefer `subtitle` removal mode unless the
+    `vod_remove_subtitles` as an MCP background task, retrieve its provider
+    `task_id` through `tasks/result`, then poll with the matching task tool.
+    Prefer `subtitle` removal mode unless the
     broader visual effect of `text` mode is intentional. Reuse `client_token`
     when reconciling an ambiguous submission.
 
