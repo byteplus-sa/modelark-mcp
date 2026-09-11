@@ -26,6 +26,7 @@ from modelark_mcp.providers.modelark.seedance import SeedanceService
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import persistence_requires_task
 
 
 class SeedanceGetTaskInput(BaseModel):
@@ -34,14 +35,17 @@ class SeedanceGetTaskInput(BaseModel):
     task_id: str = Field(
         ...,
         description=(
-            "The task ID returned by seedance_create_task, "
+            "Provider task ID from the task-augmented result of seedance_create_task, "
             "seedance_create_task_variations, seedance_2_5_create_task, "
             "or seedance_2_5_create_task_variations."
         ),
     )
     persist_output: bool = Field(
         True,
-        description="Whether to copy provider output URLs into durable artifact storage on first successful retrieval.",
+        description=(
+            "Whether to copy provider output URLs into durable artifact storage on first successful retrieval. "
+            "The default true requires task-augmented execution; use false for a foreground status check."
+        ),
     )
 
 
@@ -83,6 +87,9 @@ async def seedance_get_task(
     calls return the cached artifact references without re-downloading. Supports
     optional MCP task-augmented execution for completed-output persistence.
     """
+    task_error = persistence_requires_task(ctx, input.persist_output)
+    if task_error is not None:
+        return task_error
     await ctx.info(f"Retrieving Seedance task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)
     runtime = get_runtime(ctx)

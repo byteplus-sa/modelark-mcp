@@ -148,8 +148,8 @@ and uses the `vod:read` JWT scope.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Task ID returned by `vod_enhance_video` |
-| `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true) |
+| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of `vod_enhance_video` |
+| `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true; task-augmented execution required when true) |
 
 ### Output and execution limits
 
@@ -232,8 +232,8 @@ tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses the
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Task ID returned by `vod_transcode_video` |
-| `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true) |
+| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of `vod_transcode_video` |
+| `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true; task-augmented execution required when true) |
 
 ### Output and execution limits
 
@@ -255,7 +255,8 @@ Burn subtitles into a public HTTPS video with MediaKit. Supply either
 `subtitle_url` for an SRT, VTT, or ASS file or a non-empty `subtitles` list of
 `subtitle_text`, `start_time`, and `end_time` cues. If both are supplied, the
 subtitle file takes priority. The tool uses `vod:subtitle:add` in JWT mode and
-returns a task ID for `vod_get_subtitle_addition_task`.
+returns an MCP task ID; retrieve its result through `tasks/result` and pass the
+returned provider task ID to `vod_get_subtitle_addition_task`.
 
 Style options are `subtitle_pos_preset` (`bottom_center`, `top_center`,
 `center`, `lower_third`), positive `subtitle_font_size`, RGBA
@@ -269,11 +270,13 @@ and is omitted by default.
 
 ## vod_get_subtitle_addition_task
 
-Poll the task returned by `vod_add_subtitles`. The tool uses `vod:read`, maps
-provider lifecycle states to `processing`, `succeeded`, or `failed`, and can
-best-effort persist the MP4 output when `persist_output=true` (default). A
-succeeded response always preserves the expiring `source_url`; persistence
-failure is reported separately and does not erase provider success.
+Poll the provider task ID returned by the `tasks/result` output of
+`vod_add_subtitles`. The tool uses `vod:read`, maps provider lifecycle states to
+`processing`, `succeeded`, or `failed`, and can best-effort persist the MP4
+output when `persist_output=true` (default). A succeeded response always
+preserves the expiring `source_url`; persistence failure is reported separately
+and does not erase provider success. Persistence requires task-augmented
+execution; use `persist_output=false` for a foreground status check.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=True`, `openWorldHint=False`
@@ -287,17 +290,21 @@ default; `mode="text"` is broader and may remove titles, labels, or watermarks.
 include up to 20 normalized erasure rectangles, selected/skipped time segments,
 subtitle OCR thresholds, callbacks, a queue ID, and a `client_token`. The
 legacy `model_version` (`v4`/`v5`) and `project` extensions are omitted unless
-explicitly supplied. The tool uses `vod:subtitle:remove` and returns a task ID
-for `vod_get_subtitle_removal_task`.
+explicitly supplied. The tool uses `vod:subtitle:remove` and returns an MCP task
+ID; retrieve its result through `tasks/result` and pass the provider task ID to
+`vod_get_subtitle_removal_task`.
 
 **Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`
 
 ## vod_get_subtitle_removal_task
 
-Poll the task returned by `vod_remove_subtitles`. Its normalized lifecycle,
-optional durable MP4 persistence, source-URL preservation, and failure behavior
-match `vod_get_subtitle_addition_task`. The tool uses `vod:read`.
+Poll the provider task ID returned by the `tasks/result` output of
+`vod_remove_subtitles`. Its normalized lifecycle, optional durable MP4
+persistence, source-URL preservation, and failure behavior match
+`vod_get_subtitle_addition_task`. The tool uses `vod:read`; persistence requires
+task-augmented execution, while `persist_output=false` allows a foreground
+status check.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=True`, `openWorldHint=False`
@@ -327,9 +334,10 @@ and an `output_format`.
 ### Output
 
 Returns `VodSeparateAudioOutput` with `provider` `byteplus-vod-mediakit`,
-`status` `accepted`, the provider `request_id` and `provider_log_id`, the
-`task_id` to poll with `vod_get_audio_separation`, and a heuristic
-`recommended_poll_after_ms`. The POST is non-idempotent and is never retried
+`status` `accepted`, the provider `request_id` and `provider_log_id`, an MCP
+task ID, and a heuristic `recommended_poll_after_ms`. Retrieve the task result
+through `tasks/result`, then pass its provider task ID to
+`vod_get_audio_separation`. The POST is non-idempotent and is never retried
 automatically (timeout/5xx means ambiguous completion).
 
 ## vod_get_audio_separation
@@ -345,8 +353,8 @@ Poll a BytePlus VOD AI MediaKit separate-voice task (`GET
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Task ID returned by `vod_separate_audio` |
-| `persist_output` | boolean | No | Copy completed tracks into durable artifact storage on first successful poll (default `true`) |
+| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of `vod_separate_audio` |
+| `persist_output` | boolean | No | Copy completed tracks into durable artifact storage on first successful poll (default `true`; task-augmented execution required when true) |
 
 ### Output and execution limits
 
@@ -550,8 +558,8 @@ Retrieve the status and output of a Seedance task.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Task ID to retrieve |
-| `persist_output` | boolean | No | Persist video/last-frame on success (default: true) |
+| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of a Seedance create tool |
+| `persist_output` | boolean | No | Persist video/last-frame on success (default: true; task-augmented execution required when true) |
 
 ### Output
 
@@ -666,8 +674,9 @@ Generate N independent audio variations in parallel.
 
 ### seedance_create_task_variations
 
-Create N independent Seedance video tasks in parallel. Returns task IDs
-for async polling via `seedance_get_task`.
+Create N independent Seedance video tasks in parallel. The MCP task result
+contains the per-variation provider task IDs for async polling via
+`seedance_get_task`.
 
 **Input:** Inherits all fields from `seedance_create_task`, plus:
 
@@ -683,8 +692,9 @@ for async polling via `seedance_get_task`.
 ### seedance_2_5_create_task_variations
 
 Create N independent Seedance 2.5 video tasks in parallel (each a separate
-task). Poll each task ID via `seedance_get_task`; partial failures are
-captured per variation.
+provider task). Poll the MCP task through `tasks/result`, then pass each
+returned provider task ID to `seedance_get_task`; partial failures are captured
+per variation.
 
 **Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`

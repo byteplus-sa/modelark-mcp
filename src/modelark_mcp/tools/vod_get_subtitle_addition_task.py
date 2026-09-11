@@ -7,6 +7,7 @@ from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field
 
 from modelark_mcp.providers.vod_mediakit.subtitles import VodMediaKitSubtitleBurnInService
+from modelark_mcp.tools._task_execution import persistence_requires_task
 from modelark_mcp.tools._vod_subtitle_shared import (
     VodSubtitleTaskOutput,
     poll_subtitle_task,
@@ -20,11 +21,14 @@ class VodGetSubtitleAdditionTaskInput(BaseModel):
         min_length=1,
         max_length=256,
         pattern=r"^[A-Za-z0-9._:-]+$",
-        description="Task ID returned by vod_add_subtitles.",
+        description="Provider task ID from the task-augmented result of vod_add_subtitles.",
     )
     persist_output: bool = Field(
         default=True,
-        description="Whether to copy a completed subtitled video into durable artifact storage on first successful poll.",
+        description=(
+            "Whether to copy a completed subtitled video into durable artifact storage on first successful poll. "
+            "The default true requires task-augmented execution; use false for a foreground status check."
+        ),
     )
 
 
@@ -43,6 +47,9 @@ async def vod_get_subtitle_addition_task(
     is skipped or fails. Supports optional MCP task-augmented execution for
     completed-output persistence.
     """
+    task_error = persistence_requires_task(ctx, input.persist_output)
+    if task_error is not None:
+        return task_error
     return await poll_subtitle_task(
         input_task_id=input.task_id,
         persist_output=input.persist_output,

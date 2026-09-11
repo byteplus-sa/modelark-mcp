@@ -616,10 +616,17 @@ class TestSeedanceLifecycleE2E:
                 "seedance_get_task",
                 {"input": {"task_id": task.id, "persist_output": False}},
             )
+            with pytest.raises(
+                ToolError, match="persist_output=true requires task-augmented execution"
+            ):
+                await client.call_tool(
+                    "seedance_get_task",
+                    {"input": {"task_id": task.id}},
+                )
             background_fetched = await _call_background_tool(
                 client,
                 "seedance_get_task",
-                {"input": {"task_id": task.id, "persist_output": False}},
+                {"input": {"task_id": task.id}},
             )
             listed = await client.call_tool("seedance_list_tasks", {"input": {}})
             cancelled = await client.call_tool(

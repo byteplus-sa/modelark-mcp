@@ -176,7 +176,8 @@ Create an async video generation task.
 }
 ```
 
-Returns a task ID. Poll for completion with `seedance_get_task`.
+The create call returns an MCP task ID. Poll `tasks/result` to obtain the
+provider task ID, then pass that provider ID to `seedance_get_task`.
 
 ## 10. Polling for Video Completion
 
@@ -247,7 +248,9 @@ Create multiple video tasks with different prompts.
 }
 ```
 
-Returns multiple task IDs. Poll each with `seedance_get_task`.
+The variations call returns an MCP task ID. Poll `tasks/result` to obtain the
+per-variation provider task IDs, then pass each provider ID to
+`seedance_get_task`.
 
 ## 13. List Recent Video Tasks
 

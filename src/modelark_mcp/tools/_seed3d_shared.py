@@ -30,6 +30,7 @@ from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import persistence_requires_task
 
 
 class Seed3DImageInput(MediaSource):
@@ -55,11 +56,14 @@ class Seed3DGetTaskInput(BaseModel):
 
     task_id: str = Field(
         ...,
-        description="The task ID returned by the corresponding 3D create task tool.",
+        description="Provider task ID from the task-augmented result of the corresponding 3D create task tool.",
     )
     persist_output: bool = Field(
         True,
-        description="Whether to copy provider output URLs into durable artifact storage on first successful retrieval.",
+        description=(
+            "Whether to copy provider output URLs into durable artifact storage on first successful retrieval. "
+            "The default true requires task-augmented execution; use false for a foreground status check."
+        ),
     )
 
 
@@ -275,6 +279,9 @@ async def seed3d_get_task_impl(
     input: Seed3DGetTaskInput, ctx: Context, family: str
 ) -> Seed3DTaskOutput | ToolResult:
     """Retrieve a Seed3D task and persist the generated 3D file on success."""
+    task_error = persistence_requires_task(ctx, input.persist_output)
+    if task_error is not None:
+        return task_error
     label = _family_label(family)
     await ctx.info(f"Retrieving {label} task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)

@@ -251,7 +251,8 @@ and `vod:read`.
 Enhance a public HTTPS video using the exact currently supported profile. The
 operation is asynchronous, mutating, non-idempotent, and open-world. Do
 not retry it automatically: a timeout may be ambiguous after provider work has
-started. Save the returned task ID and poll it with `vod_get_enhancement_task`.
+started. Poll the MCP task ID through `tasks/result`, then pass its provider
+`task_id` to `vod_get_enhancement_task`.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -309,7 +310,8 @@ default 2000); `fps_mode` (`vfr`/`cfr`, default `vfr`); `fps` ([1,240], unset ke
 source rate); `is_hdr_to_sdr` (default `true`).
 
 Returns `status="accepted"` plus `task_id` and a heuristic
-`recommended_poll_after_ms`. Poll with `vod_get_transcode_task`.
+`recommended_poll_after_ms` through `tasks/result`; pass that provider
+`task_id` to `vod_get_transcode_task`.
 
 #### `vod_get_transcode_task`
 
@@ -331,7 +333,8 @@ video. At least one of `subtitle_url` or `subtitles` is required; the file URL
 takes priority if both are present. Inline cues require nonblank
 `subtitle_text`, a nonnegative `start_time`, and a later `end_time`. Optional
 position, font size, RGBA color, and font identifier fields control styling.
-Submit with `vod:subtitle:add`, capture the task ID, then poll with `vod:read`.
+Submit with `vod:subtitle:add`, retrieve the provider `task_id` through
+`tasks/result`, then poll with `vod:read`.
 The poller requires `task_type="add-subtitle-to-video"` and can best-effort
 persist the completed MP4 when `persist_output=true`.
 
@@ -341,7 +344,8 @@ Use precision erasure on a public HTTPS video. The default `subtitle` mode
 targets dialogue subtitles; `text` mode is broader and may erase titles,
 labels, or watermarks. Optional normalized rectangles, selected/skipped time
 segments, and OCR subtitle thresholds constrain processing. Submit with
-`vod:subtitle:remove`, capture the task ID, then poll with `vod:read`. The
+`vod:subtitle:remove`, retrieve the provider `task_id` through `tasks/result`,
+then poll with `vod:read`. The
 poller requires `task_type="erase-video-subtitle-pro"` and shares the subtitle
 addition persistence contract.
 
@@ -374,7 +378,8 @@ The source is a public HTTPS URL (audio or video), exactly one of the two.
 | `output_format` | `"aac"` \| `"mp3"` \| `"wav"` \| `"m4a"` \| `"flac"` | No | Default `aac` |
 
 Returns `status="accepted"` plus `task_id`, `request_id`, and
-`provider_log_id`. Poll with `vod_get_audio_separation`.
+`provider_log_id` through `tasks/result`. Poll the provider `task_id` with
+`vod_get_audio_separation`.
 
 **Source URL liveness.** The provider downloads `audio_url`/`video_url`
 asynchronously after submission, so the URL must stay fetchable until the
@@ -1444,7 +1449,7 @@ default model for that product is used.
 1. Call `seedance_create_task` (2.0) or `seedance_2_5_create_task` (2.5) as an
    MCP background task.
 2. Poll the MCP task and retrieve its result to obtain the ModelArk `task_id`.
-3. Immediately persist the returned `task_id`, request parameters, prompt hash,
+3. Retrieve the MCP task result and immediately persist its provider `task_id`, request parameters, prompt hash,
    and intended output path to the shot manifest before polling.
 4. Poll `seedance_get_task` in foreground with `persist_output=false` until the
    status is terminal.
@@ -1716,13 +1721,13 @@ Set to `0` (default) for record-only mode with no enforcement.
     timeout, and do not present `estimated_cost_usd` as available.
 
 18. **Enhancement is submit-then-poll.** Call `vod_enhance_video` as an MCP
-    background task, capture the returned `task_id`, then poll with
+    background task, retrieve its provider `task_id` through `tasks/result`, then poll with
     `vod_get_enhancement_task` until the status is `succeeded` or `failed`.
     Persist the result before its 24-hour
     source URL expires.
 
 19. **Transcode is submit-then-poll.** Call `vod_transcode_video` as an MCP
-    background task, capture the returned `task_id`, then poll with
+    background task, retrieve its provider `task_id` through `tasks/result`, then poll with
     `vod_get_transcode_task` until the status is `succeeded` or `failed`. The
     default profile is portrait-to-720x720
     letterbox; set `video.codec`, `scale_*`, `bitrate_*`, `fps`, and

@@ -26,6 +26,7 @@ from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.security.auth_context import PrincipalContext
 from modelark_mcp.security.media_policy import get_media_limits
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import persistence_requires_task
 from modelark_mcp.tools._vod_shared import VodArtifactPersistenceIssue
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
@@ -49,10 +50,15 @@ def _track_mime_type(url: HttpsUrl) -> str:
 class VodGetAudioSeparationInput(BaseModel):
     """Input for ``vod_get_audio_separation``."""
 
-    task_id: str = Field(description="Task ID returned by vod_separate_audio.")
+    task_id: str = Field(
+        description="Provider task ID from the task-augmented result of vod_separate_audio."
+    )
     persist_output: bool = Field(
         default=True,
-        description="Whether to copy completed track URLs into durable artifact storage on first successful poll.",
+        description=(
+            "Whether to copy completed track URLs into durable artifact storage on first successful poll. "
+            "The default true requires task-augmented execution; use false for a foreground status check."
+        ),
     )
 
 
@@ -244,6 +250,9 @@ async def vod_get_audio_separation(
     return the cached artifact references without re-downloading. Supports
     optional MCP task-augmented execution for completed-output persistence.
     """
+    task_error = persistence_requires_task(ctx, input.persist_output)
+    if task_error is not None:
+        return task_error
     await ctx.info(f"Retrieving VOD AI MediaKit audio separation task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)
     runtime = get_runtime(ctx)
