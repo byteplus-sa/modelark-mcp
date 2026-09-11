@@ -27,6 +27,7 @@ from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 # ---------------------------------------------------------------------------
 # Input / Output models
@@ -116,7 +117,7 @@ async def seedream_generate_image(
     4.x). Pro models are limited to single-image generation. Requires MCP
     task-augmented execution so generation and persistence run in the background.
     """
-    await ctx.info("Starting Seedream image generation")
+    await context_log(ctx, "info", "Starting Seedream image generation")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -178,7 +179,7 @@ async def seedream_generate_image(
         ):
             response, request_id = await call_with_retry(lambda: service.generate(request))
     except ProviderError as exc:
-        await ctx.error(f"Seedream generation failed: {exc.message}")
+        await context_log(ctx, "error", f"Seedream generation failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

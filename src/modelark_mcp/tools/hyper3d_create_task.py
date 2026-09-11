@@ -21,6 +21,7 @@ from modelark_mcp.tools._seed3d_shared import (
     Seed3DImageInput,
     execute_seed3d_create,
 )
+from modelark_mcp.tools._task_execution import context_log
 
 
 class Hyper3DCreateTaskInput(BaseModel):
@@ -128,7 +129,7 @@ async def hyper3d_create_task(
     asynchronously — use ``hyper3d_get_task`` to poll for completion. Requires
     MCP task-augmented execution for the provider submission.
     """
-    await ctx.info("Creating Hyper3D 3D generation task")
+    await context_log(ctx, "info", "Creating Hyper3D 3D generation task")
     settings = get_settings()
     if not settings.has_seed3d:
         raise ValueError(

@@ -278,6 +278,9 @@ async def test_vod_scope_allows_dispatch(tmp_path: Path, monkeypatch: pytest.Mon
                 "Authorization": "Bearer vod-token",
                 "Origin": "https://client.example.com",
                 "Accept": "application/json, text/event-stream",
+                "Mcp-Protocol-Version": "2026-07-28",
+                "Mcp-Method": "tools/call",
+                "Mcp-Name": "vod_enhance_video",
             },
             json={
                 "jsonrpc": "2.0",
@@ -288,14 +291,20 @@ async def test_vod_scope_allows_dispatch(tmp_path: Path, monkeypatch: pytest.Mon
                     "arguments": {
                         "input": {"video_url": "https://example.com/input.mp4", "persist": False}
                     },
+                    "_meta": {
+                        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                        "io.modelcontextprotocol/clientCapabilities": {
+                            "extensions": {"io.modelcontextprotocol/tasks": {}}
+                        },
+                    },
                     "task": {"ttl": 60000},
                 },
             },
         )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["result"]["task"]["status"] == "working"
-    assert payload["result"]["task"]["taskId"]
+    assert payload["result"]["status"] == "working"
+    assert payload["result"]["taskId"]
 
 
 async def test_oversized_body_is_rejected_before_mcp(tmp_path: Path) -> None:

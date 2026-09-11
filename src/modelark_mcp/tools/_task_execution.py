@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastmcp import Context
 from fastmcp.tools import ToolResult
+
+
+async def context_log(
+    ctx: Context, level: Literal["info", "warning", "error"], message: str
+) -> None:
+    """Send a client log when a live MCP session is available."""
+    if getattr(ctx, "is_background_task", False):
+        return
+    await getattr(ctx, level)(message)
 
 
 def persistence_requires_task(ctx: Context, persist_output: bool) -> ToolResult | None:

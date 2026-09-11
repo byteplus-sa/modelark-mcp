@@ -187,14 +187,16 @@ Check the status of a video generation task.
 
 ```json
 {
-  "task_id": "cgt-20260721134956-h5cz9",
-  "persist_output": true
+  "task_id": "provider-task-abc123",
+  "persist_output": false
 }
 ```
 
-On first successful retrieval, the video is automatically downloaded and
-persisted as a durable artifact. Subsequent polls return the cached
-artifact without re-downloading.
+Use `persist_output=false` for foreground status polling. To persist the
+completed output, run the retrieval through an MCP task with
+`persist_output=true` (or omit the field) after the provider task reaches a
+terminal state; subsequent polls return the cached artifact without
+re-downloading.
 
 ## 11. First/Last Frame Video Generation
 
@@ -329,7 +331,7 @@ seedance_create_task({
 3. Poll for video completion in the foreground:
 
 ```
-seedance_get_task({"task_id": "<task_id from step 2>"})
+seedance_get_task({"task_id": "<provider task ID from tasks/result>", "persist_output": false})
 ```
 
 ## 16. Batch Storyboard with Seedream

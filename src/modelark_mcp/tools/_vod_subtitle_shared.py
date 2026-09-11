@@ -18,6 +18,7 @@ from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.security.auth_context import PrincipalContext
 from modelark_mcp.security.media_policy import get_media_limits
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 from modelark_mcp.tools._vod_shared import VodArtifactPersistenceIssue
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
@@ -150,7 +151,7 @@ async def persist_subtitle_output(
             cached_video = cached.get("video") if cached else None
         except Exception:
             cached_video = None
-            await ctx.warning(f"VOD {label} artifact cache lookup failed.")
+            await context_log(ctx, "warning", f"VOD {label} artifact cache lookup failed.")
         if cached_video is not None:
             singleflight.artifacts = {"video": cached_video}
             return cached_video, None, "persisted"
@@ -164,7 +165,9 @@ async def persist_subtitle_output(
                 auth=owner,
             )
         except ArtifactPersistenceError as exc:
-            await ctx.warning(f"VOD {label} output persistence failed: {exc.safe_message}")
+            await context_log(
+                ctx, "warning", f"VOD {label} output persistence failed: {exc.safe_message}"
+            )
             return (
                 None,
                 VodArtifactPersistenceIssue(
@@ -176,8 +179,10 @@ async def persist_subtitle_output(
                 "failed",
             )
         except Exception:
-            await ctx.warning(
-                f"VOD {label} output persistence failed due to an internal storage error."
+            await context_log(
+                ctx,
+                "warning",
+                f"VOD {label} output persistence failed due to an internal storage error.",
             )
             return (
                 None,
@@ -194,8 +199,10 @@ async def persist_subtitle_output(
         try:
             await runtime.task_artifact_cache.set("vod-mediakit", task_id, {"video": video_ref})
         except Exception:
-            await ctx.warning(
-                f"VOD {label} artifact cache update failed; artifact remains available."
+            await context_log(
+                ctx,
+                "warning",
+                f"VOD {label} artifact cache update failed; artifact remains available.",
             )
         return video_ref, None, "persisted"
 
@@ -211,7 +218,7 @@ async def poll_subtitle_task[OutputT: VodSubtitleTaskOutput](
     log_event: str,
 ) -> OutputT | ToolResult:
     """Poll, normalize, and optionally persist one subtitle operation task."""
-    await ctx.info(f"Retrieving VOD AI MediaKit {label} task {input_task_id}")
+    await context_log(ctx, "info", f"Retrieving VOD AI MediaKit {label} task {input_task_id}")
     await ctx.report_progress(progress=20, total=100)
     runtime = get_runtime(ctx)
     owner = get_principal(ctx)
@@ -220,7 +227,7 @@ async def poll_subtitle_task[OutputT: VodSubtitleTaskOutput](
     try:
         task = await call_with_retry(lambda: service.get(input_task_id))
     except ProviderError as exc:
-        await ctx.error(f"Failed to retrieve {label} task: {exc.message}")
+        await context_log(ctx, "error", f"Failed to retrieve {label} task: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

@@ -317,9 +317,18 @@ async def test_concurrent_first_polls_persist_one_shared_artifact(
         sha256="abc",
         created_at="2026-09-08T14:00:00Z",
     )
-    monkeypatch.setattr(
-        VodMediaKitEnhancementService, "get", AsyncMock(return_value=_succeeded_task())
-    )
+    get_call_count = 0
+    both_gets_started = asyncio.Event()
+
+    async def get_task(_self: VodMediaKitEnhancementService, _task_id: str) -> EnhancementTask:
+        nonlocal get_call_count
+        get_call_count += 1
+        if get_call_count == 2:
+            both_gets_started.set()
+        await both_gets_started.wait()
+        return _succeeded_task()
+
+    monkeypatch.setattr(VodMediaKitEnhancementService, "get", get_task)
     monkeypatch.setattr(VodMediaKitEnhancementService, "close", _close)
     runtime = fake_ctx.lifespan_context["runtime"]
     await runtime.ownership_store.record("vod-mediakit", "amk-tool-enhance-video-1", AuthContext())

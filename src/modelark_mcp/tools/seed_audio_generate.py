@@ -28,6 +28,7 @@ from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 # ---------------------------------------------------------------------------
 # Input / Output models
@@ -179,7 +180,7 @@ async def seed_audio_generate(
     MCP task-augmented execution because generation and persistence can exceed
     foreground client deadlines.
     """
-    await ctx.info("Starting Seed Audio generation")
+    await context_log(ctx, "info", "Starting Seed Audio generation")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -240,7 +241,7 @@ async def seed_audio_generate(
                 lambda: service.generate(request, request_id=client_request_id)
             )
     except ProviderError as exc:
-        await ctx.error(f"Seed Audio generation failed: {exc.message}")
+        await context_log(ctx, "error", f"Seed Audio generation failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

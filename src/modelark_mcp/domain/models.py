@@ -185,7 +185,13 @@ class VariationResult(BaseModel):
     index: int = Field(..., description="0-based variation index.")
     seed: int | None = Field(None, description="Seed used (if applicable).")
     artifact: ArtifactRef | None = Field(None, description="Generated artifact (None if failed).")
-    task_id: str | None = Field(None, description="Task ID for async results (Seedance only).")
+    task_id: str | None = Field(
+        None,
+        description=(
+            "Provider task ID for Seedance polling, obtained from the enclosing "
+            "MCP task's tasks/result output."
+        ),
+    )
     error: VariationError | None = Field(None, description="Error if this variation failed.")
     request_id: str | None = Field(None, description="Client request ID for this variation.")
     provider_log_id: str | None = Field(

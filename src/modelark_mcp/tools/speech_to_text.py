@@ -31,6 +31,7 @@ from modelark_mcp.security.media_policy import decode_base64_safely
 from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 _STT_MAX_BYTES = 200 * 1024 * 1024
 _BYTES_PER_SECOND_16KHZ_MONO_16BIT = 32000
@@ -130,7 +131,7 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
     up to the configured ASR poll limit. Returns the complete
     ``TranscriptionResult`` through the MCP task result.
     """
-    await ctx.info("Starting speech-to-text transcription")
+    await context_log(ctx, "info", "Starting speech-to-text transcription")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -143,7 +144,7 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
         audio_bytes = await _resolve_audio_bytes(input.audio, ctx)
     except (ProviderError, ValueError) as exc:
         log_warning("audio_resolution_failed", error=str(exc))
-        await ctx.error("Audio resolution failed.")
+        await context_log(ctx, "error", "Audio resolution failed.")
         if isinstance(exc, ProviderError):
             return provider_error_result(exc)
         detail = "Invalid audio source URL." if isinstance(exc, UrlValidationError) else str(exc)
@@ -179,7 +180,7 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
                 )
             )
     except ProviderError as exc:
-        await ctx.error(f"Speech-to-text failed: {exc.message}")
+        await context_log(ctx, "error", f"Speech-to-text failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

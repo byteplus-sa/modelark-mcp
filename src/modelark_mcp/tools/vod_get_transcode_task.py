@@ -24,7 +24,7 @@ from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.security.auth_context import PrincipalContext
 from modelark_mcp.security.media_policy import get_media_limits
 from modelark_mcp.tools._errors import provider_error_result
-from modelark_mcp.tools._task_execution import persistence_requires_task
+from modelark_mcp.tools._task_execution import context_log, persistence_requires_task
 from modelark_mcp.tools._vod_shared import VodArtifactPersistenceIssue
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
@@ -179,7 +179,9 @@ async def _persist_output(
             retryable=exc.retryable,
             artifact_limit_bytes=get_media_limits().video_max_bytes,
         )
-        await ctx.warning(f"VOD transcode output persistence failed: {exc.safe_message}")
+        await context_log(
+            ctx, "warning", f"VOD transcode output persistence failed: {exc.safe_message}"
+        )
         return None, issue, "failed"
     except Exception:
         issue = VodArtifactPersistenceIssue(
@@ -188,8 +190,10 @@ async def _persist_output(
             retryable=True,
             artifact_limit_bytes=get_media_limits().video_max_bytes,
         )
-        await ctx.warning(
-            "VOD transcode output persistence failed due to an internal storage error."
+        await context_log(
+            ctx,
+            "warning",
+            "VOD transcode output persistence failed due to an internal storage error.",
         )
         return None, issue, "failed"
 
@@ -210,7 +214,7 @@ async def vod_get_transcode_task(
     task_error = persistence_requires_task(ctx, input.persist_output)
     if task_error is not None:
         return task_error
-    await ctx.info(f"Retrieving VOD AI MediaKit transcode task {input.task_id}")
+    await context_log(ctx, "info", f"Retrieving VOD AI MediaKit transcode task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)
     runtime = get_runtime(ctx)
     owner = get_principal(ctx)
@@ -220,7 +224,7 @@ async def vod_get_transcode_task(
     try:
         task = await call_with_retry(lambda: service.get(input.task_id))
     except ProviderError as exc:
-        await ctx.error(f"Failed to retrieve transcode task: {exc.message}")
+        await context_log(ctx, "error", f"Failed to retrieve transcode task: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

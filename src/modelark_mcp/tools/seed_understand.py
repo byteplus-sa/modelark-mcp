@@ -26,6 +26,7 @@ from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 
 class UnderstandingImageInput(MediaSource):
@@ -143,7 +144,7 @@ async def seed_understand(
     chat endpoint. This tool requires task-augmented execution so long video
     analysis does not consume a foreground MCP request deadline.
     """
-    await ctx.info("Starting Seed 2.1 multimodal understanding")
+    await context_log(ctx, "info", "Starting Seed 2.1 multimodal understanding")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -207,7 +208,7 @@ async def seed_understand(
         ):
             response, request_id = await call_with_retry(lambda: service.generate(request))
     except ProviderError as exc:
-        await ctx.error(f"Understanding failed: {exc.message}")
+        await context_log(ctx, "error", f"Understanding failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

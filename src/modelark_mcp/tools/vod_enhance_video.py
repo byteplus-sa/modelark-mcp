@@ -23,6 +23,7 @@ from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.security.media_policy import get_media_limits
 from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 from modelark_mcp.tools._vod_shared import VodArtifactPersistenceIssue
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
@@ -158,13 +159,13 @@ async def vod_enhance_video(
     )
     owner = get_principal(ctx)
     service = VodMediaKitEnhancementService()
-    await ctx.info("Starting VOD AI MediaKit enhancement")
+    await context_log(ctx, "info", "Starting VOD AI MediaKit enhancement")
     await ctx.report_progress(progress=20, total=100)
     try:
         async with runtime.provider_limiters.acquire("vod-mediakit", owner):
             submission = await service.enhance(request)
     except ProviderError as exc:
-        await ctx.error(f"VOD AI MediaKit enhancement failed: {exc.message}")
+        await context_log(ctx, "error", f"VOD AI MediaKit enhancement failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()
@@ -209,7 +210,7 @@ async def vod_enhance_video(
                 retryable=exc.retryable,
                 artifact_limit_bytes=get_media_limits().video_max_bytes,
             )
-            await ctx.warning(f"VOD output persistence failed: {exc.safe_message}")
+            await context_log(ctx, "warning", f"VOD output persistence failed: {exc.safe_message}")
         except Exception:
             # Provider success may already be billable. Preserve its source URL even
             # when a future/custom artifact backend violates the typed error contract.
@@ -220,7 +221,9 @@ async def vod_enhance_video(
                 retryable=True,
                 artifact_limit_bytes=get_media_limits().video_max_bytes,
             )
-            await ctx.warning("VOD output persistence failed due to an internal storage error.")
+            await context_log(
+                ctx, "warning", "VOD output persistence failed due to an internal storage error."
+            )
 
     await ctx.report_progress(progress=100, total=100)
     log_info(

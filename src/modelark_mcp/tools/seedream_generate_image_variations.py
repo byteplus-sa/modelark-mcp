@@ -26,6 +26,7 @@ from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._cost import DEFAULT_MAX_CONCURRENT, estimate_cost, log_cost_estimate
 from modelark_mcp.tools._parallel import generate_seeds, resolve_prompts, run_variation_batch
+from modelark_mcp.tools._task_execution import context_log
 
 
 class SeedreamVariationsInput(BaseModel):
@@ -127,7 +128,7 @@ async def seedream_generate_image_variations(
     fail the batch. Requires MCP task-augmented execution so the batch runs in
     the background.
     """
-    await ctx.info(f"Starting {input.variations} parallel Seedream generations")
+    await context_log(ctx, "info", f"Starting {input.variations} parallel Seedream generations")
     await ctx.report_progress(progress=10, total=100)
 
     log_cost_estimate(product="image", variations=input.variations)

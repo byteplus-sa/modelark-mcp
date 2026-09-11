@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from modelark_mcp.domain.artifacts import MediaType
 from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.runtime import get_principal, get_runtime
+from modelark_mcp.tools._task_execution import context_log
 
 
 class SeedMediaGetArtifactInput(BaseModel):
@@ -46,7 +47,7 @@ async def seed_media_get_artifact(
     persisted by a previous generation call after the provider URL has expired
     (2h for audio, 24h for image/video).
     """
-    await ctx.info(f"Fetching artifact {input.artifact_id}")
+    await context_log(ctx, "info", f"Fetching artifact {input.artifact_id}")
 
     runtime = get_runtime(ctx)
     auth = get_principal(ctx)

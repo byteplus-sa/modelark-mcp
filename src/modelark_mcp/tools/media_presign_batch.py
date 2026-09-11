@@ -24,6 +24,7 @@ from modelark_mcp.observability.logger import info as log_info
 from modelark_mcp.providers.object_storage import make_object_storage_gateway
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
+from modelark_mcp.tools._task_execution import context_log
 from modelark_mcp.tools.media_presign import validate_object_key
 
 
@@ -97,7 +98,9 @@ async def media_presign_batch(
     is reported inline as a per-key error while the rest of the batch
     succeeds.
     """
-    await ctx.info(f"Generating presigned URLs for {len(input.object_keys)} object keys")
+    await context_log(
+        ctx, "info", f"Generating presigned URLs for {len(input.object_keys)} object keys"
+    )
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()

@@ -22,6 +22,7 @@ from modelark_mcp.providers.object_storage import make_object_storage_gateway
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 _OBJECT_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-_/]*$")
 
@@ -84,7 +85,7 @@ async def media_presign(input: MediaPresignInput, ctx: Context) -> MediaPresignO
     or is about to expire.  The object must already exist in the bucket (uploaded
     via ``media_upload``).  No data is transferred — only a new URL is minted.
     """
-    await ctx.info("Generating presigned URL")
+    await context_log(ctx, "info", "Generating presigned URL")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -116,7 +117,7 @@ async def media_presign(input: MediaPresignInput, ctx: Context) -> MediaPresignO
             else:
                 url = await call_with_retry(lambda: gateway.presign_get(key=input.object_key))
     except ProviderError as exc:
-        await ctx.error(f"Presign failed: {exc.message}")
+        await context_log(ctx, "error", f"Presign failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await gateway.close()

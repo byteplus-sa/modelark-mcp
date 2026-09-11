@@ -22,6 +22,7 @@ from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._cost import DEFAULT_MAX_CONCURRENT, estimate_cost, log_cost_estimate
 from modelark_mcp.tools._parallel import resolve_prompts, run_variation_batch
+from modelark_mcp.tools._task_execution import context_log
 from modelark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
 
 
@@ -86,7 +87,9 @@ async def seedance_2_5_create_task_variations(
     via ``seedance_get_task``. Partial failures are captured per variation.
     Requires MCP task-augmented execution for the provider submissions.
     """
-    await ctx.info(f"Starting {input.variations} parallel Seedance 2.5 task creations")
+    await context_log(
+        ctx, "info", f"Starting {input.variations} parallel Seedance 2.5 task creations"
+    )
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()

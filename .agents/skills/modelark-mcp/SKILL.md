@@ -38,7 +38,7 @@ behind one server:
 - **Object storage upload** — presigned URL generation for URL-only media
   workflows such as Seedance video references.
 
-The server is built on FastMCP v3 and runs locally via `stdio` or as a
+The server is built on FastMCP v4 and runs locally via `stdio` or as a
 deployable Streamable HTTP service. Generated media is persisted to a local
 artifact store with stable `seed-media://` resource URIs that survive provider
 URL expiry (2 hours for audio, 24 hours for ModelArk image/video/3D and MediaKit
@@ -781,8 +781,10 @@ separate task.
 | `variations` | `int` | Yes | 1–5 |
 | `variation_prompts` | `list[str]` | No | Per-variation prompts |
 
-Returns `SeedanceVariationsOutput` with per-variation task IDs and
-`recommended_poll_after_ms` values.
+Returns `SeedanceVariationsOutput` with per-variation provider task IDs and
+`recommended_poll_after_ms` values. The variation result is returned by the
+enclosing MCP task; poll that task through `tasks/result` before using each
+provider task ID with `seedance_get_task`.
 
 #### `seedance_get_task`
 
@@ -792,21 +794,24 @@ store. Results are cached for 24 hours.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | `str` | Yes | Task ID from `seedance_create_task` |
-| `persist_output` | `bool` | Yes (default `true`) | Persist to artifact store |
+| `task_id` | `str` | Yes | Provider task ID from the create task's `tasks/result` output |
+| `persist_output` | `bool` | Yes (default `true`) | Persist to artifact store; `true` requires task-augmented retrieval |
 
 Returns `SeedanceTaskOutput` with `task_id`, `model`, `created_at`,
 `updated_at`, `status`, optional `error`, optional `video: ArtifactRef`,
 optional `last_frame: ArtifactRef`, optional `usage`, `settings`.
 
-**Typical polling pattern:**
+**Foreground status polling:**
 
 ```json
-{"task_id": "task_abc123", "persist_output": true}
+{"task_id": "provider_task_abc123", "persist_output": false}
 ```
 
 Call this repeatedly (respecting the `recommended_poll_after_ms` from
 creation) until `status` is `succeeded`, `failed`, `cancelled`, or `expired`.
+For durable artifact persistence, repeat the same call with `persist_output`
+omitted or `true` through a task-augmented request after the provider task
+reaches a terminal state.
 
 #### `seedance_list_tasks`
 
@@ -878,9 +883,9 @@ Create an asynchronous Seedance 2.5 video generation task.
 | `audios` | `list[SeedanceAudioInput]` | No | Up to 10 audios with role: `reference_audio`. Audio-only input is supported (unique to 2.5). Each entry may be a plain URL string or `{"url": ...}` |
 | `model` | `str` | No | Default: `dreamina-seedance-2-5-260628`. No Fast/Mini variants. |
 | `resolution` | `"480p"` \| `"720p"` \| `"1080p"` | No | 2.5 supports 480p, 720p, and 1080p. 4k is not supported. |
-| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit`, auto-derived from input video. For first/last-frame, locks to first image. |
-| `duration` | `int` | No | -1 (auto) to 30 seconds. Ignored for edit tasks (auto-derived from input video). |
-| `omni_reference_task_type` | `str` | No | Task type hint. 2.5 values: `auto | reference | edit | extend` — `edit_video` is 2.0-only and is rejected. Default: `auto`. |
+| `ratio` | `str` | No | Aspect ratio (e.g. `16:9`, `9:16`). For `extend_video`, stripped (auto-locks to source) to prevent `InvalidParameter.TaskTypeConstraint`. For `edit_video`, auto-derived from input video. For first/last-frame, locks to first image. |
+| `duration` | `int` | No | -1 (auto) to 30 seconds. Ignored for `edit_video` tasks (auto-derived from input video). |
+| `omni_reference_task_type` | `str` | No | Task type hint passed through to the provider. Common values: `auto` (default, provider auto-detects), `edit_video`, `extend_video`. The server does not restrict or validate this to a fixed enum for either 2.0 or 2.5; for `extend_video`, `ratio` is stripped client-side to prevent `InvalidParameter.TaskTypeConstraint`. |
 | `generate_audio` | `bool` | No | Whether to generate an audio track. |
 | `watermark` | `bool` | No | Apply AIGC watermark. |
 | `return_last_frame` | `bool` | No | Return the last frame as a separate image. |

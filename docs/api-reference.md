@@ -513,7 +513,7 @@ Result of a single variation within a parallel generation.
 | `index` | integer | 0-based variation index |
 | `seed` | integer \| null | Seed used (image only) |
 | `artifact` | ArtifactRef \| null | Generated artifact (null if failed) |
-| `task_id` | string \| null | Task ID (Seedance only) |
+| `task_id` | string \| null | Provider task ID for Seedance polling, obtained from the enclosing MCP task's `tasks/result` output |
 | `error` | object \| null | Error details if failed |
 | `request_id` | string \| null | Provider request ID |
 | `provider_log_id` | string \| null | Provider log ID (Seed Audio) |

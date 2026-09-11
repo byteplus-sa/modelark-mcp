@@ -21,7 +21,8 @@ truststore.inject_into_ssl()
 
 from fastmcp import Context, FastMCP  # noqa: E402
 from fastmcp.resources import ResourceContent, ResourceResult  # noqa: E402
-from fastmcp.server.tasks import TaskConfig  # noqa: E402
+from fastmcp.utilities.tasks import TaskConfig  # noqa: E402
+from fastmcp_tasks import TasksExtension  # noqa: E402
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest  # noqa: E402
 from starlette.middleware import Middleware  # noqa: E402
 from starlette.responses import JSONResponse, Response  # noqa: E402
@@ -688,6 +689,7 @@ def create_server(
         middleware=[MetricsMiddleware()],
         app_settings=resolved_settings,
     )
+    server.add_extension(TasksExtension())
 
     @server.resource(
         "seed-media://artifacts/{artifact_id}",

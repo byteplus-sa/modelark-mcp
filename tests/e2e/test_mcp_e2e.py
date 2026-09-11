@@ -20,6 +20,8 @@ import pytest
 import respx
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
+from fastmcp_tasks import call_tool_task
+from mcp.shared.exceptions import MCPError
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import refresh_capability_registry
@@ -101,14 +103,22 @@ async def _call_background_tool(
     *,
     raise_on_error: bool = True,
 ) -> Any:
-    task = await client.call_tool(
+    task = await call_tool_task(
+        client,
         name,
         arguments,
-        task=True,
         raise_on_error=raise_on_error,
     )
-    assert not task.returned_immediately
     return await task.result()
+
+
+def _foreground_client(mcp: FastMCP) -> Client:
+    client = Client(mcp)
+    client._auto_internal_extensions = False  # type: ignore[attr-defined]
+    client._session_kwargs.pop("extensions", None)  # type: ignore[attr-defined]
+    client._session_kwargs.pop("result_claims", None)  # type: ignore[attr-defined]
+    client._session_kwargs.update(client._build_extension_kwargs())  # type: ignore[attr-defined]
+    return client
 
 
 class TestToolDiscovery:
@@ -155,7 +165,7 @@ class TestToolDiscovery:
         async with Client(mcp) as client:
             tools = await client.list_tools()
             tool = next(t for t in tools if t.name == "seedream_generate_image")
-            schema = tool.inputSchema
+            schema = tool.input_schema
             assert schema is not None
             assert "properties" in schema
             assert "input" in schema["properties"]
@@ -165,7 +175,7 @@ class TestToolDiscovery:
         async with Client(mcp) as client:
             tools = await client.list_tools()
             tool = next(t for t in tools if t.name == "seedream_generate_image")
-            schema = tool.outputSchema
+            schema = tool.output_schema
             assert schema is not None
             assert "artifacts" in schema["properties"]
             assert "model" in schema["properties"]
@@ -181,8 +191,8 @@ class TestSeedUnderstandE2E:
         monkeypatch.setattr(SeedUnderstandingService, "generate", provider_call)
 
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
-        async with Client(mcp) as client:
-            with pytest.raises(ToolError, match="requires task-augmented execution"):
+        async with _foreground_client(mcp) as client:
+            with pytest.raises(MCPError, match="requires the tasks extension"):
                 await client.call_tool(
                     "seed_understand",
                     {"input": {"prompt": "Analyze the video"}},
@@ -228,12 +238,11 @@ class TestSeedUnderstandE2E:
 
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
         async with Client(mcp) as client:
-            task = await client.call_tool(
+            task = await call_tool_task(
+                client,
                 "seed_understand",
                 {"input": {"prompt": "Analyze the video"}},
-                task=True,
             )
-            assert not task.returned_immediately
             await asyncio.wait_for(provider_started.wait(), timeout=5)
 
             release_provider.set()
@@ -250,8 +259,8 @@ class TestResourceTemplates:
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
         async with Client(mcp) as client:
             templates = await client.list_resource_templates()
-            artifact_tmpl = next(t for t in templates if "artifacts" in t.uriTemplate)
-            assert "artifact_id" in artifact_tmpl.uriTemplate
+            artifact_tmpl = next(t for t in templates if "artifacts" in t.uri_template)
+            assert "artifact_id" in artifact_tmpl.uri_template
 
     async def test_health_resource_registered(self, e2e_server: object) -> None:
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
@@ -335,7 +344,7 @@ class TestSeedreamGenerateImageE2E:
         item = content[0]
         assert hasattr(item, "blob")
         assert base64.b64decode(item.blob) == raw_bytes
-        assert item.mimeType == "image/png"
+        assert item.mime_type == "image/png"
 
     async def test_provider_error_returns_error_result(self, e2e_server: object) -> None:
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
@@ -616,13 +625,14 @@ class TestSeedanceLifecycleE2E:
                 "seedance_get_task",
                 {"input": {"task_id": task.id, "persist_output": False}},
             )
-            with pytest.raises(
-                ToolError, match="persist_output=true requires task-augmented execution"
-            ):
-                await client.call_tool(
-                    "seedance_get_task",
-                    {"input": {"task_id": task.id}},
-                )
+            async with _foreground_client(mcp) as foreground_client:
+                with pytest.raises(
+                    ToolError, match="persist_output=true requires task-augmented execution"
+                ):
+                    await foreground_client.call_tool(
+                        "seedance_get_task",
+                        {"input": {"task_id": task.id}},
+                    )
             background_fetched = await _call_background_tool(
                 client,
                 "seedance_get_task",

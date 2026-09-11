@@ -29,6 +29,7 @@ from modelark_mcp.tools._seedance_shared import (
     SeedanceVideoInput,
     strip_ratio_for_video_extension,
 )
+from modelark_mcp.tools._task_execution import context_log
 
 
 class SeedanceCreateTaskInput(BaseModel):
@@ -195,7 +196,7 @@ async def seedance_create_task(
     and a recommended polling interval. Requires MCP task-augmented execution
     for the provider submission itself.
     """
-    await ctx.info("Creating Seedance video generation task")
+    await context_log(ctx, "info", "Creating Seedance video generation task")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -284,7 +285,7 @@ async def seedance_create_task(
         ):
             task_id, request_id = await call_with_retry(lambda: service.create_task(request))
     except ProviderError as exc:
-        await ctx.error(f"Seedance task creation failed: {exc.message}")
+        await context_log(ctx, "error", f"Seedance task creation failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

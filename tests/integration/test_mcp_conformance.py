@@ -169,7 +169,7 @@ class TestToolDiscovery:
             assert tool.task_config.poll_interval == timedelta(seconds=2)
             mcp_tool = tool.to_mcp_tool()
             assert mcp_tool.execution is not None
-            assert mcp_tool.execution.taskSupport == "required"
+            assert mcp_tool.execution.task_support == "required"
 
     async def test_completed_media_retrieval_tools_support_optional_background_execution(
         self, configured_server: None
@@ -193,7 +193,7 @@ class TestToolDiscovery:
             assert tool.task_config.poll_interval == timedelta(seconds=2)
             mcp_tool = tool.to_mcp_tool()
             assert mcp_tool.execution is not None
-            assert mcp_tool.execution.taskSupport == "optional"
+            assert mcp_tool.execution.task_support == "optional"
 
     async def test_short_control_plane_tools_remain_foreground(
         self, configured_server: None
@@ -270,104 +270,104 @@ class TestToolAnnotations:
         tools = await server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "seed_audio_generate")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.idempotentHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.idempotent_hint is False
+        assert tool.annotations.open_world_hint is True
 
     async def test_seedream_annotations(self, configured_server: None) -> None:
         server = configured_server
         tools = await server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "seedream_generate_image")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.open_world_hint is True
 
     async def test_seedance_create_annotations(self, configured_server: None) -> None:
         server = configured_server
         tools = await server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "seedance_create_task")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.open_world_hint is True
 
     async def test_seedance_get_readonly(self, configured_server: None) -> None:
         server = configured_server
         tools = await server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "seedance_get_task")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.idempotentHint is True
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.idempotent_hint is True
 
     async def test_seedance_list_readonly(self, configured_server: None) -> None:
         server = configured_server
         tools = await server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "seedance_list_tasks")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.idempotentHint is True
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.idempotent_hint is True
 
     async def test_seedance_cancel_destructive(self, configured_server: None) -> None:
         server = configured_server
         tools = await server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "seedance_cancel_or_delete_task")
         assert tool.annotations is not None
-        assert tool.annotations.destructiveHint is True
-        assert tool.annotations.readOnlyHint is False
+        assert tool.annotations.destructive_hint is True
+        assert tool.annotations.read_only_hint is False
 
     async def test_vod_enhance_annotations(self, configured_server: None) -> None:
         tools = await configured_server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "vod_enhance_video")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.idempotentHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.idempotent_hint is False
+        assert tool.annotations.open_world_hint is True
 
     async def test_vod_transcode_submit_annotations(self, configured_server: None) -> None:
         tools = await configured_server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "vod_transcode_video")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.idempotentHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.idempotent_hint is False
+        assert tool.annotations.open_world_hint is True
 
     async def test_vod_get_enhancement_annotations(self, configured_server: None) -> None:
         tools = await configured_server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "vod_get_enhancement_task")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.idempotentHint is True
-        assert tool.annotations.openWorldHint is False
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.idempotent_hint is True
+        assert tool.annotations.open_world_hint is False
 
     async def test_vod_get_transcode_annotations(self, configured_server: None) -> None:
         tools = await configured_server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "vod_get_transcode_task")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.idempotentHint is True
-        assert tool.annotations.openWorldHint is False
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.idempotent_hint is True
+        assert tool.annotations.open_world_hint is False
 
     async def test_vod_separate_audio_annotations(self, configured_server: None) -> None:
         tools = await configured_server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "vod_separate_audio")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.idempotentHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.idempotent_hint is False
+        assert tool.annotations.open_world_hint is True
 
     async def test_vod_get_audio_separation_annotations(self, configured_server: None) -> None:
         tools = await configured_server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "vod_get_audio_separation")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.idempotentHint is True
-        assert tool.annotations.openWorldHint is False
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.idempotent_hint is True
+        assert tool.annotations.open_world_hint is False
 
     @pytest.mark.parametrize("tool_name", ["vod_add_subtitles", "vod_remove_subtitles"])
     async def test_vod_subtitle_submit_annotations(
@@ -376,10 +376,10 @@ class TestToolAnnotations:
         tools = await configured_server.mcp.list_tools()
         tool = next(item for item in tools if item.name == tool_name)
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.idempotentHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.idempotent_hint is False
+        assert tool.annotations.open_world_hint is True
 
     @pytest.mark.parametrize(
         "tool_name",
@@ -391,10 +391,10 @@ class TestToolAnnotations:
         tools = await configured_server.mcp.list_tools()
         tool = next(item for item in tools if item.name == tool_name)
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.idempotentHint is True
-        assert tool.annotations.openWorldHint is False
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.idempotent_hint is True
+        assert tool.annotations.open_world_hint is False
 
 
 class TestInputSchemas:
@@ -628,25 +628,25 @@ class TestVariationToolAnnotations:
         tools = await server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "seedream_generate_image_variations")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.open_world_hint is True
 
     async def test_seed_audio_variations_annotations(self, configured_server: None) -> None:
         server = configured_server
         tools = await server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "seed_audio_generate_variations")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.open_world_hint is True
 
     async def test_seedance_variations_annotations(self, configured_server: None) -> None:
         server = configured_server
         tools = await server.mcp.list_tools()
         tool = next(t for t in tools if t.name == "seedance_create_task_variations")
         assert tool.annotations is not None
-        assert tool.annotations.readOnlyHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.open_world_hint is True
 
 
 class TestVariationInputSchemas:

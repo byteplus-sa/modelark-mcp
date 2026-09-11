@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import TYPE_CHECKING, cast
 
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
-from mcp.types import CreateTaskResult
+from mcp_types import CreateTaskResult
 from prometheus_client import Counter, Histogram
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ class MetricsMiddleware(Middleware):
             TOOL_REQUESTS.labels(tool=tool_name, status="exception").inc()
             raise
         else:
-            if isinstance(result, CreateTaskResult):
+            if isinstance(result, CreateTaskResult) or not hasattr(result, "is_error"):
                 status = "accepted"
             else:
                 status = "error" if result.is_error else "success"

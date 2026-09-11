@@ -396,7 +396,7 @@ modelark-mcp/
 ## Tech Stack
 
 - [Python 3.12+](https://www.python.org/) on [uv](https://docs.astral.sh/uv/)
-- [FastMCP v3](https://gofastmcp.com/) — MCP server framework
+- [FastMCP v4](https://gofastmcp.com/) — MCP server framework
 - [httpx](https://www.python-httpx.org/) — async HTTP client
 - [Pydantic v2](https://docs.pydantic.dev/) — typed models and validation
 - [pydantic-settings](https://pydantic.dev/docs/validation/latest/concepts/pydantic_settings/) — environment configuration
