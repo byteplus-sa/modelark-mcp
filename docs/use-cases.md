@@ -176,8 +176,9 @@ Create an async video generation task.
 }
 ```
 
-The create call returns an MCP task ID. Poll `tasks/result` to obtain the
-provider task ID, then pass that provider ID to `seedance_get_task`.
+The create call returns an MCP task ID. Poll `tasks/get` until terminal, read
+the provider task ID from its result, then pass that provider ID to
+`seedance_get_task`.
 
 ## 10. Polling for Video Completion
 
@@ -250,9 +251,9 @@ Create multiple video tasks with different prompts.
 }
 ```
 
-The variations call returns an MCP task ID. Poll `tasks/result` to obtain the
-per-variation provider task IDs, then pass each provider ID to
-`seedance_get_task`.
+The variations call returns an MCP task ID. Poll `tasks/get` until terminal,
+read the per-variation provider task IDs from its result, then pass each
+provider ID to `seedance_get_task`.
 
 ## 13. List Recent Video Tasks
 
@@ -298,8 +299,8 @@ Delete (terminal):
 
 Generate a reference image, then use it as input for video generation.
 
-1. Generate an image as an MCP background task, then poll `tasks/get` and
-   retrieve its result through `tasks/result`:
+1. Generate an image as an MCP background task, then poll `tasks/get` until
+   terminal and read its result:
 
 ```
 seedream_generate_image({
@@ -311,8 +312,8 @@ seedream_generate_image({
 ```
 
 2. Use the generated image (as base64) to create a video task with MCP task
-   metadata. Poll the returned MCP task and retrieve its result to obtain the
-   provider task ID:
+   metadata. Poll the returned MCP task with `tasks/get` until terminal and
+   read its provider task ID from the result:
 
 ```
 seedance_create_task({
@@ -331,7 +332,7 @@ seedance_create_task({
 3. Poll for video completion in the foreground:
 
 ```
-seedance_get_task({"task_id": "<provider task ID from tasks/result>", "persist_output": false})
+seedance_get_task({"task_id": "<provider task ID from terminal tasks/get>", "persist_output": false})
 ```
 
 ## 16. Batch Storyboard with Seedream

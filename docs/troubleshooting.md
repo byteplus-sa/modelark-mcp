@@ -100,8 +100,8 @@ operations so the original foreground request does not stay open.
 
 - Invoke `seedance_create_task`, `seedream_generate_image`, and
   `seed_audio_generate` with MCP task metadata. Retain the returned MCP task
-  ID, poll `tasks/get` at the advertised interval, then retrieve the typed
-  result through `tasks/result`.
+  ID, poll `tasks/get` at the advertised interval until terminal; that response
+  contains the typed result.
 - For long video work, the result of the MCP task contains the provider task
   ID. Poll `seedance_get_task` in the foreground with `persist_output=false`;
   use its optional task augmentation with `persist_output=true` when the

@@ -3,8 +3,8 @@
 Resolves audio to raw bytes (URL → SSRF-safe download, Base64 → decode, file →
 read), submits to Seed Speech ASR via HTTP, and polls until complete. Required
 MCP task augmentation returns an MCP task ID immediately; clients obtain the
-``TranscriptionResult`` through ``tasks/result``. No separate provider task
-tool or TOS upload is required — the HTTP submit + poll is contained within
+``TranscriptionResult`` from the terminal ``tasks/get`` response. No separate
+provider task tool or TOS upload is required — the HTTP submit + poll is contained within
 the MCP task.
 """
 

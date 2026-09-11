@@ -189,7 +189,7 @@ class VariationResult(BaseModel):
         None,
         description=(
             "Provider task ID for Seedance polling, obtained from the enclosing "
-            "MCP task's tasks/result output."
+            "MCP task's terminal tasks/get result."
         ),
     )
     error: VariationError | None = Field(None, description="Error if this variation failed.")

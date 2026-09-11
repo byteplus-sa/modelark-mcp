@@ -26,7 +26,7 @@ behind one server:
   Use for OCR, scene analysis, content review, and as a visual reasoning
   sub-agent.
 - **Speech-to-Text** — required-MCP-task audio transcription via Seed Speech
-  ASR; retrieve the completed transcript through `tasks/result`.
+  ASR; retrieve the completed transcript from the terminal `tasks/get` response.
 - **VOD AI MediaKit** — asynchronous video enhancement using the exact
   common/professional/4K/high/24-fps profile with task polling and download,
   asynchronous video transcoding
@@ -157,8 +157,8 @@ advertise a two-second polling interval:
 - `vod_add_subtitles`
 - `vod_remove_subtitles`
 
-Call them with MCP task metadata, retain the returned MCP task ID, poll
-`tasks/get`, and retrieve the typed result through `tasks/result`. Foreground
+Call them with MCP task metadata, retain the returned MCP task ID, and poll
+`tasks/get` until terminal; that response contains the typed result. Foreground
 calls are rejected before the provider is contacted. For Seedance, Seed 3D,
 and MediaKit create/submit tools, the MCP task covers provider submission: the
 result contains the provider task ID to poll with the corresponding get tool.
@@ -251,7 +251,7 @@ and `vod:read`.
 Enhance a public HTTPS video using the exact currently supported profile. The
 operation is asynchronous, mutating, non-idempotent, and open-world. Do
 not retry it automatically: a timeout may be ambiguous after provider work has
-started. Poll the MCP task ID through `tasks/result`, then pass its provider
+started. Poll the MCP task ID with `tasks/get` until terminal, then pass its provider
 `task_id` to `vod_get_enhancement_task`.
 
 | Parameter | Type | Required | Description |
@@ -267,7 +267,7 @@ started. Poll the MCP task ID through `tasks/result`, then pass its provider
 | `persist` | boolean | No | Best-effort durable artifact copy; default `true` |
 
 The verified response is `status="accepted"` inside the MCP task result. Use
-the provider `task_id` from `tasks/result` and poll that exact ID with
+the provider `task_id` from the terminal `tasks/get` result and poll that exact ID with
 `vod_get_enhancement_task`; do not substitute the transcode or
 audio-separation poll tools for enhancement results.
 If a completed response supplies `source_url`, retain it even when the best-effort
@@ -278,7 +278,7 @@ convenience-endpoint pricing and billing-unit mapping are confirmed.
 #### `vod_get_enhancement_task`
 
 Read-only poll of an enhancement task (`vod:read`). Requires the provider
-`task_id` from the `tasks/result` output of `vod_enhance_video`. Maps provider `running`→`processing`,
+`task_id` from the terminal `tasks/get` result of `vod_enhance_video`. Maps provider `running`→`processing`,
 `completed`→`succeeded`, and `failed`→`failed`, while requiring
 `task_type="enhance-video"`. On success, returns the 24-hour `source_url`,
 duration, resolution, frame rate, enhancement tier, and normalized timestamps.
@@ -311,13 +311,13 @@ default 2000); `fps_mode` (`vfr`/`cfr`, default `vfr`); `fps` ([1,240], unset ke
 source rate); `is_hdr_to_sdr` (default `true`).
 
 Returns `status="accepted"` plus `task_id` and a heuristic
-`recommended_poll_after_ms` through `tasks/result`; pass that provider
+`recommended_poll_after_ms` from the terminal `tasks/get` result; pass that provider
 `task_id` to `vod_get_transcode_task`.
 
 #### `vod_get_transcode_task`
 
 Read-only poll of a transcode task (`vod:read`). Requires the provider `task_id`
-from the `tasks/result` output of `vod_transcode_video`. Maps provider `running`→`processing`,
+from the terminal `tasks/get` result of `vod_transcode_video`. Maps provider `running`→`processing`,
 `completed`→`succeeded`, `failed`→`failed` (the provider documents no
 queued/expired/cancelled statuses). On success, returns `source_url` (24-hour
 lifetime) plus optional `duration_seconds`/`resolution`/`video_codec` and
@@ -335,7 +335,7 @@ takes priority if both are present. Inline cues require nonblank
 `subtitle_text`, a nonnegative `start_time`, and a later `end_time`. Optional
 position, font size, RGBA color, and font identifier fields control styling.
 Submit with `vod:subtitle:add`, retrieve the provider `task_id` through
-`tasks/result`, then poll with `vod:read`.
+`tasks/get`, then poll with `vod:read`.
 The poller requires `task_type="add-subtitle-to-video"` and can best-effort
 persist the completed MP4 when `persist_output=true`.
 
@@ -345,7 +345,7 @@ Use precision erasure on a public HTTPS video. The default `subtitle` mode
 targets dialogue subtitles; `text` mode is broader and may erase titles,
 labels, or watermarks. Optional normalized rectangles, selected/skipped time
 segments, and OCR subtitle thresholds constrain processing. Submit with
-`vod:subtitle:remove`, retrieve the provider `task_id` through `tasks/result`,
+`vod:subtitle:remove`, retrieve the provider `task_id` from the terminal `tasks/get` result,
 then poll with `vod:read`. The
 poller requires `task_type="erase-video-subtitle-pro"` and shares the subtitle
 addition persistence contract.
@@ -379,7 +379,7 @@ The source is a public HTTPS URL (audio or video), exactly one of the two.
 | `output_format` | `"aac"` \| `"mp3"` \| `"wav"` \| `"m4a"` \| `"flac"` | No | Default `aac` |
 
 Returns `status="accepted"` plus `task_id`, `request_id`, and
-`provider_log_id` through `tasks/result`. Poll the provider `task_id` with
+`provider_log_id` from the terminal `tasks/get` result. Poll the provider `task_id` with
 `vod_get_audio_separation`.
 
 **Source URL liveness.** The provider downloads `audio_url`/`video_url`
@@ -393,7 +393,7 @@ a stable public URL.
 #### `vod_get_audio_separation`
 
 Read-only poll of a separation task (`vod:read`). Requires the provider
-`task_id` from the `tasks/result` output of `vod_separate_audio`. Maps provider `running`→`processing`,
+`task_id` from the terminal `tasks/get` result of `vod_separate_audio`. Maps provider `running`→`processing`,
 `completed`→`succeeded`, `failed`→`failed`. On success, `voice`, `background`,
 `music`, and `sfx` each carry the track's expiring `source_url` (24-hour
 lifetime) and, with `persist_output=true` (default), a durable `artifact`
@@ -402,7 +402,7 @@ provider success. On failure, `error` carries the safe provider detail.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of `vod_separate_audio` |
+| `task_id` | string | Yes | Provider task ID from the terminal `tasks/get` result of `vod_separate_audio` |
 | `persist_output` | boolean | No | Best-effort durable copy on first successful poll; default `true` (requires task-augmented execution) |
 
 **Latency and transient failures.** A completed separation typically takes
@@ -783,7 +783,7 @@ separate task.
 
 Returns `SeedanceVariationsOutput` with per-variation provider task IDs and
 `recommended_poll_after_ms` values. The variation result is returned by the
-enclosing MCP task; poll that task through `tasks/result` before using each
+enclosing MCP task; poll that task with `tasks/get` until terminal before using each
 provider task ID with `seedance_get_task`.
 
 #### `seedance_get_task`
@@ -794,7 +794,7 @@ store. Results are cached for 24 hours.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | `str` | Yes | Provider task ID from the create task's `tasks/result` output |
+| `task_id` | `str` | Yes | Provider task ID from the create task's terminal `tasks/get` result |
 | `persist_output` | `bool` | Yes (default `true`) | Persist to artifact store; `true` requires task-augmented retrieval |
 
 Returns `SeedanceTaskOutput` with `task_id`, `model`, `created_at`,
@@ -1035,7 +1035,7 @@ file URL (zip package of the 3D file) into durable artifact storage so the
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | `str` | Yes | Provider task ID from the `tasks/result` output of the create tool |
+| `task_id` | `str` | Yes | Provider task ID from the terminal `tasks/get` result of the create tool |
 | `persist_output` | `bool` | No (default `true`) | Persist the 3D file to artifact store on first success; requires task-augmented execution |
 
 Returns `Seed3DTaskOutput` with `task_id`, `model`, `created_at`, `updated_at`,
@@ -1207,7 +1207,7 @@ Requires `BYTEPLUS_SEED_SPEECH_API_KEY`. Auth scope: `seed:asr:transcribe`.
 
 Transcribe audio to text via Seed Speech ASR. The tool requires MCP task
 augmentation, internally submits the audio to the provider, polls until
-complete, and returns the full result through `tasks/result`. The provider
+complete, and returns the full result in the terminal `tasks/get` response. The provider
 lifecycle does not expose a separate task ID, object-storage upload, or second
 domain tool.
 
@@ -1444,7 +1444,7 @@ default model for that product is used.
 1. Call a Seedream or Seed Audio generation tool as an MCP background task with
    `persist=true` (default).
 2. Poll the MCP task at the advertised interval and retrieve its result with
-   `tasks/result`.
+   terminal `tasks/get` response.
 3. The tool returns an `ArtifactRef` with `uri` (e.g.
    `seed-media://artifacts/abc123`).
 4. Use the artifact URI as a stable reference to the media. The artifact
@@ -1514,7 +1514,7 @@ default model for that product is used.
 
 Call `speech_to_text` as an MCP background task with an audio URL, Base64, or
 local file path (stdio only). Poll the MCP task and retrieve the complete
-`TranscriptionResult` through `tasks/result`; no separate provider task tool or
+`TranscriptionResult` from the terminal `tasks/get` response; no separate provider task tool or
 object-storage upload is required.
 
 Use `TranscriptionResult.text` for the full transcript, or `utterances` /
@@ -1657,7 +1657,7 @@ Set to `0` (default) for record-only mode with no enforcement.
    wastes quota and can hit rate limits.
 
 3. **Make polling resumable.** Save the MCP task ID and the provider task ID
-   from `tasks/result` with request metadata before the first poll. A process
+   from the terminal `tasks/get` result with request metadata before the first poll. A process
    timeout must continue the existing task, not create a duplicate.
 
 4. **Use variation tools for choice.** When the user needs options (e.g., "show
@@ -1705,7 +1705,7 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 14. **`speech_to_text` requires background execution.** Its internal provider
     polling can run until the configured poll cap. Retain the MCP task ID and
-    retrieve the completed transcription through `tasks/result`.
+    retrieve the completed transcription from the terminal `tasks/get` response.
 
 15. **Use `seed_understand` for multimodal reasoning.** It can analyze images
     (OCR, scene description), videos (content analysis, UI review), and
@@ -1727,13 +1727,13 @@ Set to `0` (default) for record-only mode with no enforcement.
     timeout, and do not present `estimated_cost_usd` as available.
 
 18. **Enhancement is submit-then-poll.** Call `vod_enhance_video` as an MCP
-    background task, retrieve its provider `task_id` through `tasks/result`, then poll with
+    background task, retrieve its provider `task_id` from the terminal `tasks/get` result, then poll with
     `vod_get_enhancement_task` until the status is `succeeded` or `failed`.
     Persist the result before its 24-hour
     source URL expires.
 
 19. **Transcode is submit-then-poll.** Call `vod_transcode_video` as an MCP
-    background task, retrieve its provider `task_id` through `tasks/result`, then poll with
+    background task, retrieve its provider `task_id` from the terminal `tasks/get` result, then poll with
     `vod_get_transcode_task` until the status is `succeeded` or `failed`. The
     default profile is portrait-to-720x720
     letterbox; set `video.codec`, `scale_*`, `bitrate_*`, `fps`, and
@@ -1742,7 +1742,7 @@ Set to `0` (default) for record-only mode with no enforcement.
 
 20. **Subtitle operations are submit-then-poll.** Use `vod_add_subtitles` or
     `vod_remove_subtitles` as an MCP background task, retrieve its provider
-    `task_id` through `tasks/result`, then poll with the matching task tool.
+    `task_id` from the terminal `tasks/get` result, then poll with the matching task tool.
     Prefer `subtitle` removal mode unless the
     broader visual effect of `text` mode is intentional. Reuse `client_token`
     when reconciling an ambiguous submission.

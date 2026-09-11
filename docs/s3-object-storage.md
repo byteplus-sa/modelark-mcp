@@ -34,7 +34,7 @@ flowchart LR
     TOSGW --> TOS["Private TOS bucket"]
     S3GW -.->|"presigned URL"| BytePlus["BytePlus APIs"]
     Tool -->|"typed result"| Task
-    Task -->|"tasks/result: URL"| Client
+    Task -->|"tasks/get: URL"| Client
     Client -->|"passes URL to task-augmented Seedance etc."| BytePlus
 ```
 
@@ -69,8 +69,8 @@ sequenceDiagram
     G-->>T: presigned HTTPS GET URL
     T->>G: close()
     T-->>C: task status completed
-    C->>T: tasks/result
-    T-->>C: { url, expires_at, object_key, bytes }
+    C->>T: tasks/get
+    T-->>C: terminal result { url, expires_at, object_key, bytes }
 ```
 
 ### Object key generation
@@ -132,8 +132,8 @@ sequenceDiagram
     U->>G: presign_get(key)
     G-->>U: presigned URL (T=0, valid 30min)
     U-->>C: task status completed
-    C->>U: tasks/result
-    U-->>C: { url, object_key, ... }
+    C->>U: tasks/get
+    U-->>C: terminal result { url, object_key, ... }
 
     Note over C,S3: ...later, URL expires or is about to...
 

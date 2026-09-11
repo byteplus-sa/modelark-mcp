@@ -3,8 +3,8 @@
 The server supports two mechanisms for producing multiple outputs from a
 single task-augmented MCP request: **native provider batch** (one API call,
 many outputs) and **client-side parallel variation** (many independent API
-calls with bounded concurrency). The client receives an MCP task ID, polls
-`tasks/get`, and obtains the typed output through `tasks/result`.
+calls with bounded concurrency). The client receives an MCP task ID and polls
+`tasks/get` until terminal; that response contains the typed output.
 
 ## Native provider batch
 
@@ -21,7 +21,8 @@ API and is only supported by **Lite** and **4.x** model families.
    `sequential_image_generation: "auto"` with
    `sequential_image_generation_options: {"max_images": N}`.
 4. The provider returns all N images in a single response. Each image is
-   persisted as a separate `ArtifactRef` and returned through `tasks/result`.
+   persisted as a separate `ArtifactRef` and returned in the terminal
+   `tasks/get` response.
 
 This is a **single `POST /images/generations` call** — one request, one
 response, multiple outputs. It is the most efficient path and should be

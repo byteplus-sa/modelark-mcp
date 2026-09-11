@@ -59,8 +59,9 @@ The following tools require MCP task-augmented execution and advertise
 - `vod_remove_subtitles`
 
 A client calls these tools with task metadata, receives an MCP task ID without
-holding the original tool call open, polls `tasks/get`, and obtains the final
-tool output through `tasks/result`. A foreground call is rejected before any
+holding the original tool call open, and polls `tasks/get` until it reaches a
+terminal status. That terminal response contains the final tool output. A
+foreground call is rejected before any
 provider request is made. For Seedance, Seed 3D, and MediaKit create/submit
 tools, the MCP task covers the provider submission; its result contains the
 provider task ID used by the corresponding get tool.
@@ -148,7 +149,7 @@ and uses the `vod:read` JWT scope.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of `vod_enhance_video` |
+| `task_id` | string | Yes | Provider task ID from the terminal `tasks/get` result of `vod_enhance_video` |
 | `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true; task-augmented execution required when true) |
 
 ### Output and execution limits
@@ -232,7 +233,7 @@ tool is registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is set and uses the
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of `vod_transcode_video` |
+| `task_id` | string | Yes | Provider task ID from the terminal `tasks/get` result of `vod_transcode_video` |
 | `persist_output` | boolean | No | Persist the completed output on first successful poll (default: true; task-augmented execution required when true) |
 
 ### Output and execution limits
@@ -255,8 +256,8 @@ Burn subtitles into a public HTTPS video with MediaKit. Supply either
 `subtitle_url` for an SRT, VTT, or ASS file or a non-empty `subtitles` list of
 `subtitle_text`, `start_time`, and `end_time` cues. If both are supplied, the
 subtitle file takes priority. The tool uses `vod:subtitle:add` in JWT mode and
-returns an MCP task ID; retrieve its result through `tasks/result` and pass the
-returned provider task ID to `vod_get_subtitle_addition_task`.
+returns an MCP task ID; poll `tasks/get` until terminal and pass the provider
+task ID from that result to `vod_get_subtitle_addition_task`.
 
 Style options are `subtitle_pos_preset` (`bottom_center`, `top_center`,
 `center`, `lower_third`), positive `subtitle_font_size`, RGBA
@@ -270,7 +271,7 @@ and is omitted by default.
 
 ## vod_get_subtitle_addition_task
 
-Poll the provider task ID returned by the `tasks/result` output of
+Poll the provider task ID returned in the terminal `tasks/get` result of
 `vod_add_subtitles`. The tool uses `vod:read`, maps provider lifecycle states to
 `processing`, `succeeded`, or `failed`, and can best-effort persist the MP4
 output when `persist_output=true` (default). A succeeded response always
@@ -291,15 +292,15 @@ include up to 20 normalized erasure rectangles, selected/skipped time segments,
 subtitle OCR thresholds, callbacks, a queue ID, and a `client_token`. The
 legacy `model_version` (`v4`/`v5`) and `project` extensions are omitted unless
 explicitly supplied. The tool uses `vod:subtitle:remove` and returns an MCP task
-ID; retrieve its result through `tasks/result` and pass the provider task ID to
-`vod_get_subtitle_removal_task`.
+ID; poll `tasks/get` until terminal and pass the provider task ID from that
+result to `vod_get_subtitle_removal_task`.
 
 **Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`
 
 ## vod_get_subtitle_removal_task
 
-Poll the provider task ID returned by the `tasks/result` output of
+Poll the provider task ID returned in the terminal `tasks/get` result of
 `vod_remove_subtitles`. Its normalized lifecycle, optional durable MP4
 persistence, source-URL preservation, and failure behavior match
 `vod_get_subtitle_addition_task`. The tool uses `vod:read`; persistence requires
@@ -335,8 +336,8 @@ and an `output_format`.
 
 Returns `VodSeparateAudioOutput` with `provider` `byteplus-vod-mediakit`,
 `status` `accepted`, the provider `request_id` and `provider_log_id`, an MCP
-task ID, and a heuristic `recommended_poll_after_ms`. Retrieve the task result
-through `tasks/result`, then pass its provider task ID to
+task ID, and a heuristic `recommended_poll_after_ms`. Poll `tasks/get` until
+terminal, then pass the provider task ID from its result to
 `vod_get_audio_separation`. The POST is non-idempotent and is never retried
 automatically (timeout/5xx means ambiguous completion).
 
@@ -353,7 +354,7 @@ Poll a BytePlus VOD AI MediaKit separate-voice task (`GET
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of `vod_separate_audio` |
+| `task_id` | string | Yes | Provider task ID from the terminal `tasks/get` result of `vod_separate_audio` |
 | `persist_output` | boolean | No | Copy completed tracks into durable artifact storage on first successful poll (default `true`; task-augmented execution required when true) |
 
 ### Output and execution limits
@@ -373,8 +374,8 @@ errors (e.g. 429).
 
 Generate full-scene audio through Seed Speech.
 
-**Execution:** Required MCP background task. Retrieve the completed generation
-through `tasks/result`.
+**Execution:** Required MCP background task. Poll `tasks/get` until terminal;
+the response contains the completed generation.
 
 **Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`
@@ -558,7 +559,7 @@ Retrieve the status and output of a Seedance task.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Provider task ID from the `tasks/result` output of a Seedance create tool |
+| `task_id` | string | Yes | Provider task ID from the terminal `tasks/get` result of a Seedance create tool |
 | `persist_output` | boolean | No | Persist video/last-frame on success (default: true; task-augmented execution required when true) |
 
 ### Output
@@ -692,9 +693,9 @@ contains the per-variation provider task IDs for async polling via
 ### seedance_2_5_create_task_variations
 
 Create N independent Seedance 2.5 video tasks in parallel (each a separate
-provider task). Poll the MCP task through `tasks/result`, then pass each
-returned provider task ID to `seedance_get_task`; partial failures are captured
-per variation.
+provider task). Poll the MCP task with `tasks/get` until terminal, then pass
+each provider task ID from its result to `seedance_get_task`; partial failures
+are captured per variation.
 
 **Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`
@@ -778,8 +779,9 @@ internally until transcription is complete.
 
 **Execution:** Required MCP background task. The MCP task ID protects the
 provider polling window, which can run for up to the configured 600-second
-default. Retrieve the complete `TranscriptionResult` through `tasks/result`;
-there is no separate provider task tool or object-storage upload requirement.
+default. Poll `tasks/get` until terminal; its response contains the complete
+`TranscriptionResult`. There is no separate provider task tool or object-storage
+upload requirement.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=True`, `openWorldHint=False`
@@ -938,8 +940,8 @@ Create an asynchronous 3D generation task. Both tools are gated by
 `BYTEPLUS_MODELARK_3D_ENABLED=true` (disabled by default) and reuse the
 ModelArk API key.
 
-**Execution:** Required MCP background task for provider submission. Retrieve
-the provider task ID through `tasks/result`.
+**Execution:** Required MCP background task for provider submission. Poll
+`tasks/get` until terminal and read the provider task ID from its result.
 
 - `hyper3d_create_task` (Hyper3d-Gen2): text-to-3D and/or image-to-3D
   (1-5 images). Exposes `seed`, `callback_url`, and model text-command

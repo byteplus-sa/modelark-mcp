@@ -123,14 +123,13 @@ sequenceDiagram
     S-->>C: MCP task ID (working)
     S->>W: enqueue long-running tool
     W->>A: generation, transcription, upload, submission, or persistence
-    loop recommended every 2 seconds
+    loop recommended every 2 seconds until terminal
         C->>S: tasks/get
-        S-->>C: working or terminal status
+        S-->>C: working status or terminal result
     end
     A-->>W: completion
     W->>S: store final tool result
-    C->>S: tasks/result (MCP task ID)
-    S-->>C: typed tool output
+    Note over C,S: terminal tasks/get response contains the typed tool output
     opt Provider submission result
         Note over S,C: typed output includes provider task ID
         C->>S: product get tool(provider task ID)

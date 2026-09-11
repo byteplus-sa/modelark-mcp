@@ -79,7 +79,8 @@ accepts as reference input:
 > video references as a **public HTTPS URL only** — there is no inline Base64
 > option. Call `media_upload` with MCP task metadata to upload Base64 or a
 > local file path (stdio only) to object storage (TOS or S3), then retrieve its
-> presigned HTTPS GET URL through `tasks/result` before passing it to the
+> presigned HTTPS GET URL through the terminal `tasks/get` result before passing
+> it to the
 > task-augmented `seedance_create_task`. Alternatively, host the video on
 > your own accessible HTTPS endpoint. The URL must resolve to
 > a public IP (private/loopback/link-local addresses are rejected by the SSRF
