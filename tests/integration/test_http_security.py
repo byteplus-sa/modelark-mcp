@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 import respx
-from fastmcp.server.auth import StaticTokenVerifier
+from fastmcp.server.auth import AccessToken, TokenVerifier
 from starlette.middleware import Middleware
 
 from modelark_mcp.config.env import Settings
@@ -38,8 +40,18 @@ def _jwt_settings(tmp_path: Path) -> Settings:
     )
 
 
-def _verifier() -> StaticTokenVerifier:
-    return StaticTokenVerifier(
+class ClaimsTokenVerifier(TokenVerifier):
+    def __init__(self, tokens: dict[str, dict[str, Any]]) -> None:
+        super().__init__()
+        self.tokens = tokens
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        data = self.tokens.get(token)
+        return AccessToken(token=token, **data) if data is not None else None
+
+
+def _verifier() -> ClaimsTokenVerifier:
+    return ClaimsTokenVerifier(
         tokens={
             "good-token": {
                 "client_id": "test-client",
@@ -253,7 +265,6 @@ async def test_vod_subtitle_scopes_reject_enhancement_only_token(
 async def test_vod_scope_allows_dispatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from modelark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
     from modelark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission
-    from modelark_mcp.security.auth_context import AuthContext
 
     async def enhance(
         _self: VodMediaKitEnhancementService, _request: object
@@ -267,10 +278,6 @@ async def test_vod_scope_allows_dispatch(tmp_path: Path, monkeypatch: pytest.Mon
 
     monkeypatch.setattr(VodMediaKitEnhancementService, "enhance", enhance)
     monkeypatch.setattr(VodMediaKitEnhancementService, "close", close)
-    monkeypatch.setattr(
-        "modelark_mcp.tools.vod_enhance_video.get_principal",
-        lambda _ctx: AuthContext(principal_id="video-user", tenant_id="tenant-a"),
-    )
     async with _http_client(tmp_path) as http_client:
         response = await http_client.post(
             "/mcp",
@@ -297,14 +304,47 @@ async def test_vod_scope_allows_dispatch(tmp_path: Path, monkeypatch: pytest.Mon
                             "extensions": {"io.modelcontextprotocol/tasks": {}}
                         },
                     },
-                    "task": {"ttl": 60000},
                 },
             },
         )
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["result"]["status"] == "working"
-    assert payload["result"]["taskId"]
+        assert response.status_code == 200, response.text
+        task_id = response.json()["result"]["taskId"]
+        async with asyncio.timeout(5):
+            while True:
+                polled = await http_client.post(
+                    "/mcp",
+                    headers={
+                        "Authorization": "Bearer vod-token",
+                        "Origin": "https://client.example.com",
+                        "Accept": "application/json, text/event-stream",
+                        "Mcp-Protocol-Version": "2026-07-28",
+                        "Mcp-Method": "tasks/get",
+                        "Mcp-Name": task_id,
+                    },
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 5,
+                        "method": "tasks/get",
+                        "params": {
+                            "taskId": task_id,
+                            "_meta": {
+                                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                                "io.modelcontextprotocol/clientCapabilities": {
+                                    "extensions": {"io.modelcontextprotocol/tasks": {}}
+                                },
+                            },
+                        },
+                    },
+                )
+                payload = polled.json()["result"]
+                if payload["status"] != "working":
+                    break
+                await asyncio.sleep(0.01)
+        assert payload["result"]["isError"] is False
+        assert (
+            payload["result"]["structuredContent"]["source_url"]
+            == "https://output.example.com/enhanced.mp4"
+        )
 
 
 async def test_oversized_body_is_rejected_before_mcp(tmp_path: Path) -> None:

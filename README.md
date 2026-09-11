@@ -48,8 +48,8 @@ Key features:
 - **Runtime controls** — shared provider/principal concurrency, daily budget
   reservations, safe retries, task ownership, readiness with optional provider
   health checks, per-IP HTTP rate limiting, metrics, and tracing
-- **1,096 offline tests** — unit, contract, integration, HTTP security, E2E, and
-  MCP conformance with 88% branch coverage
+- **1,132 offline tests** — unit, contract, integration, HTTP security, E2E, and
+  MCP conformance with 86% combined statement/branch coverage
 
 ## Supported Input Modalities
 
@@ -208,6 +208,15 @@ See [Configuration](docs/configuration.md) for the full environment
 variable reference.
 
 ## Using with MCP Clients
+
+**Client requirement: MCP `2026-07-28` plus the FastMCP tasks extension.**
+Generation tools require task-augmented calls; completed output is retrieved
+through `tasks/get`. Provider status polls use `persist_output=false`, and output
+persistence runs as another task. Tool discovery alone does not prove support.
+The locked FastMCP Python client 4.0.3 is tested in-process and over subprocess
+stdio. The named desktop/IDE client snippets below are connection templates;
+their task execution compatibility has not been verified. See the
+[compatibility requirements and working Python workflow](docs/integration-guide.md#required-client-support).
 
 The server runs as a `stdio` process. Configure it in your MCP client:
 

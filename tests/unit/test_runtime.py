@@ -857,3 +857,23 @@ class TestObjectStorageArtifactStore:
     ) -> None:
         store, _gateway = object_store
         assert await store.delete_expired(datetime.now(UTC)) == 0  # type: ignore[attr-defined]
+
+
+async def test_task_claim_is_atomic_and_survives_reopening(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    owner = AuthContext(principal_id="alice", tenant_id="tenant-a")
+    store = SQLiteTaskOwnershipStore(database)
+    try:
+        claims = await asyncio.gather(
+            *(store.claim("mcp-execution", "task-one", owner) for _ in range(8))
+        )
+        assert claims.count(True) == 1
+        assert await store.claim("mcp-execution", "task-two", owner)
+    finally:
+        await store.close()
+    reopened = SQLiteTaskOwnershipStore(database)
+    try:
+        assert not await reopened.claim("mcp-execution", "task-one", owner)
+        await reopened.require_owner("mcp-execution", "task-one", owner)
+    finally:
+        await reopened.close()

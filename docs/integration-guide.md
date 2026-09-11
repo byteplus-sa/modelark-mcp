@@ -20,6 +20,114 @@ Use `python -m modelark_mcp` in client configurations so transport security
 settings are applied consistently. The server module also injects `truststore`
 before provider clients are created.
 
+## Required Client Support
+
+**Generation requires the MCP `2026-07-28` protocol and the FastMCP tasks
+extension.** Tool discovery alone does not demonstrate task execution support.
+A client must submit task-augmented calls and retrieve terminal output through
+`tasks/get`; foreground calls to required-task tools are rejected before provider
+submission. Status-only polls use `persist_output=false`; clients that advertise
+tasks may automatically execute optional status tools as tasks too. Downloading
+and persisting completed media requires a background task.
+
+**Tested client:** the repository's locked FastMCP Python client **4.0.3**, with
+its tasks extension, using in-process and subprocess stdio transports. Legacy
+`Client(..., mode="legacy")` rejection is covered by protocol tests. These tests
+mock providers and do not make billable generation calls.
+
+**The Claude Desktop, Codex, Cursor, VS Code, and Inspector configuration examples
+are connection templates; task execution on those clients has not been verified.**
+Confirm protocol and extension support for your installed client version before
+starting a generation workflow. See the [official FastMCP task documentation](https://gofastmcp.com/servers/tasks).
+
+## Python Task Workflow
+
+Run this from the repository using `uv run python`, with credentials configured
+in `.env` and `SMOKE_REFERENCE_IMAGE_URL` pointing to an accessible reference
+image. **This example submits one billable video generation.** The provider ID
+is saved before polling; if polling fails, use that ID to resume retrieval rather
+than repeating submission. The MCP task ID identifies the worker operation,
+while the provider ID identifies the video generation.
+
+```python
+import asyncio
+import json
+import os
+import sys
+from pathlib import Path
+
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
+from fastmcp_tasks import call_tool_task
+
+
+async def main():
+    transport = StdioTransport(
+        command=sys.executable, args=["-m", "modelark_mcp"]
+    )
+    async with Client(transport) as client:
+        submission = await call_tool_task(
+            client,
+            "seedance_create_task",
+            {"input": {
+                "prompt": "A gentle camera move through the scene",
+                "images": [{
+                    "kind": "url",
+                    "url": os.environ["SMOKE_REFERENCE_IMAGE_URL"],
+                    "role": "reference_image",
+                }],
+                "duration": 5,
+                "resolution": "480p",
+            }},
+        )
+        print("MCP submission task:", submission.task_id)
+        created = await submission.result()
+        provider_id = created.structured_content["task_id"]
+        directory = Path(".artifacts")
+        directory.mkdir(exist_ok=True)
+        with (directory / "provider_tasks.jsonl").open("a") as stream:
+            stream.write(json.dumps({"task_id": provider_id}) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+
+        for _ in range(30):
+            status = await client.call_tool(
+                "seedance_get_task",
+                {"input": {"task_id": provider_id, "persist_output": False}},
+            )
+            state = status.structured_content["status"]
+            if state == "succeeded":
+                break
+            if state in {"failed", "cancelled", "expired"}:
+                raise RuntimeError(f"Provider task {provider_id}: {state}")
+            await asyncio.sleep(10)
+        else:
+            raise TimeoutError(f"Resume polling provider task {provider_id}")
+
+        persistence = await call_tool_task(
+            client,
+            "seedance_get_task",
+            {"input": {"task_id": provider_id, "persist_output": True}},
+        )
+        completed = await persistence.result()
+        print(completed.structured_content["video"])
+
+
+asyncio.run(main())
+```
+
+`task.result()` waits through `tasks/get` and returns the terminal tool result.
+In this single-process stdio example, FastMCP 4.0.3 automatically task-augments
+`client.call_tool()` for the optional status tool as well; `persist_output=false`
+still prevents downloads. The standalone smoke scripts use modern and public
+`mode="legacy"` clients connected to the same in-process server lifespan to
+exercise a genuinely foreground status call. Do not launch a second stdio server
+against the same SQLite state to obtain that behavior.
+A provider success can still have `video=null` when best-effort persistence
+fails; inspect the result before treating the artifact as delivered. The same
+submit/status/persistence sequence is tested offline by the smoke-workflow tests;
+`tests/e2e/test_stdio_tasks.py` separately verifies a real subprocess task result.
+
 ## Providing Credentials
 
 Two options:

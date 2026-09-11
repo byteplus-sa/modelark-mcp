@@ -134,6 +134,11 @@ explicitly enabled.
 
 ### Background Task Execution
 
+Task execution requires MCP `2026-07-28` and the
+`io.modelcontextprotocol/tasks` extension. FastMCP 4.0.3 is tested; a desktop
+client discovering tools does not by itself prove task execution support.
+
+
 The following long-running calls require MCP task-augmented execution and
 advertise a two-second polling interval:
 
@@ -169,6 +174,18 @@ polling; once a task succeeds, use task-augmented execution with
 `persist_output=true` so completed-media download and persistence cannot exhaust
 the client deadline. List, presign, artifact-read, and cancel/delete tools
 remain foreground operations.
+
+MCP task get/update/cancel calls enforce the same configured tenant and principal
+ownership as provider tasks. Required-task execution is claimed once in the
+runtime database: an interrupted task cannot silently replay paid work. Retain
+both MCP and provider IDs, and reconcile ambiguous provider outcomes before
+submitting again. The smoke scripts save provider IDs before polling.
+
+JWT-authenticated Redis tasks require `FASTMCP_TASKS_ENCRYPTION_KEY`; keep the
+runtime database, queue and encryption key together. Redis does not remove the
+single-replica limitation. Snapshot encryption protects stored auth context;
+backend access controls must also protect task arguments and results. See the
+repository deployment and security documentation for recovery constraints.
 
 ---
 

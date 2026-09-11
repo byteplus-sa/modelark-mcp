@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
+from functools import wraps
 from time import perf_counter
 from typing import TYPE_CHECKING, cast
 
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
-from mcp_types import CreateTaskResult
+from fastmcp_tasks.context import get_task_context
+from fastmcp_tasks.models import CreateTaskResult
 from prometheus_client import Counter, Histogram
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     import mcp.types as mt
     from fastmcp.tools import ToolResult
 
@@ -21,6 +27,11 @@ TOOL_REQUESTS = Counter(
 TOOL_DURATION = Histogram(
     "modelark_mcp_tool_duration_seconds",
     "MCP tool execution duration.",
+    ("tool",),
+)
+TOOL_ADMISSION_DURATION = Histogram(
+    "modelark_mcp_tool_admission_duration_seconds",
+    "MCP background task admission duration, excluding worker execution.",
     ("tool",),
 )
 PROVIDER_REQUESTS = Counter(
@@ -50,6 +61,35 @@ RETRY_ATTEMPTS = Counter(
 )
 
 
+def instrument_tool_execution[**Parameters, ReturnValue](
+    handler: Callable[Parameters, Awaitable[ReturnValue]], *, tool_name: str
+) -> Callable[Parameters, Awaitable[ReturnValue]]:
+    """Measure real task workers while preserving foreground middleware counts."""
+
+    @wraps(handler)
+    async def measured(*args: Parameters.args, **kwargs: Parameters.kwargs) -> ReturnValue:
+        if get_task_context() is None:
+            return await handler(*args, **kwargs)
+        started = perf_counter()
+        try:
+            result = await handler(*args, **kwargs)
+        except asyncio.CancelledError:
+            TOOL_REQUESTS.labels(tool=tool_name, status="cancelled").inc()
+            raise
+        except Exception:
+            TOOL_REQUESTS.labels(tool=tool_name, status="exception").inc()
+            raise
+        else:
+            status = "error" if getattr(result, "is_error", False) else "success"
+            TOOL_REQUESTS.labels(tool=tool_name, status=status).inc()
+            return result
+        finally:
+            TOOL_DURATION.labels(tool=tool_name).observe(perf_counter() - started)
+
+    measured.__dict__["__signature__"] = inspect.signature(handler, eval_str=True)
+    return measured
+
+
 class MetricsMiddleware(Middleware):
     """Measure MCP tool calls without tenant, model, URL, or request labels."""
 
@@ -60,17 +100,23 @@ class MetricsMiddleware(Middleware):
     ) -> ToolResult:
         tool_name = context.message.name
         started = perf_counter()
+        accepted = False
         try:
             result = cast("ToolResult | CreateTaskResult", await call_next(context))
+        except asyncio.CancelledError:
+            TOOL_REQUESTS.labels(tool=tool_name, status="cancelled").inc()
+            raise
         except Exception:
             TOOL_REQUESTS.labels(tool=tool_name, status="exception").inc()
             raise
         else:
-            if isinstance(result, CreateTaskResult) or not hasattr(result, "is_error"):
+            if isinstance(result, CreateTaskResult):
+                accepted = True
                 status = "accepted"
             else:
                 status = "error" if result.is_error else "success"
             TOOL_REQUESTS.labels(tool=tool_name, status=status).inc()
             return cast("ToolResult", result)
         finally:
-            TOOL_DURATION.labels(tool=tool_name).observe(perf_counter() - started)
+            duration = TOOL_ADMISSION_DURATION if accepted else TOOL_DURATION
+            duration.labels(tool=tool_name).observe(perf_counter() - started)

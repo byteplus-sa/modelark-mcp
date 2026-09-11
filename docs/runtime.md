@@ -10,6 +10,7 @@ per-task persistence single-flight, and the provider retry policy.
 All state lives in a single SQLite database at
 `<artifact_dir>/runtime.sqlite3` (default `artifact_dir` is `.artifacts`),
 shared by the ownership stores, budget ledger, and task-artifact cache. The
+ownership table also stores MCP task owners and atomic execution claims. The
 database is opened in WAL mode (`PRAGMA journal_mode=WAL`) with a
 `busy_timeout`; each store's
 synchronous `sqlite3.Connection` is guarded by a per-instance `asyncio.Lock`
@@ -317,3 +318,20 @@ Re-exports `DEFAULT_MAX_CONCURRENT = 5`.
 
 See [api-reference.md](api-reference.md) for `VariationResult` /
 `VariationSummary` / `VariationError` field tables.
+
+
+## MCP task execution claims
+
+`TaskOwnershipStore.claim(provider, task_id, owner) -> bool` uses an atomic
+`INSERT ... ON CONFLICT DO NOTHING`, returning true only for the first claim.
+The `mcp` namespace binds protocol tasks to their application owners; the
+`mcp-execution` namespace records the first entry into a required-task handler.
+Neither namespace changes provider task IDs or provider ownership checks.
+
+Execution claims are not released on failure or cancellation: provider work may
+already have been accepted. A restarted worker encountering an existing claim
+fails before entering the handler and asks for reconciliation. Foreground status
+checks and optional background persistence remain repeatable. Claims are stored
+in the same SQLite file, share its locking/transaction behavior, and follow the
+existing ownership retention policy. The queue, database and configured snapshot
+encryption key must stay together across restarts.

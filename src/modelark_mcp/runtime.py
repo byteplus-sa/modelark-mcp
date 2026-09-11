@@ -129,6 +129,8 @@ class ProviderLimiters:
 
 
 class TaskOwnershipStore(Protocol):
+    async def claim(self, provider: str, task_id: str, owner: AuthContext) -> bool: ...
+
     async def record(self, provider: str, task_id: str, owner: AuthContext) -> None: ...
 
     async def require_owner(self, provider: str, task_id: str, owner: AuthContext) -> None: ...
@@ -301,6 +303,23 @@ class SQLiteTaskOwnershipStore:
             self._connection.commit()
 
         await _run_locked(self._lock, _run)
+
+    async def claim(self, provider: str, task_id: str, owner: AuthContext) -> bool:
+        created_at = datetime.now(UTC).isoformat()
+
+        def _run() -> bool:
+            cursor = self._connection.execute(
+                """
+                INSERT INTO task_ownership(provider, task_id, principal_id, tenant_id, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(provider, task_id) DO NOTHING
+                """,
+                (provider, task_id, owner.principal_id, owner.tenant_id, created_at),
+            )
+            self._connection.commit()
+            return cursor.rowcount == 1
+
+        return await _run_locked(self._lock, _run)
 
     async def require_owner(self, provider: str, task_id: str, owner: AuthContext) -> None:
         def _run() -> tuple[str, str] | None:

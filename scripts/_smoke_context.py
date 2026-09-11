@@ -1,16 +1,23 @@
-"""Minimal FastMCP context adapter used by the live smoke-test scripts.
-
-The scripts execute outside pytest, so they must not depend on test-only modules.
-Tool handlers only require the small logging/progress surface implemented here.
-"""
+"""Shared MCP client and legacy context helpers for standalone smoke scripts."""
 
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp.tools import ToolResult
+from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+    from pathlib import Path
+
+    from fastmcp import Client
+
+    from modelark_mcp.config.env import Settings
+    from modelark_mcp.runtime import RuntimeServices
 
 
 @dataclass
@@ -48,3 +55,66 @@ def require_tool_success[T](result: T | ToolResult) -> T:
         details = result.structured_content or {"content": result.content}
         raise RuntimeError(f"Tool returned an error result: {json.dumps(details, default=str)}")
     return result
+
+
+@dataclass
+class SmokeClient:
+    """Run smoke workflows through the public MCP task protocol."""
+
+    client: Client
+    foreground_client: Client | None = None
+
+    async def call[T: BaseModel](
+        self, name: str, params: BaseModel, output_type: type[T], *, background: bool = True
+    ) -> T:
+        from fastmcp_tasks import call_tool_task
+
+        arguments = {"input": params.model_dump(mode="json")}
+        if background:
+            task = await call_tool_task(self.client, name, arguments)
+            print(f"  MCP task ID: {task.task_id}")
+            result = await task.result()
+        else:
+            client = self.foreground_client or self.client
+            result = await client.call_tool(name, arguments)
+        return output_type.model_validate(result.structured_content)
+
+    def save_provider_ids(self, directory: Path, task_ids: list[str]) -> None:
+        import os
+        from datetime import UTC, datetime
+
+        directory.mkdir(parents=True, exist_ok=True)
+        with (directory / "smoke_provider_tasks.jsonl").open("a") as stream:
+            stream.write(
+                json.dumps(
+                    {
+                        "created_at": datetime.now(UTC).isoformat(),
+                        "provider": "seedance",
+                        "task_ids": task_ids,
+                    }
+                )
+                + "\n"
+            )
+            stream.flush()
+            os.fsync(stream.fileno())
+
+
+@asynccontextmanager
+async def smoke_session(settings: Settings) -> AsyncIterator[tuple[SmokeClient, RuntimeServices]]:
+    """Own one real server lifespan and expose its artifact store to the scripts."""
+    from fastmcp import Client
+
+    from modelark_mcp.runtime import create_runtime_services
+    from modelark_mcp.server import create_server
+
+    runtime: RuntimeServices | None = None
+
+    async def runtime_factory(resolved_settings: Settings) -> RuntimeServices:
+        nonlocal runtime
+        runtime = await create_runtime_services(resolved_settings)
+        return runtime
+
+    server = create_server(settings, runtime_factory=runtime_factory)
+    async with Client(server) as client, Client(server, mode="legacy") as foreground_client:
+        assert runtime is not None
+        yield SmokeClient(client, foreground_client), runtime

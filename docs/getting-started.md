@@ -87,6 +87,14 @@ syntactically valid without making any billable provider calls.
 
 ## Using with MCP Clients
 
+**Use a client supporting MCP `2026-07-28` and the FastMCP tasks extension.**
+Generation tools require task-augmented calls, and `persist_output=true`
+retrieval must also run as a background task. Discovery alone is insufficient.
+The locked FastMCP Python client 4.0.3 is tested; the desktop and Inspector
+configurations below are connection templates with unverified task execution.
+See [Required Client Support and the Python workflow](integration-guide.md#required-client-support)
+before submitting generation.
+
 ### Claude Desktop
 
 Add the server to your `claude_desktop_config.json`:

@@ -113,12 +113,7 @@ async def _call_background_tool(
 
 
 def _foreground_client(mcp: FastMCP) -> Client:
-    client = Client(mcp)
-    client._auto_internal_extensions = False  # type: ignore[attr-defined]
-    client._session_kwargs.pop("extensions", None)  # type: ignore[attr-defined]
-    client._session_kwargs.pop("result_claims", None)  # type: ignore[attr-defined]
-    client._session_kwargs.update(client._build_extension_kwargs())  # type: ignore[attr-defined]
-    return client
+    return Client(mcp, mode="legacy")
 
 
 class TestToolDiscovery:
