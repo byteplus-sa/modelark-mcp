@@ -187,7 +187,8 @@ async def seedance_2_5_create_task(
     (30 images, 10 videos, 10 audio), and 480p/720p/1080p resolution.
     The task runs asynchronously on the provider — use
     ``seedance_get_task`` to poll for completion. Returns the task ID
-    and a recommended polling interval.
+    and a recommended polling interval. Requires MCP task-augmented execution
+    for the provider submission itself.
     """
     await ctx.info("Creating Seedance 2.5 video generation task")
     await ctx.report_progress(progress=10, total=100)

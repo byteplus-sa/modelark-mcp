@@ -1,8 +1,13 @@
 # Use Cases
 
-The ModelArk Seed MCP server exposes BytePlus multimodal generation through
-ten MCP tools (nine core plus an optional media upload helper). Here are
-common scenarios and how to achieve them.
+The ModelArk Seed MCP server exposes a conditional multimodal tool surface.
+Here are common scenarios and how to achieve them.
+
+The JSON blocks below show tool input payloads. Invoke generation, variation,
+transcription, upload, understanding, and provider-submission tools with MCP
+task augmentation. For Seedance, Seed 3D, and MediaKit retrieval, poll in
+foreground with `persist_output=false`, then use optional task augmentation
+with `persist_output=true` when downloading a completed output.
 
 ## 1. Text-to-Image Generation
 

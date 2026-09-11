@@ -2,7 +2,8 @@
 
 The handler validates media inputs, builds an OpenAI-compatible Chat Completions
 request with image/video content parts, and returns the model's text answer
-with optional chain-of-thought reasoning. Forces ``stream: false`` for MVP.
+with optional chain-of-thought reasoning. The server registers the handler as
+a required MCP background task and forces ``stream: false`` for the provider.
 """
 
 from __future__ import annotations
@@ -139,7 +140,8 @@ async def seed_understand(
     this for video understanding, image understanding, and as a multimodal
     reasoning sub-agent. For local media files, upload them first with
     media_upload to obtain an HTTPS URL; video Base64 is not supported by the
-    chat endpoint.
+    chat endpoint. This tool requires task-augmented execution so long video
+    analysis does not consume a foreground MCP request deadline.
     """
     await ctx.info("Starting Seed 2.1 multimodal understanding")
     await ctx.report_progress(progress=10, total=100)

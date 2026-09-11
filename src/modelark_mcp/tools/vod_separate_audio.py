@@ -91,7 +91,7 @@ async def vod_separate_audio(
     (plus music and sound-effects tracks for the Drama and Narrate scenes).
     Returns an accepted task ID for polling with vod_get_audio_separation. The
     mutation is never retried automatically because completion can be ambiguous
-    after a timeout.
+    after a timeout. Requires MCP task-augmented execution for submission.
     """
     runtime = get_runtime(ctx)
     settings = runtime.settings

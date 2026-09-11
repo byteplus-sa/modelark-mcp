@@ -241,7 +241,8 @@ async def vod_get_audio_separation(
 
     On the first successful poll with ``persist_output=True``, copies each
     expiring provider track URL into durable artifact storage. Subsequent calls
-    return the cached artifact references without re-downloading.
+    return the cached artifact references without re-downloading. Supports
+    optional MCP task-augmented execution for completed-output persistence.
     """
     await ctx.info(f"Retrieving VOD AI MediaKit audio separation task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)

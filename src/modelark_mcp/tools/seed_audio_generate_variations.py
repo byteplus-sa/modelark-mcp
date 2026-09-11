@@ -104,7 +104,8 @@ async def seed_audio_generate_variations(
     """Generate multiple audio variations in parallel through Seed Speech.
 
     Seed Audio does not support seeds, so variations rely on the stochastic
-    nature of the model. Partial failures are captured per variation.
+    nature of the model. Partial failures are captured per variation. Requires
+    MCP task-augmented execution for the parallel generations and persistence.
     """
     await ctx.info(f"Starting {input.variations} parallel Seed Audio generations")
     await ctx.report_progress(progress=10, total=100)

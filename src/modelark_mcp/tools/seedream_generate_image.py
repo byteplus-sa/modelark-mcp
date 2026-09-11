@@ -113,7 +113,8 @@ async def seedream_generate_image(
 
     Supports text-to-image and reference-based editing. The ``max_images``
     parameter enables batch generation for models that support it (Lite,
-    4.x). Pro models are limited to single-image generation.
+    4.x). Pro models are limited to single-image generation. Requires MCP
+    task-augmented execution so generation and persistence run in the background.
     """
     await ctx.info("Starting Seedream image generation")
     await ctx.report_progress(progress=10, total=100)

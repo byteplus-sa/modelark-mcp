@@ -137,7 +137,8 @@ async def vod_add_subtitles(
     Returns an asynchronous task ID for vod_get_subtitle_addition_task. When
     both subtitle_url and subtitles are supplied, MediaKit uses subtitle_url.
     The request is not automatically retried after ambiguous failures; supply
-    and reuse client_token when reconciling a timed-out submission.
+    and reuse client_token when reconciling a timed-out submission. Requires MCP
+    task-augmented execution for submission.
     """
     runtime = get_runtime(ctx)
     if not runtime.settings.has_vod_mediakit:

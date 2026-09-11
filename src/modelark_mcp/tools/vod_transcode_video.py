@@ -150,6 +150,7 @@ async def vod_transcode_video(
     the verified portrait-to-720x720 letterbox profile. Returns an accepted
     task ID for polling with vod_get_transcode_task. The mutation is never
     retried automatically because completion can be ambiguous after a timeout.
+    Requires MCP task-augmented execution for the provider submission.
     """
     runtime = get_runtime(ctx)
     settings = runtime.settings

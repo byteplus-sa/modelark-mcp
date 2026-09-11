@@ -288,13 +288,14 @@ async def test_vod_scope_allows_dispatch(tmp_path: Path, monkeypatch: pytest.Mon
                     "arguments": {
                         "input": {"video_url": "https://example.com/input.mp4", "persist": False}
                     },
+                    "task": {"ttl": 60000},
                 },
             },
         )
     assert response.status_code == 200
     payload = response.json()
-    assert payload["result"]["isError"] is False
-    assert payload["result"]["structuredContent"]["provider"] == "byteplus-vod-mediakit"
+    assert payload["result"]["task"]["status"] == "working"
+    assert payload["result"]["task"]["taskId"]
 
 
 async def test_oversized_body_is_rejected_before_mcp(tmp_path: Path) -> None:

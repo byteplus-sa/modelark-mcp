@@ -40,7 +40,8 @@ async def vod_get_subtitle_addition_task(
     On the first successful poll with persist_output enabled, copies the
     temporary MP4 output into durable artifact storage with single-flight
     concurrency protection. Provider success remains visible if persistence
-    is skipped or fails.
+    is skipped or fails. Supports optional MCP task-augmented execution for
+    completed-output persistence.
     """
     return await poll_subtitle_task(
         input_task_id=input.task_id,

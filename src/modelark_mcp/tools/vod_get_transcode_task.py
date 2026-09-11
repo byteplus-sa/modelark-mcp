@@ -198,7 +198,8 @@ async def vod_get_transcode_task(
 
     On the first successful poll with ``persist_output=True``, copies the
     expiring provider output URL into durable artifact storage. Subsequent
-    calls return the cached artifact reference without re-downloading.
+    calls return the cached artifact reference without re-downloading. Supports
+    optional MCP task-augmented execution for completed-output persistence.
     """
     await ctx.info(f"Retrieving VOD AI MediaKit transcode task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)

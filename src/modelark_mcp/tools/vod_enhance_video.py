@@ -127,7 +127,8 @@ async def vod_enhance_video(
     timeout. An accepted response contains a task ID without an output URL; poll
     it with vod_get_enhancement_task. If MediaKit directly returns a completed
     output, its provider URL is preserved and durable persistence is best-effort
-    under the 200 MiB video policy.
+    under the 200 MiB video policy. Requires MCP task-augmented execution for
+    submission and any immediate persistence.
     """
     runtime = get_runtime(ctx)
     settings = runtime.settings

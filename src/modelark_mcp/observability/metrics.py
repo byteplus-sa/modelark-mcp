@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from time import perf_counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from mcp.types import CreateTaskResult
 from prometheus_client import Counter, Histogram
 
 if TYPE_CHECKING:
@@ -60,13 +61,16 @@ class MetricsMiddleware(Middleware):
         tool_name = context.message.name
         started = perf_counter()
         try:
-            result = await call_next(context)
+            result = cast("ToolResult | CreateTaskResult", await call_next(context))
         except Exception:
             TOOL_REQUESTS.labels(tool=tool_name, status="exception").inc()
             raise
         else:
-            status = "error" if result.is_error else "success"
+            if isinstance(result, CreateTaskResult):
+                status = "accepted"
+            else:
+                status = "error" if result.is_error else "success"
             TOOL_REQUESTS.labels(tool=tool_name, status=status).inc()
-            return result
+            return cast("ToolResult", result)
         finally:
             TOOL_DURATION.labels(tool=tool_name).observe(perf_counter() - started)

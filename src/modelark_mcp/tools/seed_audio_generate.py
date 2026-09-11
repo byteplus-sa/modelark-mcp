@@ -175,7 +175,9 @@ async def seed_audio_generate(
 
     Accepts a text prompt (up to 3,000 characters) and optional audio or
     image references for voice cloning and scene control. Returns a durable
-    artifact reference that survives the 2-hour provider URL expiry.
+    artifact reference that survives the 2-hour provider URL expiry. Requires
+    MCP task-augmented execution because generation and persistence can exceed
+    foreground client deadlines.
     """
     await ctx.info("Starting Seed Audio generation")
     await ctx.report_progress(progress=10, total=100)

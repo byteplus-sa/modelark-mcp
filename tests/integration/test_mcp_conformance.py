@@ -9,6 +9,7 @@ These tests exercise the FastMCP layer directly — no provider calls.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -83,6 +84,20 @@ def s3_only_server(
     get_settings.cache_clear()
 
 
+@pytest.fixture
+def seed3d_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "sk-test")
+    monkeypatch.setenv("BYTEPLUS_MODELARK_3D_ENABLED", "true")
+
+    get_settings.cache_clear()
+
+    yield SimpleNamespace(mcp=create_server(get_settings()))
+
+    get_settings.cache_clear()
+
+
 class TestToolDiscovery:
     """Verify configured tools are discoverable when credentials are set."""
 
@@ -120,6 +135,108 @@ class TestToolDiscovery:
             "vod_remove_subtitles",
             "vod_get_subtitle_removal_task",
         }
+
+    async def test_long_running_tools_require_background_execution(
+        self, configured_server: None
+    ) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tools_by_name = {tool.name: tool for tool in tools}
+        required_task_names = {
+            "media_upload",
+            "seed_audio_generate",
+            "seed_audio_generate_variations",
+            "speech_to_text",
+            "seed_understand",
+            "seedream_generate_image",
+            "seedream_edit_image",
+            "seedream_generate_image_variations",
+            "seedance_create_task",
+            "seedance_create_task_variations",
+            "seedance_2_5_create_task",
+            "seedance_2_5_create_task_variations",
+            "vod_enhance_video",
+            "vod_transcode_video",
+            "vod_separate_audio",
+            "vod_add_subtitles",
+            "vod_remove_subtitles",
+        }
+        assert required_task_names <= tools_by_name.keys()
+
+        for name in required_task_names:
+            tool = tools_by_name[name]
+            assert tool.task_config.mode == "required"
+            assert tool.task_config.poll_interval == timedelta(seconds=2)
+            mcp_tool = tool.to_mcp_tool()
+            assert mcp_tool.execution is not None
+            assert mcp_tool.execution.taskSupport == "required"
+
+    async def test_completed_media_retrieval_tools_support_optional_background_execution(
+        self, configured_server: None
+    ) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tools_by_name = {tool.name: tool for tool in tools}
+        optional_task_names = {
+            "seedance_get_task",
+            "vod_get_enhancement_task",
+            "vod_get_transcode_task",
+            "vod_get_audio_separation",
+            "vod_get_subtitle_addition_task",
+            "vod_get_subtitle_removal_task",
+        }
+        assert optional_task_names <= tools_by_name.keys()
+
+        for name in optional_task_names:
+            tool = tools_by_name[name]
+            assert tool.task_config.mode == "optional"
+            assert tool.task_config.poll_interval == timedelta(seconds=2)
+            mcp_tool = tool.to_mcp_tool()
+            assert mcp_tool.execution is not None
+            assert mcp_tool.execution.taskSupport == "optional"
+
+    async def test_short_control_plane_tools_remain_foreground(
+        self, configured_server: None
+    ) -> None:
+        server = configured_server
+        tools = await server.mcp.list_tools()
+        tools_by_name = {tool.name: tool for tool in tools}
+        foreground_names = {
+            "seed_media_get_artifact",
+            "media_presign",
+            "media_presign_batch",
+            "seedance_list_tasks",
+            "seedance_cancel_or_delete_task",
+        }
+        assert foreground_names <= tools_by_name.keys()
+
+        for name in foreground_names:
+            tool = tools_by_name[name]
+            assert tool.task_config.mode == "forbidden"
+            mcp_tool = tool.to_mcp_tool()
+            assert mcp_tool.execution is None
+
+    async def test_seed3d_create_and_retrieval_task_modes(self, seed3d_server: None) -> None:
+        tools = await seed3d_server.mcp.list_tools()
+        tools_by_name = {tool.name: tool for tool in tools}
+
+        for name in {"hyper3d_create_task", "hitem3d_create_task"}:
+            tool = tools_by_name[name]
+            assert tool.task_config.mode == "required"
+            assert tool.task_config.poll_interval == timedelta(seconds=2)
+
+        for name in {"hyper3d_get_task", "hitem3d_get_task"}:
+            tool = tools_by_name[name]
+            assert tool.task_config.mode == "optional"
+            assert tool.task_config.poll_interval == timedelta(seconds=2)
+
+        for name in {
+            "hyper3d_list_tasks",
+            "hyper3d_cancel_or_delete_task",
+            "hitem3d_list_tasks",
+            "hitem3d_cancel_or_delete_task",
+        }:
+            assert tools_by_name[name].task_config.mode == "forbidden"
 
     async def test_vod_mediakit_tool_not_registered_without_its_key(
         self, no_creds_server: None

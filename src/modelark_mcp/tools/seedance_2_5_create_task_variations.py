@@ -84,6 +84,7 @@ async def seedance_2_5_create_task_variations(
 
     Each variation creates a separate task. The caller polls each task ID
     via ``seedance_get_task``. Partial failures are captured per variation.
+    Requires MCP task-augmented execution for the provider submissions.
     """
     await ctx.info(f"Starting {input.variations} parallel Seedance 2.5 task creations")
     await ctx.report_progress(progress=10, total=100)

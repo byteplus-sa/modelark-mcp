@@ -80,7 +80,8 @@ async def seedance_get_task(
 
     On first successful retrieval with ``persist_output=True``, copies
     the 24-hour provider URLs into durable artifact storage. Subsequent
-    calls return the cached artifact references without re-downloading.
+    calls return the cached artifact references without re-downloading. Supports
+    optional MCP task-augmented execution for completed-output persistence.
     """
     await ctx.info(f"Retrieving Seedance task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)

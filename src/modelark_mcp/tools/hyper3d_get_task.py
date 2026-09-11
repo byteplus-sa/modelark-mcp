@@ -23,7 +23,8 @@ async def hyper3d_get_task(
 
     On first successful retrieval with ``persist_output=True``, copies the
     provider's 24-hour zip URL into durable artifact storage so the
-    ``seed-media://`` resource remains available after expiry.
+    ``seed-media://`` resource remains available after expiry. Supports optional
+    MCP task-augmented execution for completed-output persistence.
     """
     return await seed3d_get_task_impl(input, ctx, "hyper3d")
 

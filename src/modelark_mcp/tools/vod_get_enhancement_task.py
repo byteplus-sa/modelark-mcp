@@ -211,6 +211,8 @@ async def vod_get_enhancement_task(
 
     On the first successful poll with ``persist_output=True``, copies the
     expiring output into durable artifact storage and caches the artifact.
+    Supports optional MCP task-augmented execution for completed-output
+    persistence.
     """
     await ctx.info(f"Retrieving VOD AI MediaKit enhancement task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)

@@ -33,6 +33,54 @@ contract is enforced for all tools:
   `structured_content` to avoid schema-validation conflicts under strict MCP
   clients.
 
+### Long-running tool execution
+
+The following tools require MCP task-augmented execution and advertise
+`execution.taskSupport="required"` with a two-second recommended poll interval:
+
+- `media_upload`
+- `seed_audio_generate`
+- `seed_audio_generate_variations`
+- `speech_to_text`
+- `seedream_generate_image`
+- `seedream_edit_image`
+- `seedream_generate_image_variations`
+- `seedance_create_task`
+- `seedance_create_task_variations`
+- `seedance_2_5_create_task`
+- `seedance_2_5_create_task_variations`
+- `hyper3d_create_task`
+- `hitem3d_create_task`
+- `seed_understand`
+- `vod_enhance_video`
+- `vod_transcode_video`
+- `vod_separate_audio`
+- `vod_add_subtitles`
+- `vod_remove_subtitles`
+
+A client calls these tools with task metadata, receives an MCP task ID without
+holding the original tool call open, polls `tasks/get`, and obtains the final
+tool output through `tasks/result`. A foreground call is rejected before any
+provider request is made. For Seedance, Seed 3D, and MediaKit create/submit
+tools, the MCP task covers the provider submission; its result contains the
+provider task ID used by the corresponding get tool.
+
+The following retrieval tools advertise `execution.taskSupport="optional"`:
+
+- `seedance_get_task`
+- `hyper3d_get_task`
+- `hitem3d_get_task`
+- `vod_get_enhancement_task`
+- `vod_get_transcode_task`
+- `vod_get_audio_separation`
+- `vod_get_subtitle_addition_task`
+- `vod_get_subtitle_removal_task`
+
+Use foreground execution for quick status checks with persistence disabled.
+Use task-augmented execution when `persist_output=true` and a completed media
+file may need to be downloaded and copied into durable storage. Artifact reads,
+presigning, list operations, and cancel/delete operations remain foreground.
+
 ## seed_media_get_artifact
 
 Retrieve persisted media inline by artifact ID.
@@ -316,6 +364,9 @@ errors (e.g. 429).
 ## seed_audio_generate
 
 Generate full-scene audio through Seed Speech.
+
+**Execution:** Required MCP background task. Retrieve the completed generation
+through `tasks/result`.
 
 **Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`
@@ -661,6 +712,12 @@ family auto-resolves to `pro` so no explicit `SEED_UNDERSTANDING_MODEL_FAMILY`
 is required. Other custom model IDs can be registered via
 `SEED_UNDERSTANDING_MODEL_BINDINGS`.
 
+**Execution:** Required MCP background task
+(`execution.taskSupport="required"`). The initial task-augmented call returns
+a task ID before ModelArk finishes, and the client polls for the result at the
+server-recommended two-second interval. Foreground calls are rejected
+immediately. Choose a task TTL that covers the expected analysis duration.
+
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`
 
@@ -706,10 +763,13 @@ Returns `SeedUnderstandOutput` with `model`, `completion_id`, `choices`
 
 ## speech_to_text
 
-Transcribe audio to text via Seed Speech ASR. Submits audio via HTTP, polls
-until transcription is complete, and returns the complete
-`TranscriptionResult` in a single synchronous call — no task ID exposed to
-the caller, no object-storage upload required.
+Transcribe audio to text via Seed Speech ASR. Submits audio via HTTP and polls
+internally until transcription is complete.
+
+**Execution:** Required MCP background task. The MCP task ID protects the
+provider polling window, which can run for up to the configured 600-second
+default. Retrieve the complete `TranscriptionResult` through `tasks/result`;
+there is no separate provider task tool or object-storage upload requirement.
 
 **Annotations:** `readOnlyHint=True`, `destructiveHint=False`,
 `idempotentHint=True`, `openWorldHint=False`
@@ -794,6 +854,9 @@ optional `log_id`.
 Upload image, audio, or video media to object storage (TOS or S3) and receive
 a presigned HTTPS URL.
 
+**Execution:** Required MCP background task because a video upload can contain
+up to 200 MiB.
+
 **Annotations:** `readOnlyHint=False`, `destructiveHint=False`,
 `idempotentHint=False`, `openWorldHint=True`
 
@@ -865,6 +928,9 @@ Create an asynchronous 3D generation task. Both tools are gated by
 `BYTEPLUS_MODELARK_3D_ENABLED=true` (disabled by default) and reuse the
 ModelArk API key.
 
+**Execution:** Required MCP background task for provider submission. Retrieve
+the provider task ID through `tasks/result`.
+
 - `hyper3d_create_task` (Hyper3d-Gen2): text-to-3D and/or image-to-3D
   (1-5 images). Exposes `seed`, `callback_url`, and model text-command
   parameters (`material`, `mesh_mode`, `quality_override`, `addons`,
@@ -883,6 +949,10 @@ recommended polling delay.
 
 Retrieve a 3D task's status and, on first success, persist the provider's
 zip URL into durable artifact storage (`seed-media://artifacts/{id}`).
+
+**Execution:** Optional MCP background task. Poll in foreground with
+`persist_output=false`, then use task augmentation with `persist_output=true`
+for the completed download.
 
 ## hyper3d_list_tasks / hitem3d_list_tasks
 

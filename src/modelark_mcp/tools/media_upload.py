@@ -125,7 +125,8 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
 
     The returned URL can be passed directly to tools that accept media URLs,
     such as ``seedance_create_task`` (video references).  Video references are
-    URL-only — this tool is the integrated upload path for them.
+    URL-only — this tool is the integrated upload path for them. Requires MCP
+    task-augmented execution because uploads can contain up to 200 MiB of video.
     """
     await ctx.info("Starting media upload")
     await ctx.report_progress(progress=10, total=100)

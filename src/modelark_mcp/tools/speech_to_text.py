@@ -122,10 +122,12 @@ async def _resolve_audio_bytes(audio: AsrAudioInput, ctx: Context) -> bytes:
 
 
 async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToTextOutput | ToolResult:
-    """Transcribe audio to text via Seed Speech ASR (single synchronous call).
+    """Transcribe audio to text via Seed Speech ASR.
 
-    Accepts audio via URL, Base64, or local file path (stdio only). Returns the
-    complete ``TranscriptionResult`` directly — no task ID, no polling.
+    Accepts audio via URL, Base64, or local file path (stdio only). Requires MCP
+    task-augmented execution because the internal provider polling can run for
+    up to the configured ASR poll limit. Returns the complete
+    ``TranscriptionResult`` through the MCP task result.
     """
     await ctx.info("Starting speech-to-text transcription")
     await ctx.report_progress(progress=10, total=100)

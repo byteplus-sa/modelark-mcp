@@ -119,6 +119,7 @@ async def vod_remove_subtitles(
     titles, labels, or watermarks. Returns a task ID for
     vod_get_subtitle_removal_task. The request is not automatically retried
     after ambiguous failures; reuse client_token when reconciling a timeout.
+    Requires MCP task-augmented execution for submission.
     """
     runtime = get_runtime(ctx)
     if not runtime.settings.has_vod_mediakit:

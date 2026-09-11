@@ -94,8 +94,8 @@ claim. Tool scopes are enforced by FastMCP:
 The `speech_to_text` tool is registered when `BYTEPLUS_SEED_SPEECH_API_KEY` is
 set — the same key that enables Seed Audio (TTS). It submits audio via HTTP,
 polls until transcription is complete, and returns the complete
-`TranscriptionResult` in a single synchronous call. Audio input accepts URL,
-Base64, or local file path (stdio only).
+`TranscriptionResult` through a required MCP background task. Audio input
+accepts URL, Base64, or local file path (stdio only).
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -216,7 +216,9 @@ budget, cache, and limiter implementations before horizontal scaling is safe.
 |---|---|---|
 | `BYTEPLUS_CONNECT_TIMEOUT_MS` | `10000` | Provider connection timeout |
 | `BYTEPLUS_REQUEST_TIMEOUT_MS` | `600000` | Full provider request timeout |
+| `FASTMCP_DOCKET_URL` | `memory://` | FastMCP background-task backend used by generation, transcription, upload, provider submission, understanding, and optional media-persistence calls; set a Redis URL when task state must be shared outside one process |
 | `MODELARK_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
 
 Logs are structured JSON on stderr. Provider credentials and sensitive media
-fields are redacted.
+fields are redacted. The default in-memory task backend is process-local; a
+server restart discards active and retained task state.

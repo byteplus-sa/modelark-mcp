@@ -124,7 +124,8 @@ async def seedream_generate_image_variations(
 
     Each variation is an independent generation with its own seed (when
     supported). Partial failures are captured — one bad variation does not
-    fail the batch.
+    fail the batch. Requires MCP task-augmented execution so the batch runs in
+    the background.
     """
     await ctx.info(f"Starting {input.variations} parallel Seedream generations")
     await ctx.report_progress(progress=10, total=100)

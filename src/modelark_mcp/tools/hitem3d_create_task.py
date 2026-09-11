@@ -99,7 +99,8 @@ async def hitem3d_create_task(
     """Create an asynchronous Hitem3d 3D generation task.
 
     Hitem3d is image-to-3D only. The task runs asynchronously — use
-    ``hitem3d_get_task`` to poll for completion.
+    ``hitem3d_get_task`` to poll for completion. Requires MCP task-augmented
+    execution for the provider submission.
     """
     await ctx.info("Creating Hitem3d 3D generation task")
     settings = get_settings()

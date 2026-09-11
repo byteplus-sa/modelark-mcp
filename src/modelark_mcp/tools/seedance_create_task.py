@@ -192,7 +192,8 @@ async def seedance_create_task(
     Accepts text, image, video, and audio references as content input.
     The task runs asynchronously on the provider — use
     ``seedance_get_task`` to poll for completion. Returns the task ID
-    and a recommended polling interval.
+    and a recommended polling interval. Requires MCP task-augmented execution
+    for the provider submission itself.
     """
     await ctx.info("Creating Seedance video generation task")
     await ctx.report_progress(progress=10, total=100)

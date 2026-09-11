@@ -170,7 +170,8 @@ async def seedream_edit_image(
 
     Supports point-based and bounding-box editing by constructing coordinate
     markup (``<point>`` / ``<bbox>``) from structured inputs. At least one
-    reference image and one coordinate (point or bbox) are required.
+    reference image and one coordinate (point or bbox) are required. Requires
+    MCP task-augmented execution so editing and persistence run in the background.
     """
     await ctx.info("Starting Seedream image edit")
     await ctx.report_progress(progress=10, total=100)

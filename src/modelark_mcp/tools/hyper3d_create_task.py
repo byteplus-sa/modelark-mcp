@@ -125,7 +125,8 @@ async def hyper3d_create_task(
     """Create an asynchronous Hyper3D 3D generation task.
 
     Accepts a text prompt and/or up to 5 reference images. The task runs
-    asynchronously — use ``hyper3d_get_task`` to poll for completion.
+    asynchronously — use ``hyper3d_get_task`` to poll for completion. Requires
+    MCP task-augmented execution for the provider submission.
     """
     await ctx.info("Creating Hyper3D 3D generation task")
     settings = get_settings()
