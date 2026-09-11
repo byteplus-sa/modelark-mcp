@@ -25,15 +25,17 @@ at startup by `OBJECT_STORAGE_BACKEND`.
 
 ```mermaid
 flowchart LR
-    Client["MCP Client"] -->|"media_upload"| Tool["media_upload tool"]
+    Client["MCP Client"] -->|"media_upload + task metadata"| Task["MCP task"]
+    Task -->|"background execution"| Tool["media_upload tool"]
     Tool --> Factory["make_object_storage_gateway()"]
     Factory -->|"backend=s3"| S3GW["S3Gateway (boto3)"]
     Factory -->|"backend=tos"| TOSGW["TosGateway (tos SDK)"]
     S3GW --> S3["Private S3 bucket"]
     TOSGW --> TOS["Private TOS bucket"]
     S3GW -.->|"presigned URL"| BytePlus["BytePlus APIs"]
-    Tool -->|"returns URL"| Client
-    Client -->|"passes URL to seedance_create_task etc."| BytePlus
+    Tool -->|"typed result"| Task
+    Task -->|"tasks/result: URL"| Client
+    Client -->|"passes URL to task-augmented Seedance etc."| BytePlus
 ```
 
 The `S3Gateway` (`providers/s3/client.py`) wraps a synchronous `boto3`
@@ -52,7 +54,8 @@ sequenceDiagram
     participant G as S3Gateway
     participant S3 as S3 bucket
 
-    C->>T: media_upload(data=base64, media_type="video", mime_type="video/mp4")
+    C->>T: media_upload(..., task metadata)
+    T-->>C: MCP task ID
     T->>T: Validate MIME + size (before upload)
     T->>F: get configured backend
     F-->>T: S3Gateway instance
@@ -65,6 +68,8 @@ sequenceDiagram
     G->>G: asyncio.to_thread(boto3 generate_presigned_url)
     G-->>T: presigned HTTPS GET URL
     T->>G: close()
+    T-->>C: task status completed
+    C->>T: tasks/result
     T-->>C: { url, expires_at, object_key, bytes }
 ```
 
@@ -121,10 +126,13 @@ sequenceDiagram
     participant G as Gateway
     participant S3 as Bucket
 
-    C->>U: media_upload(data, media_type, mime_type)
+    C->>U: media_upload(data, media_type, mime_type, task metadata)
+    U-->>C: MCP task ID
     U->>S3: put_object (key=references/video/uuid)
     U->>G: presign_get(key)
     G-->>U: presigned URL (T=0, valid 30min)
+    U-->>C: task status completed
+    C->>U: tasks/result
     U-->>C: { url, object_key, ... }
 
     Note over C,S3: ...later, URL expires or is about to...

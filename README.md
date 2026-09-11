@@ -48,7 +48,7 @@ Key features:
 - **Runtime controls** — shared provider/principal concurrency, daily budget
   reservations, safe retries, task ownership, readiness with optional provider
   health checks, per-IP HTTP rate limiting, metrics, and tracing
-- **1,094 offline tests** — unit, contract, integration, HTTP security, E2E, and
+- **1,096 offline tests** — unit, contract, integration, HTTP security, E2E, and
   MCP conformance with 88% branch coverage
 
 ## Supported Input Modalities
@@ -77,9 +77,10 @@ accepts as reference input:
 > [!NOTE]
 > **Video references must be pre-hosted.** `seedance_create_task` accepts
 > video references as a **public HTTPS URL only** — there is no inline Base64
-> option. Use the `media_upload` tool to upload Base64 or a local file path
-> (stdio only) to object storage (TOS or S3) and receive a presigned HTTPS GET URL you can
-> pass directly to `seedance_create_task`. Alternatively, host the video on
+> option. Call `media_upload` with MCP task metadata to upload Base64 or a
+> local file path (stdio only) to object storage (TOS or S3), then retrieve its
+> presigned HTTPS GET URL through `tasks/result` before passing it to the
+> task-augmented `seedance_create_task`. Alternatively, host the video on
 > your own accessible HTTPS endpoint. The URL must resolve to
 > a public IP (private/loopback/link-local addresses are rejected by the SSRF
 > policy). `media_upload` requires TOS or S3 credentials; see [Configuration](docs/configuration.md).

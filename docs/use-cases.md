@@ -293,7 +293,8 @@ Delete (terminal):
 
 Generate a reference image, then use it as input for video generation.
 
-1. Generate an image:
+1. Generate an image as an MCP background task, then poll `tasks/get` and
+   retrieve its result through `tasks/result`:
 
 ```
 seedream_generate_image({
@@ -304,7 +305,9 @@ seedream_generate_image({
 })
 ```
 
-2. Use the generated image (as base64) for video:
+2. Use the generated image (as base64) to create a video task with MCP task
+   metadata. Poll the returned MCP task and retrieve its result to obtain the
+   provider task ID:
 
 ```
 seedance_create_task({
@@ -320,7 +323,7 @@ seedance_create_task({
 })
 ```
 
-3. Poll for video completion:
+3. Poll for video completion in the foreground:
 
 ```
 seedance_get_task({"task_id": "<task_id from step 2>"})
