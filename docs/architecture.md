@@ -120,7 +120,7 @@ sequenceDiagram
     participant W as Docket worker
     participant A as BytePlus API or object storage
     C->>S: tools/call + task metadata
-    S-->>C: task ID (working)
+    S-->>C: MCP task ID (working)
     S->>W: enqueue long-running tool
     W->>A: generation, transcription, upload, submission, or persistence
     loop recommended every 2 seconds
@@ -129,9 +129,10 @@ sequenceDiagram
     end
     A-->>W: completion
     W->>S: store final tool result
-    C->>S: tasks/result
+    C->>S: tasks/result (MCP task ID)
     S-->>C: typed tool output
     opt Provider submission result
+        Note over S,C: typed output includes provider task ID
         C->>S: product get tool(provider task ID)
         S->>A: foreground status request
         A-->>S: provider task status

@@ -25,7 +25,8 @@ behind one server:
   reasoning through ModelArk Chat Completions; supports deep-thinking mode.
   Use for OCR, scene analysis, content review, and as a visual reasoning
   sub-agent.
-- **Speech-to-Text** — synchronous audio transcription via Seed Speech ASR.
+- **Speech-to-Text** — required-MCP-task audio transcription via Seed Speech
+  ASR; retrieve the completed transcript through `tasks/result`.
 - **VOD AI MediaKit** — asynchronous video enhancement using the exact
   common/professional/4K/high/24-fps profile with task polling and download,
   asynchronous video transcoding

@@ -1,10 +1,11 @@
-"""``speech_to_text`` tool — transcribe audio via Seed Speech ASR (synchronous).
+"""``speech_to_text`` tool — transcribe audio via Seed Speech ASR.
 
 Resolves audio to raw bytes (URL → SSRF-safe download, Base64 → decode, file →
-read), submits to Seed Speech ASR via HTTP, polls until complete, and returns
-the ``TranscriptionResult`` in a single response. No task ID, no TOS upload,
-no second tool — the HTTP submit + poll is fully contained within one tool
-invocation.
+read), submits to Seed Speech ASR via HTTP, and polls until complete. Required
+MCP task augmentation returns an MCP task ID immediately; clients obtain the
+``TranscriptionResult`` through ``tasks/result``. No separate provider task
+tool or TOS upload is required — the HTTP submit + poll is contained within
+the MCP task.
 """
 
 from __future__ import annotations
