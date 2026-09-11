@@ -8,7 +8,7 @@ from fastmcp.tools import ToolResult
 
 def persistence_requires_task(ctx: Context, persist_output: bool) -> ToolResult | None:
     """Reject foreground persistence while allowing foreground status polling."""
-    if persist_output and getattr(ctx, "task_id", None) is None:
+    if persist_output and not getattr(ctx, "task_id", None):
         return ToolResult(
             content=(
                 "persist_output=true requires task-augmented execution; use "

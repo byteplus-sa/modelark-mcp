@@ -22,6 +22,15 @@ def test_foreground_status_polling_allows_persistence_disabled() -> None:
     assert persistence_requires_task(context, persist_output=False) is None
 
 
+def test_empty_task_identifier_is_not_task_augmented() -> None:
+    context = FakeContext(task_id="")
+
+    result = persistence_requires_task(context, persist_output=True)
+
+    assert result is not None
+    assert result.is_error is True
+
+
 def test_task_augmented_persistence_is_allowed() -> None:
     context = FakeContext(task_id="task-123")
 
