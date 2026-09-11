@@ -106,3 +106,32 @@ provider credentials from a Secret rather than literal manifest values.
 
 See [Configuration](configuration.md), [Transports](transports.md), and
 [Troubleshooting](troubleshooting.md) for the complete operating contract.
+
+
+## Background tasks in a single-replica deployment
+
+**Redis retention does not enable multiple replicas.** Provider budgets,
+ownership, execution claims, artifact state and concurrency controls still use
+single-instance services. Keep `runtime.sqlite3` on durable storage when using
+`FASTMCP_DOCKET_URL=redis://...` or `rediss://...`, and preserve it with the queue.
+
+JWT-authenticated Redis task deployments must set
+`FASTMCP_TASKS_ENCRYPTION_KEY` through the secret manager. Startup rejects an
+unencrypted backend. Use at least 32 random characters, the same key for all
+retained snapshots, TLS for the connection, and restricted Redis access.
+Snapshots carry caller credentials; task arguments/results may also contain
+sensitive media and require backend-level protection.
+
+After worker loss, an already-started required task fails on redelivery instead
+of replaying paid provider work. Reconcile the saved provider ID where available;
+if the submission result was lost, investigate provider-side status before
+creating another operation. Optional output-retrieval tasks remain repeatable.
+Deleting the runtime database or retaining queue state beyond execution-history
+retention invalidates this recovery contract. No automatic exactly-once provider
+submission guarantee is made.
+
+Offline regression coverage includes encrypted snapshot round trips, wrong-key
+failure, and a simulated interrupted provider operation across a reopened runtime
+database. Live Redis failover and named desktop-client task support require
+validation in the target environment; the supported protocol test uses FastMCP
+4.0.3 over a real stdio subprocess with a mocked provider.

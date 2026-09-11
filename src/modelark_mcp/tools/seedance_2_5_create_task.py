@@ -23,6 +23,7 @@ from modelark_mcp.tools._seedance_shared import (
     execute_seedance_create,
     strip_ratio_for_video_extension,
 )
+from modelark_mcp.tools._task_execution import context_log
 
 
 class Seedance25CreateTaskInput(BaseModel):
@@ -187,9 +188,10 @@ async def seedance_2_5_create_task(
     (30 images, 10 videos, 10 audio), and 480p/720p/1080p resolution.
     The task runs asynchronously on the provider — use
     ``seedance_get_task`` to poll for completion. Returns the task ID
-    and a recommended polling interval.
+    and a recommended polling interval. Requires MCP task-augmented execution
+    for the provider submission itself.
     """
-    await ctx.info("Creating Seedance 2.5 video generation task")
+    await context_log(ctx, "info", "Creating Seedance 2.5 video generation task")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()

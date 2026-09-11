@@ -20,6 +20,7 @@ from modelark_mcp.providers.modelark.seedance import SeedanceService
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 
 class SeedanceListTasksInput(BaseModel):
@@ -79,7 +80,7 @@ async def seedance_list_tasks(
     Supports filtering by status, task IDs, model, and service tier.
     The server caps ``page_size`` at 100 to avoid oversized context.
     """
-    await ctx.info("Listing Seedance tasks")
+    await context_log(ctx, "info", "Listing Seedance tasks")
     await ctx.report_progress(progress=20, total=100)
     owner = get_principal(ctx)
     owned_task_ids = await get_runtime(ctx).ownership_store.list_task_ids("modelark", owner)
@@ -113,7 +114,7 @@ async def seedance_list_tasks(
             )
         )
     except ProviderError as exc:
-        await ctx.error(f"Failed to list tasks: {exc.message}")
+        await context_log(ctx, "error", f"Failed to list tasks: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

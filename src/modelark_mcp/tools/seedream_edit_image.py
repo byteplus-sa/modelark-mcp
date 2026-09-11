@@ -27,6 +27,7 @@ from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 
 class EditCoordinate(BaseModel):
@@ -170,9 +171,10 @@ async def seedream_edit_image(
 
     Supports point-based and bounding-box editing by constructing coordinate
     markup (``<point>`` / ``<bbox>``) from structured inputs. At least one
-    reference image and one coordinate (point or bbox) are required.
+    reference image and one coordinate (point or bbox) are required. Requires
+    MCP task-augmented execution so editing and persistence run in the background.
     """
-    await ctx.info("Starting Seedream image edit")
+    await context_log(ctx, "info", "Starting Seedream image edit")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -225,7 +227,7 @@ async def seedream_edit_image(
         ):
             response, request_id = await call_with_retry(lambda: service.generate(request))
     except ProviderError as exc:
-        await ctx.error(f"Seedream edit failed: {exc.message}")
+        await context_log(ctx, "error", f"Seedream edit failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

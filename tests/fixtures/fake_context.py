@@ -17,6 +17,7 @@ class FakeContext:
     messages: list[str] = field(default_factory=list)
     progress_reports: list[tuple[int, int]] = field(default_factory=list)
     lifespan_context: dict[str, Any] = field(default_factory=dict)
+    task_id: str | None = "test-task"
 
     async def info(self, message: str, **kwargs: object) -> None:
         self.messages.append(f"INFO: {message}")

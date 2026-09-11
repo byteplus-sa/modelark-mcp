@@ -20,6 +20,7 @@ from modelark_mcp.tools._seed3d_shared import (
     Seed3DImageInput,
     execute_seed3d_create,
 )
+from modelark_mcp.tools._task_execution import context_log
 
 _HITEM3D_FILE_FORMATS: dict[str, int] = {
     "obj": 1,
@@ -99,9 +100,10 @@ async def hitem3d_create_task(
     """Create an asynchronous Hitem3d 3D generation task.
 
     Hitem3d is image-to-3D only. The task runs asynchronously — use
-    ``hitem3d_get_task`` to poll for completion.
+    ``hitem3d_get_task`` to poll for completion. Requires MCP task-augmented
+    execution for the provider submission.
     """
-    await ctx.info("Creating Hitem3d 3D generation task")
+    await context_log(ctx, "info", "Creating Hitem3d 3D generation task")
     settings = get_settings()
     if not settings.has_seed3d:
         raise ValueError(

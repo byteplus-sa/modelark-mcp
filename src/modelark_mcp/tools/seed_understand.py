@@ -2,7 +2,8 @@
 
 The handler validates media inputs, builds an OpenAI-compatible Chat Completions
 request with image/video content parts, and returns the model's text answer
-with optional chain-of-thought reasoning. Forces ``stream: false`` for MVP.
+with optional chain-of-thought reasoning. The server registers the handler as
+a required MCP background task and forces ``stream: false`` for the provider.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 
 class UnderstandingImageInput(MediaSource):
@@ -139,9 +141,10 @@ async def seed_understand(
     this for video understanding, image understanding, and as a multimodal
     reasoning sub-agent. For local media files, upload them first with
     media_upload to obtain an HTTPS URL; video Base64 is not supported by the
-    chat endpoint.
+    chat endpoint. This tool requires task-augmented execution so long video
+    analysis does not consume a foreground MCP request deadline.
     """
-    await ctx.info("Starting Seed 2.1 multimodal understanding")
+    await context_log(ctx, "info", "Starting Seed 2.1 multimodal understanding")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -205,7 +208,7 @@ async def seed_understand(
         ):
             response, request_id = await call_with_retry(lambda: service.generate(request))
     except ProviderError as exc:
-        await ctx.error(f"Understanding failed: {exc.message}")
+        await context_log(ctx, "error", f"Understanding failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

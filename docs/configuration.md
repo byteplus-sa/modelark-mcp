@@ -94,8 +94,8 @@ claim. Tool scopes are enforced by FastMCP:
 The `speech_to_text` tool is registered when `BYTEPLUS_SEED_SPEECH_API_KEY` is
 set — the same key that enables Seed Audio (TTS). It submits audio via HTTP,
 polls until transcription is complete, and returns the complete
-`TranscriptionResult` in a single synchronous call. Audio input accepts URL,
-Base64, or local file path (stdio only).
+`TranscriptionResult` through a required MCP background task. Audio input
+accepts URL, Base64, or local file path (stdio only).
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -216,7 +216,34 @@ budget, cache, and limiter implementations before horizontal scaling is safe.
 |---|---|---|
 | `BYTEPLUS_CONNECT_TIMEOUT_MS` | `10000` | Provider connection timeout |
 | `BYTEPLUS_REQUEST_TIMEOUT_MS` | `600000` | Full provider request timeout |
+| `FASTMCP_DOCKET_URL` | `memory://` | FastMCP background-task backend used by generation, transcription, upload, provider submission, understanding, and optional media-persistence calls; Redis can retain task state across restarts of the same single-replica deployment; it does not make SQLite state horizontally scalable |
+| `FASTMCP_TASKS_ENCRYPTION_KEY` | unset | Required for JWT-authenticated Redis task backends; use at least 32 random characters and keep the same key across restarts |
+| `FASTMCP_DOCKET_CONCURRENCY` | `10` | Maximum active background tasks per worker; provider/principal limits still apply |
 | `MODELARK_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
 
 Logs are structured JSON on stderr. Provider credentials and sensitive media
-fields are redacted.
+fields are redacted. The default in-memory task backend is process-local; a
+server restart discards active and retained task state.
+
+
+### Background task ownership and recovery
+
+**Keep the runtime database with the queue.** MCP task ownership is persisted in
+`runtime.sqlite3` using the configured tenant claim and principal. Every
+`tasks/get`, `tasks/update`, and `tasks/cancel` request checks that owner.
+Missing identity or ownership fails closed in JWT mode.
+
+Before a required-task handler starts, it atomically records an execution claim
+in the same database. If that MCP task is delivered again, the handler returns
+an error without repeating provider work. This favors avoiding duplicate charges
+over automatic recovery: after an interrupted submission, reconcile its provider
+outcome before creating a new operation. Optional output-retrieval tasks can be
+retried because they do not submit paid generation work.
+
+The default in-memory queue still loses task results at process exit. With Redis,
+retain the runtime database, backend, and encryption key together, and run only
+one application replica. Snapshot encryption protects caller credentials and
+HTTP headers stored by FastMCP; Redis must also restrict access to task arguments
+and results, which may contain media URLs and prompts. `rediss://` protects the
+connection and does not replace snapshot encryption. A wrong or missing key
+cannot decrypt existing encrypted snapshots. See [deployment.md](deployment.md).

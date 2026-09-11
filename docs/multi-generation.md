@@ -1,9 +1,10 @@
 # Multi-Generation
 
 The server supports two mechanisms for producing multiple outputs from a
-single client request: **native provider batch** (one API call, many
-outputs) and **client-side parallel variation** (many independent API calls
-with bounded concurrency).
+single task-augmented MCP request: **native provider batch** (one API call,
+many outputs) and **client-side parallel variation** (many independent API
+calls with bounded concurrency). The client receives an MCP task ID and polls
+`tasks/get` until terminal; that response contains the typed output.
 
 ## Native provider batch
 
@@ -20,7 +21,8 @@ API and is only supported by **Lite** and **4.x** model families.
    `sequential_image_generation: "auto"` with
    `sequential_image_generation_options: {"max_images": N}`.
 4. The provider returns all N images in a single response. Each image is
-   persisted as a separate `ArtifactRef`.
+   persisted as a separate `ArtifactRef` and returned in the terminal
+   `tasks/get` response.
 
 This is a **single `POST /images/generations` call** — one request, one
 response, multiple outputs. It is the most efficient path and should be
@@ -67,10 +69,10 @@ The shared helper [`run_variation_batch`] in `tools/_parallel.py`:
 ### Seedance variations
 
 Seedance variations are fundamentally different from Seedream/Seed Audio
-because each variation creates a **separate async task**. The client must
-poll each task ID via `seedance_get_task` to retrieve results. The
-`seedance_create_task_variations` tool returns task IDs immediately; the
-actual video generation runs asynchronously on the provider side.
+because each variation creates a **separate provider task**. The client first
+retrieves the variation summary through the required MCP task, then polls each
+provider task ID via `seedance_get_task` to retrieve results. The actual video
+generation runs asynchronously on the provider side.
 
 ### Cost
 

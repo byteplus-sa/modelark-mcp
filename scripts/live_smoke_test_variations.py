@@ -23,30 +23,29 @@ import truststore
 
 truststore.inject_into_ssl()
 
-from _smoke_context import SmokeContext, require_tool_success  # noqa: E402
+from _smoke_context import SmokeClient, require_tool_success, smoke_session  # noqa: E402
 
 from modelark_mcp.config.env import get_settings  # noqa: E402
-from modelark_mcp.runtime import close_runtime_services, create_runtime_services  # noqa: E402
 from modelark_mcp.tools.seed_audio_generate_variations import (  # noqa: E402
     SeedAudioVariationsInput,
-    seed_audio_generate_variations,
+    SeedAudioVariationsOutput,
 )
 from modelark_mcp.tools.seedance_create_task import SeedanceImageInput  # noqa: E402
 from modelark_mcp.tools.seedance_create_task_variations import (  # noqa: E402
     SeedanceVariationsInput,
-    seedance_create_task_variations,
+    SeedanceVariationsOutput,
 )
 from modelark_mcp.tools.seedance_get_task import (  # noqa: E402
     SeedanceGetTaskInput,
-    seedance_get_task,
+    SeedanceTaskOutput,
 )
 from modelark_mcp.tools.seedance_list_tasks import (  # noqa: E402
     SeedanceListTasksInput,
-    seedance_list_tasks,
+    SeedanceTaskPage,
 )
 from modelark_mcp.tools.seedream_generate_image_variations import (  # noqa: E402
     SeedreamVariationsInput,
-    seedream_generate_image_variations,
+    SeedreamVariationsOutput,
 )
 
 if TYPE_CHECKING:
@@ -64,11 +63,12 @@ def header(title: str) -> None:
 
 
 async def test_image_variations(
-    ctx: SmokeContext, store: ArtifactStore
+    ctx: SmokeClient, store: ArtifactStore
 ) -> tuple[bool, ArtifactRef | None]:
     header("Seedream: 3 Image Variations (seeds 42, 43, 44)")
     result = require_tool_success(
-        await seedream_generate_image_variations(
+        await ctx.call(
+            "seedream_generate_image_variations",
             SeedreamVariationsInput(
                 prompt="A beautiful mountain landscape, digital art",
                 variations=3,
@@ -77,7 +77,7 @@ async def test_image_variations(
                 response_format="url",
                 persist=True,
             ),
-            ctx,
+            SeedreamVariationsOutput,
         )
     )
 
@@ -100,15 +100,16 @@ async def test_image_variations(
     return all_verified, reference_image
 
 
-async def test_audio_variations(ctx: SmokeContext, store: ArtifactStore) -> bool:
+async def test_audio_variations(ctx: SmokeClient, store: ArtifactStore) -> bool:
     header("Seed Audio: 3 Audio Variations")
     result = require_tool_success(
-        await seed_audio_generate_variations(
+        await ctx.call(
+            "seed_audio_generate_variations",
             SeedAudioVariationsInput(
                 text_prompt="Hello, this is a parallel variation test of the Seed Audio MCP tool.",
                 variations=3,
             ),
-            ctx,
+            SeedAudioVariationsOutput,
         )
     )
 
@@ -130,7 +131,7 @@ async def test_audio_variations(ctx: SmokeContext, store: ArtifactStore) -> bool
 
 
 async def test_seedance_variations(
-    ctx: SmokeContext,
+    ctx: SmokeClient,
     runtime: RuntimeServices,
     reference_image: ArtifactRef,
 ) -> bool:
@@ -139,7 +140,8 @@ async def test_seedance_variations(
     reference_b64 = base64.b64encode(reference_data.data).decode("ascii")
 
     result = require_tool_success(
-        await seedance_create_task_variations(
+        await ctx.call(
+            "seedance_create_task_variations",
             SeedanceVariationsInput(
                 variation_prompts=[
                     "A cat walks forward slowly through a garden",
@@ -157,7 +159,7 @@ async def test_seedance_variations(
                 resolution="480p",
                 duration=5,
             ),
-            ctx,
+            SeedanceVariationsOutput,
         )
     )
 
@@ -177,8 +179,14 @@ async def test_seedance_variations(
     if not task_ids:
         return False
 
+    ctx.save_provider_ids(ARTIFACTS_DIR, task_ids)
     listed = require_tool_success(
-        await seedance_list_tasks(SeedanceListTasksInput(task_ids=task_ids), ctx)
+        await ctx.call(
+            "seedance_list_tasks",
+            SeedanceListTasksInput(task_ids=task_ids),
+            SeedanceTaskPage,
+            background=False,
+        )
     )
     listed_ids = {task.task_id for task in listed.tasks}
     if listed_ids != set(task_ids):
@@ -191,14 +199,23 @@ async def test_seedance_variations(
     while pending and time.monotonic() < deadline:
         for task_id in list(pending):
             task = require_tool_success(
-                await seedance_get_task(
-                    SeedanceGetTaskInput(task_id=task_id, persist_output=True), ctx
+                await ctx.call(
+                    "seedance_get_task",
+                    SeedanceGetTaskInput(task_id=task_id, persist_output=False),
+                    SeedanceTaskOutput,
+                    background=False,
                 )
             )
             print(f"  Task {task_id}: {task.status}")
             if task.status in {"queued", "running"}:
                 continue
             pending.remove(task_id)
+            if task.status == "succeeded":
+                task = await ctx.call(
+                    "seedance_get_task",
+                    SeedanceGetTaskInput(task_id=task_id, persist_output=True),
+                    SeedanceTaskOutput,
+                )
             if task.status != "succeeded" or task.video is None:
                 print(f"  Task {task_id} failed: {task.error}")
                 all_verified = False
@@ -226,9 +243,7 @@ async def main() -> int:
     print(f"  Seed Audio configured: {settings.has_seed_audio}")
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    runtime = await create_runtime_services(settings)
-    ctx = SmokeContext(lifespan_context={"runtime": runtime})
-    try:
+    async with smoke_session(settings) as (ctx, runtime):
         image_ok, reference_image = await test_image_variations(ctx, runtime.artifact_store)
         audio_ok = await test_audio_variations(ctx, runtime.artifact_store)
         seedance_ok = (
@@ -236,8 +251,6 @@ async def main() -> int:
             if reference_image is not None
             else False
         )
-    finally:
-        await close_runtime_services(runtime)
 
     header("Done")
     print("  Artifacts in .artifacts/:")

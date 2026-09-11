@@ -25,6 +25,7 @@ from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtim
 from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 _IMAGE_INPUT_EXAMPLE = (
     'Expected each image reference to be a URL string ("https://..."), '
@@ -215,7 +216,7 @@ async def execute_seedance_create(
         ):
             task_id, request_id = await call_with_retry(lambda: service.create_task(request))
     except ProviderError as exc:
-        await ctx.error(f"Seedance task creation failed: {exc.message}")
+        await context_log(ctx, "error", f"Seedance task creation failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

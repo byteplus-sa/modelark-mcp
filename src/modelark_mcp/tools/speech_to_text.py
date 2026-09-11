@@ -1,10 +1,11 @@
-"""``speech_to_text`` tool — transcribe audio via Seed Speech ASR (synchronous).
+"""``speech_to_text`` tool — transcribe audio via Seed Speech ASR.
 
 Resolves audio to raw bytes (URL → SSRF-safe download, Base64 → decode, file →
-read), submits to Seed Speech ASR via HTTP, polls until complete, and returns
-the ``TranscriptionResult`` in a single response. No task ID, no TOS upload,
-no second tool — the HTTP submit + poll is fully contained within one tool
-invocation.
+read), submits to Seed Speech ASR via HTTP, and polls until complete. Required
+MCP task augmentation returns an MCP task ID immediately; clients obtain the
+``TranscriptionResult`` from the terminal ``tasks/get`` response. No separate
+provider task tool or TOS upload is required — the HTTP submit + poll is contained within
+the MCP task.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from modelark_mcp.security.media_policy import decode_base64_safely
 from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 _STT_MAX_BYTES = 200 * 1024 * 1024
 _BYTES_PER_SECOND_16KHZ_MONO_16BIT = 32000
@@ -122,12 +124,14 @@ async def _resolve_audio_bytes(audio: AsrAudioInput, ctx: Context) -> bytes:
 
 
 async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToTextOutput | ToolResult:
-    """Transcribe audio to text via Seed Speech ASR (single synchronous call).
+    """Transcribe audio to text via Seed Speech ASR.
 
-    Accepts audio via URL, Base64, or local file path (stdio only). Returns the
-    complete ``TranscriptionResult`` directly — no task ID, no polling.
+    Accepts audio via URL, Base64, or local file path (stdio only). Requires MCP
+    task-augmented execution because the internal provider polling can run for
+    up to the configured ASR poll limit. Returns the complete
+    ``TranscriptionResult`` through the MCP task result.
     """
-    await ctx.info("Starting speech-to-text transcription")
+    await context_log(ctx, "info", "Starting speech-to-text transcription")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -140,7 +144,7 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
         audio_bytes = await _resolve_audio_bytes(input.audio, ctx)
     except (ProviderError, ValueError) as exc:
         log_warning("audio_resolution_failed", error=str(exc))
-        await ctx.error("Audio resolution failed.")
+        await context_log(ctx, "error", "Audio resolution failed.")
         if isinstance(exc, ProviderError):
             return provider_error_result(exc)
         detail = "Invalid audio source URL." if isinstance(exc, UrlValidationError) else str(exc)
@@ -176,7 +180,7 @@ async def speech_to_text(input: SpeechToTextInput, ctx: Context) -> SpeechToText
                 )
             )
     except ProviderError as exc:
-        await ctx.error(f"Speech-to-text failed: {exc.message}")
+        await context_log(ctx, "error", f"Speech-to-text failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

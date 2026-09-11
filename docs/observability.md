@@ -73,15 +73,16 @@ returned persistence field in addition to MCP/provider success metrics.
 
 ## Prometheus metrics (`observability/metrics.py`)
 
-Seven metrics total — 5 Counters + 2 Histograms. **There are no Gauges.**
+Eight metrics total — 5 Counters + 3 Histograms. **There are no Gauges.**
 Label cardinality is intentionally bounded (no tenant, model, URL, or request
-labels). Both Histograms use the `prometheus_client` default buckets
+labels). All Histograms use the `prometheus_client` default buckets
 `(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, +Inf)` seconds.
 
 | Metric | Type | Labels | What it measures | Label values |
 |---|---|---|---|---|
-| `modelark_mcp_tool_requests_total` | Counter | `tool`, `status` | MCP tool invocations | `success`, `error`, `exception` |
-| `modelark_mcp_tool_duration_seconds` | Histogram | `tool` | wall-clock duration of a tool call (observed in `finally`, even on exception) | — |
+| `modelark_mcp_tool_requests_total` | Counter | `tool`, `status` | Foreground outcomes, background acceptance, and worker outcomes | `accepted`, `success`, `error`, `exception`, `cancelled` |
+| `modelark_mcp_tool_duration_seconds` | Histogram | `tool` | Foreground execution or background worker execution duration, including failure and cancellation | — |
+| `modelark_mcp_tool_admission_duration_seconds` | Histogram | `tool` | Accepted background task submission duration, excluding worker execution | — |
 | `modelark_mcp_provider_requests_total` | Counter | `provider`, `operation`, `status` | outbound provider HTTP requests | `operation` = HTTP method lowercased; `status` = `success` (HTTP < 400) / `error` (HTTP ≥ 400) / `exception` |
 | `modelark_mcp_provider_duration_seconds` | Histogram | `provider`, `operation` | provider HTTP request duration (observed in `finally`) | `operation` = HTTP method lowercased |
 | `modelark_mcp_artifact_operations_total` | Counter | `operation`, `status`, `media_type` | artifact store put/get | `operation` = `put` / `get`; only `status="success"` is emitted in current call sites |
@@ -96,18 +97,28 @@ retryable failures such as HTTP 429.
 
 ### `MetricsMiddleware`
 
-A FastMCP middleware that overrides **only** `on_call_tool`. It does not
-intercept resource reads, list-tools, or HTTP routes. For each tool call:
+**Admission and execution are measured separately.** `MetricsMiddleware`
+intercepts `on_call_tool`; it does not intercept task polling, resource reads,
+list-tools, or HTTP routes. Foreground calls retain their existing outcome
+counter and execution histogram. Accepted background submissions increment
+`TOOL_REQUESTS{status="accepted"}` and observe `TOOL_ADMISSION_DURATION`,
+which covers admission only.
 
-1. reads `tool_name` from the request params;
-2. records `perf_counter()` start;
-3. `await call_next(context)`;
-4. on exception → `TOOL_REQUESTS{tool, status="exception"}` then re-raise;
-   on return → `status = "error" if result.is_error else "success"`;
-5. in `finally` → `TOOL_DURATION{tool}.observe(elapsed)` (always recorded).
+Registered handlers use `instrument_tool_execution` to measure execution in
+real task workers. Each handler execution records its terminal outcome and
+`TOOL_DURATION`, including elapsed time when an exception or cancellation
+interrupts the handler. Foreground execution bypasses this wrapper's metrics
+so middleware counts it exactly once. Repeated `tasks/get` polling does not
+add execution measurements.
 
-`status` here is MCP-level, not HTTP: `success` = result with `is_error=False`,
-`error` = MCP error result (`is_error=True`), `exception` = Python exception.
+`success` means a returned value without an MCP error, `error` means a returned
+`ToolResult` with `is_error=True`, `exception` means a raised Python exception,
+and `cancelled` means an executing handler was interrupted by cancellation.
+These are MCP/handler outcomes, not provider HTTP statuses. A background task
+normally produces both an `accepted` sample and one terminal sample; exclude
+`accepted` when calculating execution error rates. A task cancelled before its
+handler starts has no execution sample. Abrupt worker termination cannot emit
+terminal metrics; a replayed worker attempt emits its own execution sample.
 
 ### `/metrics` endpoint
 

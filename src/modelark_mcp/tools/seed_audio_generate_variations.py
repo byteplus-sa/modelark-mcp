@@ -24,6 +24,7 @@ from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._cost import DEFAULT_MAX_CONCURRENT, estimate_cost, log_cost_estimate
 from modelark_mcp.tools._parallel import resolve_prompts, run_variation_batch
+from modelark_mcp.tools._task_execution import context_log
 from modelark_mcp.tools.seed_audio_generate import AudioOutputOptions, AudioWatermarkOptions
 
 
@@ -104,9 +105,10 @@ async def seed_audio_generate_variations(
     """Generate multiple audio variations in parallel through Seed Speech.
 
     Seed Audio does not support seeds, so variations rely on the stochastic
-    nature of the model. Partial failures are captured per variation.
+    nature of the model. Partial failures are captured per variation. Requires
+    MCP task-augmented execution for the parallel generations and persistence.
     """
-    await ctx.info(f"Starting {input.variations} parallel Seed Audio generations")
+    await context_log(ctx, "info", f"Starting {input.variations} parallel Seed Audio generations")
     await ctx.report_progress(progress=10, total=100)
 
     log_cost_estimate(product="audio", variations=input.variations, duration_seconds=15.0)

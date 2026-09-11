@@ -26,6 +26,7 @@ from modelark_mcp.providers.modelark.seedance import SeedanceService
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log, persistence_requires_task
 
 
 class SeedanceGetTaskInput(BaseModel):
@@ -34,14 +35,17 @@ class SeedanceGetTaskInput(BaseModel):
     task_id: str = Field(
         ...,
         description=(
-            "The task ID returned by seedance_create_task, "
+            "Provider task ID from the task-augmented result of seedance_create_task, "
             "seedance_create_task_variations, seedance_2_5_create_task, "
             "or seedance_2_5_create_task_variations."
         ),
     )
     persist_output: bool = Field(
         True,
-        description="Whether to copy provider output URLs into durable artifact storage on first successful retrieval.",
+        description=(
+            "Whether to copy provider output URLs into durable artifact storage on first successful retrieval. "
+            "The default true requires task-augmented execution; use false for a foreground status check."
+        ),
     )
 
 
@@ -80,9 +84,13 @@ async def seedance_get_task(
 
     On first successful retrieval with ``persist_output=True``, copies
     the 24-hour provider URLs into durable artifact storage. Subsequent
-    calls return the cached artifact references without re-downloading.
+    calls return the cached artifact references without re-downloading. Supports
+    optional MCP task-augmented execution for completed-output persistence.
     """
-    await ctx.info(f"Retrieving Seedance task {input.task_id}")
+    task_error = persistence_requires_task(ctx, input.persist_output)
+    if task_error is not None:
+        return task_error
+    await context_log(ctx, "info", f"Retrieving Seedance task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)
     runtime = get_runtime(ctx)
     owner = get_principal(ctx)
@@ -92,7 +100,7 @@ async def seedance_get_task(
     try:
         task, request_id = await call_with_retry(lambda: service.get_task(input.task_id))
     except ProviderError as exc:
-        await ctx.error(f"Failed to retrieve task: {exc.message}")
+        await context_log(ctx, "error", f"Failed to retrieve task: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()
@@ -138,7 +146,7 @@ async def seedance_get_task(
                         media_type="video",
                         error=str(exc),
                     )
-                    await ctx.warning(f"Failed to persist video artifact: {exc}")
+                    await context_log(ctx, "warning", f"Failed to persist video artifact: {exc}")
 
             if task.last_frame_url:
                 try:
@@ -158,7 +166,9 @@ async def seedance_get_task(
                         media_type="last_frame",
                         error=str(exc),
                     )
-                    await ctx.warning(f"Failed to persist last-frame artifact: {exc}")
+                    await context_log(
+                        ctx, "warning", f"Failed to persist last-frame artifact: {exc}"
+                    )
 
             video_ok = task.video_url is None or video_ref is not None
             last_frame_ok = task.last_frame_url is None or last_frame_ref is not None

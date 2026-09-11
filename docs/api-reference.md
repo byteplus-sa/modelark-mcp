@@ -7,40 +7,40 @@ surface.
 
 | # | Tool | Product | Type | Auth |
 |---|---|---|---|---|
-| 1 | `seed_audio_generate` | Seed Audio | Synchronous | Seed Speech |
-| 2 | `seed_audio_generate_variations` | Seed Audio | Parallel | Seed Speech |
-| 3 | `seedream_generate_image` | Seedream | Synchronous | ModelArk |
-| 4 | `seedream_generate_image_variations` | Seedream | Parallel | ModelArk |
-| 5 | `seedance_create_task` | Seedance | Async task | ModelArk |
-| 6 | `seedance_create_task_variations` | Seedance | Parallel async | ModelArk |
-| 7 | `seedance_get_task` | Seedance | Poll | ModelArk |
+| 1 | `seed_audio_generate` | Seed Audio | Required background task | Seed Speech |
+| 2 | `seed_audio_generate_variations` | Seed Audio | Required background task | Seed Speech |
+| 3 | `seedream_generate_image` | Seedream | Required background task | ModelArk |
+| 4 | `seedream_generate_image_variations` | Seedream | Required background task | ModelArk |
+| 5 | `seedance_create_task` | Seedance | Required background submission | ModelArk |
+| 6 | `seedance_create_task_variations` | Seedance | Required background submission | ModelArk |
+| 7 | `seedance_get_task` | Seedance | Optional background retrieval | ModelArk |
 | 8 | `seedance_list_tasks` | Seedance | Read-only | ModelArk |
 | 9 | `seedance_cancel_or_delete_task` | Seedance | Destructive | ModelArk |
-| 10 | `media_upload` | Object storage (optional) | Synchronous | TOS / S3 |
+| 10 | `media_upload` | Object storage (optional) | Required background task | TOS / S3 |
 | 11 | `media_presign` | Object storage (optional) | Read-only | TOS / S3 |
 | 12 | `media_presign_batch` | Object storage (optional) | Read-only | TOS / S3 |
-| 13 | `seedream_edit_image` | Seedream | Synchronous edit | ModelArk |
-| 14 | `seed_understand` | Seed 2.1 (optional) | Synchronous | ModelArk |
-| 15 | `seedance_2_5_create_task` | Seedance 2.5 | Async task | ModelArk |
-| 16 | `seedance_2_5_create_task_variations` | Seedance 2.5 | Parallel async | ModelArk |
+| 13 | `seedream_edit_image` | Seedream | Required background task | ModelArk |
+| 14 | `seed_understand` | Seed 2.1 (optional) | Required background task | ModelArk |
+| 15 | `seedance_2_5_create_task` | Seedance 2.5 | Required background submission | ModelArk |
+| 16 | `seedance_2_5_create_task_variations` | Seedance 2.5 | Required background submission | ModelArk |
 | 17 | `seed_media_get_artifact` | Artifacts | Read-only | Local / JWT |
-| 18 | `speech_to_text` | Seed Speech ASR (optional) | Synchronous | Seed Speech |
-| 19 | `vod_enhance_video` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 20 | `vod_get_enhancement_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 21 | `vod_transcode_video` | VOD AI MediaKit (optional) | Async task | MediaKit Bearer |
-| 22 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 23 | `vod_separate_audio` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 24 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 25 | `vod_add_subtitles` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 26 | `vod_get_subtitle_addition_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 27 | `vod_remove_subtitles` | VOD AI MediaKit (optional) | Async submission | MediaKit Bearer |
-| 28 | `vod_get_subtitle_removal_task` | VOD AI MediaKit (optional) | Poll | MediaKit Bearer |
-| 29 | `hyper3d_create_task` | Hyper3D (optional) | Async task | ModelArk |
-| 30 | `hyper3d_get_task` | Hyper3D (optional) | Poll | ModelArk |
+| 18 | `speech_to_text` | Seed Speech ASR (optional) | Required background task | Seed Speech |
+| 19 | `vod_enhance_video` | VOD AI MediaKit (optional) | Required background submission | MediaKit Bearer |
+| 20 | `vod_get_enhancement_task` | VOD AI MediaKit (optional) | Optional background retrieval | MediaKit Bearer |
+| 21 | `vod_transcode_video` | VOD AI MediaKit (optional) | Required background submission | MediaKit Bearer |
+| 22 | `vod_get_transcode_task` | VOD AI MediaKit (optional) | Optional background retrieval | MediaKit Bearer |
+| 23 | `vod_separate_audio` | VOD AI MediaKit (optional) | Required background submission | MediaKit Bearer |
+| 24 | `vod_get_audio_separation` | VOD AI MediaKit (optional) | Optional background retrieval | MediaKit Bearer |
+| 25 | `vod_add_subtitles` | VOD AI MediaKit (optional) | Required background submission | MediaKit Bearer |
+| 26 | `vod_get_subtitle_addition_task` | VOD AI MediaKit (optional) | Optional background retrieval | MediaKit Bearer |
+| 27 | `vod_remove_subtitles` | VOD AI MediaKit (optional) | Required background submission | MediaKit Bearer |
+| 28 | `vod_get_subtitle_removal_task` | VOD AI MediaKit (optional) | Optional background retrieval | MediaKit Bearer |
+| 29 | `hyper3d_create_task` | Hyper3D (optional) | Required background submission | ModelArk |
+| 30 | `hyper3d_get_task` | Hyper3D (optional) | Optional background retrieval | ModelArk |
 | 31 | `hyper3d_list_tasks` | Hyper3D (optional) | Read-only | ModelArk |
 | 32 | `hyper3d_cancel_or_delete_task` | Hyper3D (optional) | Destructive | ModelArk |
-| 33 | `hitem3d_create_task` | Hitem3d (optional) | Async task | ModelArk |
-| 34 | `hitem3d_get_task` | Hitem3d (optional) | Poll | ModelArk |
+| 33 | `hitem3d_create_task` | Hitem3d (optional) | Required background submission | ModelArk |
+| 34 | `hitem3d_get_task` | Hitem3d (optional) | Optional background retrieval | ModelArk |
 | 35 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
 | 36 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
 
@@ -85,6 +85,23 @@ surface.
 | `hitem3d_list_tasks` | true | false | true | false |
 | `hitem3d_cancel_or_delete_task` | false | true | false | true |
 
+## Background Execution
+
+Generation and variation tools, `speech_to_text`, `media_upload`,
+`seed_understand`, and all Seedance, Seed 3D, and MediaKit provider-submission
+tools declare `execution.taskSupport="required"`. Invoke them with MCP task
+metadata, poll the returned task at the advertised two-second interval until
+terminal, then read the result from the `tasks/get` response. Foreground calls
+fail before the
+provider is contacted.
+
+Seedance, Seed 3D, and MediaKit get tools declare
+`execution.taskSupport="optional"` because a processing-status check is short,
+but a successful response with `persist_output=true` may download a large
+artifact. Use foreground execution with persistence disabled for quick polling,
+then task-augmented execution to retrieve and persist completed output. List,
+presign, artifact-read, and cancel/delete tools remain foreground operations.
+
 ---
 
 ## vod_enhance_video
@@ -95,8 +112,9 @@ MediaKit convenience endpoint. The tool is registered only when
 scope in JWT mode.
 
 The verified contract returns an accepted asynchronous task and deliberately fixes the
-provider profile to `common` / `professional` / `4k` / `high` / 24 fps. Poll
-the returned task ID with `vod_get_enhancement_task`. The POST is non-idempotent
+provider profile to `common` / `professional` / `4k` / `high` / 24 fps. Retrieve
+the provider task ID from the terminal `tasks/get` result, then poll it with
+`vod_get_enhancement_task`. The POST is non-idempotent
 and is never retried automatically because a timeout may occur after the provider
 began processing.
 
@@ -159,8 +177,8 @@ requires the `vod:read` scope in JWT mode.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
-| `task_id` | string | Yes | — |
-| `persist_output` | boolean | No | `true` |
+| `task_id` | string | Yes | Provider task ID from the terminal `tasks/get` result of `vod_enhance_video` |
+| `persist_output` | boolean | No | `true` (requires task-augmented execution; use `false` for foreground status) |
 
 ### Output
 
@@ -253,8 +271,8 @@ Registered only when `BYTEPLUS_VOD_MEDIAKIT_API_KEY` is configured; requires the
 
 | Field | Type | Required | Default |
 |---|---|---|---|
-| `task_id` | string | Yes | — |
-| `persist_output` | boolean | No | `true` |
+| `task_id` | string | Yes | Provider task ID from the terminal `tasks/get` result of `vod_transcode_video` |
+| `persist_output` | boolean | No | `true` (requires task-augmented execution; use `false` for foreground status) |
 
 ### Output
 
@@ -322,12 +340,15 @@ and a 5-second initial polling heuristic.
 
 ## vod_get_subtitle_addition_task
 
-Poll `GET /tasks/{task_id}` with `vod:read`. The adapter requires
-`task_type="add-subtitle-to-video"`, validates the echoed task ID, and maps
-provider state to `processing`, `succeeded`, or `failed`. On success it returns
+Poll `GET /tasks/{task_id}` with `vod:read`, using the provider task ID from the
+terminal `tasks/get` result of `vod_add_subtitles`. The adapter requires
+`task_type="add-subtitle-to-video"`, validates the echoed provider task ID, and
+maps provider state to `processing`, `succeeded`, or `failed`. On success it returns
 the expiring `source_url`, duration/resolution when available, and optionally a
-durable MP4 `video` artifact. `persist_output` defaults to true; persistence is
-single-flight and failure is reported separately from provider success.
+durable MP4 `video` artifact. `persist_output` defaults to true and requires
+task-augmented execution; use `persist_output=false` for a foreground status
+check. Persistence is single-flight and failure is reported separately from
+provider success.
 
 ## vod_remove_subtitles
 
@@ -343,7 +364,8 @@ are omitted unless explicitly supplied. The output includes the task ID and a
 
 ## vod_get_subtitle_removal_task
 
-Poll `GET /tasks/{task_id}` with `vod:read`. The adapter requires
+Poll `GET /tasks/{task_id}` with `vod:read`, using the provider task ID from the
+terminal `tasks/get` result of `vod_remove_subtitles`. The adapter requires
 `task_type="erase-video-subtitle-pro"`; lifecycle normalization, task ownership,
 source-URL preservation, and best-effort single-flight MP4 persistence match
 `vod_get_subtitle_addition_task`.
@@ -365,8 +387,9 @@ Input takes a public HTTPS source URL and separation options:
 | `output_format` | string | No | `aac` (default), `mp3`, `wav`, `m4a`, `flac` |
 
 Returns `VodSeparateAudioOutput` with `provider` `byteplus-vod-mediakit`,
-`status` `accepted`, the provider `request_id` and `provider_log_id`, and the
-`task_id` to pass to `vod_get_audio_separation`. The mutation is never retried
+`status` `accepted`, the provider `request_id` and `provider_log_id`, and an MCP
+task ID. Poll `tasks/get` until terminal, then pass the provider task ID from
+its result to `vod_get_audio_separation`. The mutation is never retried
 automatically because completion is ambiguous after a timeout.
 
 ### Example
@@ -396,8 +419,8 @@ configured and requires the `vod:read` scope in JWT mode.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `task_id` | string | Yes | Task ID returned by `vod_separate_audio` |
-| `persist_output` | boolean | No | Copy completed tracks into durable artifact storage on first successful poll (default `true`) |
+| `task_id` | string | Yes | Provider task ID from the terminal `tasks/get` result of `vod_separate_audio` |
+| `persist_output` | boolean | No | Copy completed tracks into durable artifact storage on first successful poll (default `true`; requires task-augmented execution) |
 
 Returns `VodAudioSeparationTaskOutput` with a normalized `status` of
 `processing`, `succeeded`, or `failed`. On success, `voice`, `background`,
@@ -491,7 +514,7 @@ Result of a single variation within a parallel generation.
 | `index` | integer | 0-based variation index |
 | `seed` | integer \| null | Seed used (image only) |
 | `artifact` | ArtifactRef \| null | Generated artifact (null if failed) |
-| `task_id` | string \| null | Task ID (Seedance only) |
+| `task_id` | string \| null | Provider task ID for Seedance polling, obtained from the enclosing task's terminal `tasks/get` result |
 | `error` | object \| null | Error details if failed |
 | `request_id` | string \| null | Provider request ID |
 | `provider_log_id` | string \| null | Provider log ID (Seed Audio) |
@@ -930,8 +953,8 @@ Retrieve the status and output of a Seedance task.
 
 | Field | Type | Required | Default |
 |---|---|---|---|
-| `task_id` | string | Yes | — |
-| `persist_output` | boolean | No | `true` |
+| `task_id` | string | Yes | Provider task ID from the terminal `tasks/get` result of a Seedance create tool |
+| `persist_output` | boolean | No | `true` (requires task-augmented execution; use `false` for foreground status) |
 
 ### Output
 
@@ -1293,6 +1316,15 @@ is required. Other custom model IDs can be registered via
 Base64 is not supported by the chat endpoint — upload local videos via
 `media_upload` first to obtain an HTTPS URL.
 
+### Execution
+
+`seed_understand` declares `execution.taskSupport="required"`. A compatible
+MCP client invokes it as a task, receives the server-generated task ID without
+waiting for the ModelArk response, and polls for the final tool result. The
+server recommends a two-second polling interval. Foreground invocation is
+rejected immediately instead of waiting until the client timeout expires.
+Clients must request a task TTL long enough for the expected analysis duration.
+
 ### Input
 
 | Field | Type | Required | Default | Constraints |
@@ -1393,7 +1425,9 @@ Create an asynchronous Seedance 2.5 video generation task. Supports up to
 ## 16. seedance_2_5_create_task_variations
 
 Create N independent Seedance 2.5 video generation tasks in parallel. Each
-variation creates a separate task; poll each task ID via `seedance_get_task`.
+variation creates a separate provider task. Poll the MCP task through
+`tasks/get` until terminal, then pass each provider task ID from its result to
+`seedance_get_task`.
 Partial failures are captured per variation.
 
 ### Input
@@ -1463,10 +1497,10 @@ Always registered; requires `artifacts:read` in JWT mode.
 
 ## 18. speech_to_text
 
-Transcribe audio to text via Seed Speech ASR in a single synchronous call.
-Submits audio over HTTP and polls until complete; returns the full
-`TranscriptionResult` directly — no task ID, no polling, no object-storage
-upload required.
+Transcribe audio to text via Seed Speech ASR as a required MCP background task.
+The tool submits audio over HTTP and polls internally until complete; retrieve
+the full `TranscriptionResult` from the terminal `tasks/get` response. There is no separate
+provider task tool or object-storage upload requirement.
 
 ### Input
 

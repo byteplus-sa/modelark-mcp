@@ -19,6 +19,7 @@ from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.security.auth_context import PrincipalContext
 from modelark_mcp.security.media_policy import get_media_limits
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log, persistence_requires_task
 from modelark_mcp.tools._vod_shared import VodArtifactPersistenceIssue
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
@@ -27,10 +28,15 @@ HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
 class VodGetEnhancementTaskInput(BaseModel):
     """Input for ``vod_get_enhancement_task``."""
 
-    task_id: str = Field(description="Task ID returned by vod_enhance_video.")
+    task_id: str = Field(
+        description="Provider task ID from the task-augmented result of vod_enhance_video."
+    )
     persist_output: bool = Field(
         default=True,
-        description="Whether to copy a completed output into durable artifact storage on first successful poll.",
+        description=(
+            "Whether to copy a completed output into durable artifact storage on first successful poll. "
+            "The default true requires task-augmented execution; use false for a foreground status check."
+        ),
     )
 
 
@@ -154,7 +160,7 @@ async def _persist_output(
             cached_video = cached.get("video") if cached else None
         except Exception:
             cached_video = None
-            await ctx.warning("VOD enhancement artifact cache lookup failed.")
+            await context_log(ctx, "warning", "VOD enhancement artifact cache lookup failed.")
         if cached_video is not None:
             singleflight.artifacts = {"video": cached_video}
             return cached_video, None, "persisted"
@@ -168,7 +174,9 @@ async def _persist_output(
                 auth=owner,
             )
         except ArtifactPersistenceError as exc:
-            await ctx.warning(f"VOD enhancement output persistence failed: {exc.safe_message}")
+            await context_log(
+                ctx, "warning", f"VOD enhancement output persistence failed: {exc.safe_message}"
+            )
             return (
                 None,
                 VodArtifactPersistenceIssue(
@@ -180,8 +188,10 @@ async def _persist_output(
                 "failed",
             )
         except Exception:
-            await ctx.warning(
-                "VOD enhancement output persistence failed due to an internal storage error."
+            await context_log(
+                ctx,
+                "warning",
+                "VOD enhancement output persistence failed due to an internal storage error.",
             )
             return (
                 None,
@@ -198,8 +208,10 @@ async def _persist_output(
         try:
             await runtime.task_artifact_cache.set("vod-mediakit", task_id, {"video": video_ref})
         except Exception:
-            await ctx.warning(
-                "VOD enhancement artifact cache update failed; the artifact remains available."
+            await context_log(
+                ctx,
+                "warning",
+                "VOD enhancement artifact cache update failed; the artifact remains available.",
             )
         return video_ref, None, "persisted"
 
@@ -211,8 +223,13 @@ async def vod_get_enhancement_task(
 
     On the first successful poll with ``persist_output=True``, copies the
     expiring output into durable artifact storage and caches the artifact.
+    Supports optional MCP task-augmented execution for completed-output
+    persistence.
     """
-    await ctx.info(f"Retrieving VOD AI MediaKit enhancement task {input.task_id}")
+    task_error = persistence_requires_task(ctx, input.persist_output)
+    if task_error is not None:
+        return task_error
+    await context_log(ctx, "info", f"Retrieving VOD AI MediaKit enhancement task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)
     runtime = get_runtime(ctx)
     owner = get_principal(ctx)
@@ -222,7 +239,7 @@ async def vod_get_enhancement_task(
     try:
         task = await call_with_retry(lambda: service.get(input.task_id))
     except ProviderError as exc:
-        await ctx.error(f"Failed to retrieve enhancement task: {exc.message}")
+        await context_log(ctx, "error", f"Failed to retrieve enhancement task: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

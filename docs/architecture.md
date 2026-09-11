@@ -21,6 +21,9 @@ Server as shipped today. For the original design rationale, see
   JWT verification, Host/Origin protection, and body limits.
 - **Observable and budget-aware** — structured logs, Prometheus metrics, and a
   per-principal daily budget ledger.
+- **Timeout-safe long operations** — generation, transcription, upload, and
+  provider-submission calls use required MCP task augmentation; completed-media
+  retrieval supports optional background persistence.
 
 ## Layered structure
 
@@ -95,6 +98,46 @@ shared ownership store and task-artifact cache under the `vod-mediakit` provider
 key. For all surfaces, a completed provider URL is preserved and
 persistence is attempted separately as a best-effort operation (under the
 200 MiB video limit for video, 10 MiB audio limit for separated tracks).
+
+## Long-running task flow
+
+Generation and variation calls, transcription, uploads, multimodal
+understanding, and Seedance, Seed 3D, and MediaKit submissions are registered
+with `execution.taskSupport="required"` and a two-second recommended poll
+interval. FastMCP's Docket worker runs the existing tool handler after returning
+the MCP task ID, while the handler retains the normal provider timeout, budget,
+concurrency, error, and usage accounting paths.
+
+Seedance, Seed 3D, and MediaKit get calls use optional task support: foreground
+execution remains available for short processing-status checks, while task
+augmentation protects the completed-output download and persistence path. List,
+presign, artifact-read, and cancel/delete operations stay foreground.
+
+```mermaid
+sequenceDiagram
+    participant C as MCP client
+    participant S as FastMCP server
+    participant W as Docket worker
+    participant A as BytePlus API or object storage
+    C->>S: tools/call + task metadata
+    S-->>C: MCP task ID (working)
+    S->>W: enqueue long-running tool
+    W->>A: generation, transcription, upload, submission, or persistence
+    loop recommended every 2 seconds until terminal
+        C->>S: tasks/get
+        S-->>C: working status or terminal result
+    end
+    A-->>W: completion
+    W->>S: store final tool result
+    Note over C,S: terminal tasks/get response contains the typed tool output
+    opt Provider submission result
+        Note over S,C: typed output includes provider task ID
+        C->>S: product get tool(provider task ID)
+        S->>A: foreground status request
+        A-->>S: provider task status
+        S-->>C: typed provider task output
+    end
+```
 
 ## Server lifecycle and runtime services
 

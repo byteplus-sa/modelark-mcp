@@ -34,6 +34,7 @@ from modelark_mcp.security.media_policy import (
     validate_video_mime,
 )
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 
 class MediaUploadInput(BaseModel):
@@ -125,9 +126,10 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
 
     The returned URL can be passed directly to tools that accept media URLs,
     such as ``seedance_create_task`` (video references).  Video references are
-    URL-only — this tool is the integrated upload path for them.
+    URL-only — this tool is the integrated upload path for them. Requires MCP
+    task-augmented execution because uploads can contain up to 200 MiB of video.
     """
-    await ctx.info("Starting media upload")
+    await context_log(ctx, "info", "Starting media upload")
     await ctx.report_progress(progress=10, total=100)
 
     settings = get_settings()
@@ -199,7 +201,7 @@ async def media_upload(input: MediaUploadInput, ctx: Context) -> MediaUploadOutp
                 url = await gateway.presign_get(key=key)
             await get_runtime(ctx).object_key_ownership_store.record(key, get_principal(ctx))
     except ProviderError as exc:
-        await ctx.error(f"Media upload failed: {exc.message}")
+        await context_log(ctx, "error", f"Media upload failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await gateway.close()

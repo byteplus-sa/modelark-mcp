@@ -11,18 +11,18 @@ products plus artifact access and an optional media upload helper:
 
 | Product | Tools | Description |
 |---|---|---|
-| **Seed Audio** | `seed_audio_generate`, `seed_audio_generate_variations` | Full-scene audio generation through Seed Speech |
-| **Seedream** | `seedream_generate_image`, `seedream_edit_image`, `seedream_generate_image_variations` | Image generation and editing through ModelArk |
-| **Seedance** | `seedance_create_task`, `seedance_create_task_variations`, `seedance_get_task`, `seedance_list_tasks`, `seedance_cancel_or_delete_task` | Async video generation and task management through ModelArk |
-| **Hyper3D / Hitem3d** | `hyper3d_*`, `hitem3d_*` task tools | Async 3D model generation through ModelArk (gated by `BYTEPLUS_MODELARK_3D_ENABLED`, disabled by default) |
-| **Seed 2.1 Understanding** | `seed_understand` | Multimodal video/image understanding and reasoning through ModelArk Chat Completions |
-| **Speech-to-Text** | `speech_to_text` | Synchronous audio transcription through Seed Speech ASR (HTTP) |
+| **Seed Audio** | `seed_audio_generate`, `seed_audio_generate_variations` | Background-task full-scene audio generation through Seed Speech |
+| **Seedream** | `seedream_generate_image`, `seedream_edit_image`, `seedream_generate_image_variations` | Background-task image generation and editing through ModelArk |
+| **Seedance** | `seedance_create_task`, `seedance_create_task_variations`, `seedance_get_task`, `seedance_list_tasks`, `seedance_cancel_or_delete_task` | Background-task video submission with optionally background output retrieval through ModelArk |
+| **Hyper3D / Hitem3d** | `hyper3d_*`, `hitem3d_*` task tools | Background-task 3D submission with optionally background output retrieval through ModelArk (gated by `BYTEPLUS_MODELARK_3D_ENABLED`, disabled by default) |
+| **Seed 2.1 Understanding** | `seed_understand` | Background-task video/image understanding and reasoning through ModelArk Chat Completions |
+| **Speech-to-Text** | `speech_to_text` | Background-task audio transcription through Seed Speech ASR (HTTP) |
 | **VOD AI MediaKit** | `vod_enhance_video`, `vod_get_enhancement_task` | Submit and poll asynchronous AI enhancement for the exact common/professional/4K/high/24-fps profile |
 | **VOD AI MediaKit Transcode** | `vod_transcode_video`, `vod_get_transcode_task` | Submit and poll async video transcoding (codec, container, resolution, bitrate, frame rate) |
 | **VOD AI MediaKit Subtitles** | `vod_add_subtitles`, `vod_get_subtitle_addition_task`, `vod_remove_subtitles`, `vod_get_subtitle_removal_task` | Burn SRT/VTT/ASS or inline cues into video, or remove hardcoded subtitles and recognized on-screen text |
 | **VOD Audio Separation** | `vod_separate_audio`, `vod_get_audio_separation` | Submit and poll voice + background (or voice + music + sfx) audio separation via the VOD AI MediaKit (`separate-voice`) |
 | **Artifacts** | `seed_media_get_artifact` | Retrieve persisted media inline by artifact ID |
-| **Object storage** (optional) | `media_upload`, `media_presign`, `media_presign_batch` | Upload Base64 or local-file media to TOS or S3, return a presigned HTTPS URL; renew expired URLs without re-uploading; batch-presign many keys in one call |
+| **Object storage** (optional) | `media_upload`, `media_presign`, `media_presign_batch` | Background-task upload of Base64 or local-file media to TOS or S3; foreground URL renewal without re-uploading |
 
 Key features:
 
@@ -36,6 +36,10 @@ Key features:
   `base_seed + index` deterministic seeds
 - **Typed inputs** — Pydantic models validate all inputs before spending
   quota; unsupported combinations are rejected at the MCP layer
+- **Timeout-safe long operations** — generation, transcription, large upload,
+  and provider task-submission tools require MCP task-augmented execution;
+  completed-output retrieval tools optionally support it when persistence may
+  require a large download
 - **Model capability registry** — logical model families map to
   operator-configured model IDs; validates resolutions, formats, and
   batch support per model
@@ -44,8 +48,8 @@ Key features:
 - **Runtime controls** — shared provider/principal concurrency, daily budget
   reservations, safe retries, task ownership, readiness with optional provider
   health checks, per-IP HTTP rate limiting, metrics, and tracing
-- **1,090 offline tests** — unit, contract, integration, HTTP security, E2E, and
-  MCP conformance with 88% branch coverage
+- **1,132 offline tests** — unit, contract, integration, HTTP security, E2E, and
+  MCP conformance with 86% combined statement/branch coverage
 
 ## Supported Input Modalities
 
@@ -73,9 +77,11 @@ accepts as reference input:
 > [!NOTE]
 > **Video references must be pre-hosted.** `seedance_create_task` accepts
 > video references as a **public HTTPS URL only** — there is no inline Base64
-> option. Use the `media_upload` tool to upload Base64 or a local file path
-> (stdio only) to object storage (TOS or S3) and receive a presigned HTTPS GET URL you can
-> pass directly to `seedance_create_task`. Alternatively, host the video on
+> option. Call `media_upload` with MCP task metadata to upload Base64 or a
+> local file path (stdio only) to object storage (TOS or S3), then retrieve its
+> presigned HTTPS GET URL through the terminal `tasks/get` result before passing
+> it to the
+> task-augmented `seedance_create_task`. Alternatively, host the video on
 > your own accessible HTTPS endpoint. The URL must resolve to
 > a public IP (private/loopback/link-local addresses are rejected by the SSRF
 > policy). `media_upload` requires TOS or S3 credentials; see [Configuration](docs/configuration.md).
@@ -202,6 +208,15 @@ See [Configuration](docs/configuration.md) for the full environment
 variable reference.
 
 ## Using with MCP Clients
+
+**Client requirement: MCP `2026-07-28` plus the FastMCP tasks extension.**
+Generation tools require task-augmented calls; completed output is retrieved
+through `tasks/get`. Provider status polls use `persist_output=false`, and output
+persistence runs as another task. Tool discovery alone does not prove support.
+The locked FastMCP Python client 4.0.3 is tested in-process and over subprocess
+stdio. The named desktop/IDE client snippets below are connection templates;
+their task execution compatibility has not been verified. See the
+[compatibility requirements and working Python workflow](docs/integration-guide.md#required-client-support).
 
 The server runs as a `stdio` process. Configure it in your MCP client:
 

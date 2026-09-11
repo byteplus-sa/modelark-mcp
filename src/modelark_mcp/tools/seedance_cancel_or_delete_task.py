@@ -26,6 +26,7 @@ from modelark_mcp.providers.modelark.seedance import SeedanceService
 from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 # States where each mode is valid.
 _CANCELABLE_STATES: frozenset[str] = frozenset({"queued"})
@@ -104,8 +105,10 @@ async def seedance_cancel_or_delete_task(
     This prevents accidental cancellation of a running task or deletion
     of a task that is still queued.
     """
-    await ctx.info(
-        f"Seedance {input.mode} task {input.task_id} (expected_status={input.expected_status})"
+    await context_log(
+        ctx,
+        "info",
+        f"Seedance {input.mode} task {input.task_id} (expected_status={input.expected_status})",
     )
     await ctx.report_progress(progress=20, total=100)
     await get_runtime(ctx).ownership_store.require_owner(
@@ -120,7 +123,7 @@ async def seedance_cancel_or_delete_task(
     try:
         task, _ = await call_with_retry(lambda: service.get_task(input.task_id))
     except ProviderError as exc:
-        await ctx.error(f"Failed to fetch task state: {exc.message}")
+        await context_log(ctx, "error", f"Failed to fetch task state: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()
@@ -157,7 +160,7 @@ async def seedance_cancel_or_delete_task(
     try:
         request_id = await call_with_retry(lambda: service.delete_task(input.task_id))
     except ProviderError as exc:
-        await ctx.error(f"DELETE failed: {exc.message}")
+        await context_log(ctx, "error", f"DELETE failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

@@ -94,18 +94,21 @@ If you experience timeouts:
 ## Client Timeouts vs Provider Latency
 
 A client-side MCP timeout is distinct from a server failure. Seedream Pro and
-synchronous Seedance generation can take 60–150 s (longer under cold start or
-provider queue), but many MCP clients apply a ~60 s per-tool default. In that
-case the client aborts while the server keeps running the billable call — the
-generation is not cancelled and may still succeed.
+Seedance provider submissions can take 60–150 s (longer under cold start or
+provider queue), but the server requires MCP task augmentation for those
+operations so the original foreground request does not stay open.
 
-- Prefer the asynchronous `seedance_create_task` → `seedance_get_task` flow
-  for long video work; creation returns immediately and polling is cheap.
-- Raise the client's tool timeout for synchronous `seedream_generate_image`
-  and `seed_audio_generate` calls, or run them over stdio where the client
-  default is typically higher.
-- On a client timeout, reconcile with the provider via the returned task ID /
-  request ID rather than resubmitting (see `ambiguous_completion`).
+- Invoke `seedance_create_task`, `seedream_generate_image`, and
+  `seed_audio_generate` with MCP task metadata. Retain the returned MCP task
+  ID, poll `tasks/get` at the advertised interval until terminal; that response
+  contains the typed result.
+- For long video work, the result of the MCP task contains the provider task
+  ID. Poll `seedance_get_task` in the foreground with `persist_output=false`;
+  use its optional task augmentation with `persist_output=true` when the
+  completed output needs persistence.
+- If a client disconnects after task acceptance, reconcile with the returned
+  MCP task ID or provider task ID rather than resubmitting (see
+  `ambiguous_completion`).
 
 ## Artifacts Not Persisting
 

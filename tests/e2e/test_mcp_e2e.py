@@ -8,6 +8,7 @@ retrieval through the actual MCP protocol — not direct function calls.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,15 +19,20 @@ import httpx
 import pytest
 import respx
 from fastmcp import Client
+from fastmcp.exceptions import ToolError
+from fastmcp_tasks import call_tool_task
+from mcp.shared.exceptions import MCPError
 
 from modelark_mcp.config.env import get_settings
 from modelark_mcp.config.model_capabilities import refresh_capability_registry
 from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
 from modelark_mcp.providers.modelark.schemas import (
+    ChatCompletionProviderResponse,
     SeedanceTaskListResponse,
     SeedanceTaskResponse,
 )
 from modelark_mcp.providers.modelark.seedance import SeedanceService
+from modelark_mcp.providers.modelark.understanding import SeedUnderstandingService
 from modelark_mcp.providers.seed_speech.schemas import SeedAudioProviderResponse
 from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
 from modelark_mcp.security.safe_downloader import DownloadedMedia
@@ -90,6 +96,26 @@ def _mock_seedream_response(
     )
 
 
+async def _call_background_tool(
+    client: Client,
+    name: str,
+    arguments: dict[str, Any],
+    *,
+    raise_on_error: bool = True,
+) -> Any:
+    task = await call_tool_task(
+        client,
+        name,
+        arguments,
+        raise_on_error=raise_on_error,
+    )
+    return await task.result()
+
+
+def _foreground_client(mcp: FastMCP) -> Client:
+    return Client(mcp, mode="legacy")
+
+
 class TestToolDiscovery:
     """Verify tools are discoverable through the MCP protocol."""
 
@@ -150,6 +176,77 @@ class TestToolDiscovery:
             assert "model" in schema["properties"]
 
 
+class TestSeedUnderstandE2E:
+    async def test_rejects_foreground_execution_before_provider_call(
+        self,
+        e2e_server: object,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        provider_call = AsyncMock()
+        monkeypatch.setattr(SeedUnderstandingService, "generate", provider_call)
+
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with _foreground_client(mcp) as client:
+            with pytest.raises(MCPError, match="requires the tasks extension"):
+                await client.call_tool(
+                    "seed_understand",
+                    {"input": {"prompt": "Analyze the video"}},
+                )
+
+        provider_call.assert_not_awaited()
+
+    async def test_runs_as_background_task_without_blocking_for_provider(
+        self,
+        e2e_server: object,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        provider_started = asyncio.Event()
+        release_provider = asyncio.Event()
+
+        async def delayed_generate(
+            self: SeedUnderstandingService, request: object
+        ) -> tuple[ChatCompletionProviderResponse, str | None]:
+            provider_started.set()
+            await release_provider.wait()
+            return (
+                ChatCompletionProviderResponse.model_validate(
+                    {
+                        "id": "chatcmpl-background",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": {"role": "assistant", "content": "done"},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        "usage": {
+                            "prompt_tokens": 1,
+                            "completion_tokens": 1,
+                            "total_tokens": 2,
+                        },
+                    }
+                ),
+                "req-background",
+            )
+
+        monkeypatch.setattr(SeedUnderstandingService, "generate", delayed_generate)
+
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with Client(mcp) as client:
+            task = await call_tool_task(
+                client,
+                "seed_understand",
+                {"input": {"prompt": "Analyze the video"}},
+            )
+            await asyncio.wait_for(provider_started.wait(), timeout=5)
+
+            release_provider.set()
+            result = await task.result()
+
+        assert not result.is_error
+        assert result.structured_content["choices"][0]["content"] == "done"
+
+
 class TestResourceTemplates:
     """Verify resource templates are registered and discoverable."""
 
@@ -179,7 +276,8 @@ class TestSeedreamGenerateImageE2E:
                 return_value=_mock_seedream_response(img_b64=img_b64, output_format="png")
             )
             async with Client(mcp) as client:
-                result = await client.call_tool(
+                result = await _call_background_tool(
+                    client,
                     "seedream_generate_image",
                     {"input": {"prompt": "a red circle"}},
                 )
@@ -206,7 +304,8 @@ class TestSeedreamGenerateImageE2E:
                 return_value=_mock_seedream_response(url=provider_url)
             )
             async with Client(mcp) as client:
-                result = await client.call_tool(
+                result = await _call_background_tool(
+                    client,
                     "seedream_generate_image",
                     {"input": {"prompt": "a blue square", "persist": False}},
                 )
@@ -228,7 +327,8 @@ class TestSeedreamGenerateImageE2E:
                 return_value=_mock_seedream_response(img_b64=img_b64, output_format="png")
             )
             async with Client(mcp) as client:
-                result = await client.call_tool(
+                result = await _call_background_tool(
+                    client,
                     "seedream_generate_image",
                     {"input": {"prompt": "a green triangle"}},
                 )
@@ -260,7 +360,8 @@ class TestSeedreamGenerateImageE2E:
                 )
             )
             async with Client(mcp) as client:
-                result = await client.call_tool(
+                result = await _call_background_tool(
+                    client,
                     "seedream_generate_image",
                     {"input": {"prompt": "test"}},
                     raise_on_error=False,
@@ -277,7 +378,8 @@ class TestSeedreamGenerateImageE2E:
         mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
 
         async with Client(mcp) as client:
-            result = await client.call_tool(
+            result = await _call_background_tool(
+                client,
                 "seedream_generate_image",
                 {"input": {"prompt": "test", "max_images": 3}},
                 raise_on_error=False,
@@ -306,7 +408,8 @@ class TestSeedreamGenerateImageE2E:
                 return_value=_mock_seedream_response(url=provider_url)
             )
             async with Client(mcp) as client:
-                result = await client.call_tool(
+                result = await _call_background_tool(
+                    client,
                     "seedream_generate_image",
                     {"input": {"prompt": "a purple star", "persist": True}},
                 )
@@ -372,7 +475,8 @@ class TestSeedAudioE2E:
         monkeypatch.setattr(SeedAudioService, "close", mock_close)
 
         async with Client(mcp) as client:
-            result = await client.call_tool(
+            result = await _call_background_tool(
+                client,
                 "seed_audio_generate",
                 {"input": {"text_prompt": "a short ambient scene"}},
             )
@@ -426,7 +530,8 @@ class TestSeedAudioE2E:
         monkeypatch.setattr(SeedAudioService, "close", mock_close)
 
         async with Client(mcp) as client:
-            result = await client.call_tool(
+            result = await _call_background_tool(
+                client,
                 "seed_audio_generate",
                 {"input": {"text_prompt": "a short ambient scene"}},
                 raise_on_error=False,
@@ -492,7 +597,8 @@ class TestSeedanceLifecycleE2E:
             "PchI7wAAAABJRU5ErkJggg=="
         )
         async with Client(mcp) as client:
-            created = await client.call_tool(
+            created = await _call_background_tool(
+                client,
                 "seedance_create_task",
                 {
                     "input": {
@@ -514,6 +620,19 @@ class TestSeedanceLifecycleE2E:
                 "seedance_get_task",
                 {"input": {"task_id": task.id, "persist_output": False}},
             )
+            async with _foreground_client(mcp) as foreground_client:
+                with pytest.raises(
+                    ToolError, match="persist_output=true requires task-augmented execution"
+                ):
+                    await foreground_client.call_tool(
+                        "seedance_get_task",
+                        {"input": {"task_id": task.id}},
+                    )
+            background_fetched = await _call_background_tool(
+                client,
+                "seedance_get_task",
+                {"input": {"task_id": task.id}},
+            )
             listed = await client.call_tool("seedance_list_tasks", {"input": {}})
             cancelled = await client.call_tool(
                 "seedance_cancel_or_delete_task",
@@ -530,6 +649,7 @@ class TestSeedanceLifecycleE2E:
         assert not created.is_error
         assert created.structured_content["task_id"] == task.id
         assert fetched.structured_content["status"] == "queued"
+        assert background_fetched.structured_content["status"] == "queued"
         assert listed.structured_content["total"] == 1
         assert listed.structured_content["tasks"][0]["task_id"] == task.id
         assert cancelled.structured_content["mode"] == "cancel"
@@ -568,7 +688,8 @@ class TestVariationToolsE2E:
         monkeypatch.setattr(SeedAudioService, "close", mock_close)
 
         async with Client(mcp) as client:
-            result = await client.call_tool(
+            result = await _call_background_tool(
+                client,
                 "seed_audio_generate_variations",
                 {"input": {"text_prompt": "gentle rain", "variations": 2}},
             )
@@ -588,7 +709,8 @@ class TestVariationToolsE2E:
                 return_value=_mock_seedream_response(img_b64=image_b64)
             )
             async with Client(mcp) as client:
-                result = await client.call_tool(
+                result = await _call_background_tool(
+                    client,
                     "seedream_generate_image_variations",
                     {
                         "input": {
@@ -626,7 +748,8 @@ class TestVariationToolsE2E:
         )
 
         async with Client(mcp) as client:
-            result = await client.call_tool(
+            result = await _call_background_tool(
+                client,
                 "seedance_create_task_variations",
                 {
                     "input": {

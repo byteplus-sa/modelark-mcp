@@ -28,34 +28,30 @@ import truststore
 
 truststore.inject_into_ssl()
 
-from _smoke_context import SmokeContext, require_tool_success  # noqa: E402
+from _smoke_context import SmokeClient, require_tool_success, smoke_session  # noqa: E402
 
 from modelark_mcp.config.env import get_settings  # noqa: E402
-from modelark_mcp.runtime import (  # noqa: E402
-    RuntimeServices,
-    close_runtime_services,
-    create_runtime_services,
-)
 from modelark_mcp.tools.seed_audio_generate import (  # noqa: E402
     SeedAudioGenerateInput,
-    seed_audio_generate,
+    SeedAudioGenerateOutput,
 )
 from modelark_mcp.tools.seedance_create_task import (  # noqa: E402
     SeedanceCreateTaskInput,
+    SeedanceCreateTaskOutput,
     SeedanceImageInput,
-    seedance_create_task,
 )
 from modelark_mcp.tools.seedance_get_task import (  # noqa: E402
     SeedanceGetTaskInput,
-    seedance_get_task,
+    SeedanceTaskOutput,
 )
 from modelark_mcp.tools.seedream_generate_image import (  # noqa: E402
     SeedreamGenerateInput,
-    seedream_generate_image,
+    SeedreamGenerateOutput,
 )
 
 if TYPE_CHECKING:
     from modelark_mcp.artifacts.store import ArtifactStore
+    from modelark_mcp.runtime import RuntimeServices
 
 ARTIFACTS_DIR = Path(".artifacts")
 
@@ -66,7 +62,7 @@ def header(title: str) -> None:
     print(f"{'=' * 60}\n")
 
 
-async def test_image_generation(ctx: SmokeContext, store: ArtifactStore) -> dict[str, str]:
+async def test_image_generation(ctx: SmokeClient, store: ArtifactStore) -> dict[str, str]:
     """Generate an image via seedream_generate_image and verify the artifact."""
     header("Seedream: Image Generation")
     print("Generating image: 'A serene mountain landscape at sunset, digital art'...")
@@ -74,14 +70,15 @@ async def test_image_generation(ctx: SmokeContext, store: ArtifactStore) -> dict
     print("  Size: 1024x1024")
 
     result = require_tool_success(
-        await seedream_generate_image(
+        await ctx.call(
+            "seedream_generate_image",
             SeedreamGenerateInput(
                 prompt="A serene mountain landscape at sunset, digital art",
                 size="1024x1024",
                 response_format="url",
                 persist=True,
             ),
-            ctx,
+            SeedreamGenerateOutput,
         )
     )
 
@@ -115,13 +112,14 @@ async def test_image_generation(ctx: SmokeContext, store: ArtifactStore) -> dict
     return {"image": artifact.id}
 
 
-async def test_audio_generation(ctx: SmokeContext, store: ArtifactStore) -> dict[str, str]:
+async def test_audio_generation(ctx: SmokeClient, store: ArtifactStore) -> dict[str, str]:
     """Generate audio via seed_audio_generate and verify the artifact."""
     header("Seed Audio: Audio Generation")
     print("Generating audio: 'Welcome to the ModelArk Seed Multimodal MCP Server...'")
 
     result = require_tool_success(
-        await seed_audio_generate(
+        await ctx.call(
+            "seed_audio_generate",
             SeedAudioGenerateInput(
                 text_prompt=(
                     "Welcome to the ModelArk Seed Multimodal MCP Server. "
@@ -130,7 +128,7 @@ async def test_audio_generation(ctx: SmokeContext, store: ArtifactStore) -> dict
                 ),
                 persist=True,
             ),
-            ctx,
+            SeedAudioGenerateOutput,
         )
     )
 
@@ -162,7 +160,7 @@ async def test_audio_generation(ctx: SmokeContext, store: ArtifactStore) -> dict
 
 
 async def test_video_generation_with_image(
-    ctx: SmokeContext,
+    ctx: SmokeClient,
     runtime: RuntimeServices,
 ) -> dict[str, str]:
     """Create a Seedance video task using a generated image as reference."""
@@ -171,14 +169,15 @@ async def test_video_generation_with_image(
     # Step 1: Generate a reference image.
     print("Step 1: Generating reference image...")
     image_result = require_tool_success(
-        await seedream_generate_image(
+        await ctx.call(
+            "seedream_generate_image",
             SeedreamGenerateInput(
                 prompt="A fluffy orange cat sitting on a garden path, photorealistic",
                 size="1024x1024",
                 response_format="b64_json",
                 persist=True,
             ),
-            ctx,
+            SeedreamGenerateOutput,
         )
     )
 
@@ -198,7 +197,8 @@ async def test_video_generation_with_image(
     print("  Duration: 5s")
 
     create_result = require_tool_success(
-        await seedance_create_task(
+        await ctx.call(
+            "seedance_create_task",
             SeedanceCreateTaskInput(
                 prompt="The cat walks forward through the garden, gentle movement, warm sunlight",
                 images=[
@@ -212,10 +212,11 @@ async def test_video_generation_with_image(
                 resolution="480p",
                 duration=5,
             ),
-            ctx,
+            SeedanceCreateTaskOutput,
         )
     )
 
+    ctx.save_provider_ids(ARTIFACTS_DIR, [create_result.task_id])
     print(f"\n  Task ID: {create_result.task_id}")
     print(f"  Status: {create_result.status}")
     print(f"  Poll after: {create_result.recommended_poll_after_ms}ms")
@@ -233,9 +234,11 @@ async def test_video_generation_with_image(
         print(f"  [{elapsed}s] Polling task {task_id}...")
 
         result = require_tool_success(
-            await seedance_get_task(
-                SeedanceGetTaskInput(task_id=task_id, persist_output=True),
-                ctx,
+            await ctx.call(
+                "seedance_get_task",
+                SeedanceGetTaskInput(task_id=task_id, persist_output=False),
+                SeedanceTaskOutput,
+                background=False,
             )
         )
 
@@ -260,24 +263,12 @@ async def test_video_generation_with_image(
     if final_result.error:
         print(f"  Error: {final_result.error}")
 
-    # If video wasn't persisted during polling, try once more explicitly
-    # with a fresh context (the cache may have been populated with None).
-    if not final_result.video and final_result.status == "succeeded":
-        print("\n  Video not persisted during polling — retrying with fresh context...")
-        # Clear the runtime-owned cache for this task to force re-download.
-        await runtime.task_artifact_cache.pop(task_id)
-
-        retry_ctx = SmokeContext(lifespan_context={"runtime": runtime})
-        final_result = require_tool_success(
-            await seedance_get_task(
-                SeedanceGetTaskInput(task_id=task_id, persist_output=True),
-                retry_ctx,
-            )
+    if final_result.status == "succeeded":
+        final_result = await ctx.call(
+            "seedance_get_task",
+            SeedanceGetTaskInput(task_id=task_id, persist_output=True),
+            SeedanceTaskOutput,
         )
-        if retry_ctx.messages:
-            print(f"  Context messages: {retry_ctx.messages}")
-        if final_result.status != "succeeded":
-            print(f"  Retry status: {final_result.status}")
 
     if final_result.video:
         artifact = final_result.video
@@ -356,11 +347,9 @@ async def main() -> int:
     print(f"Seedance model: {settings.seedance_default_model}")
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    runtime = await create_runtime_services(settings)
-    ctx = SmokeContext(lifespan_context={"runtime": runtime})
 
     results: dict[str, str] = {}
-    try:
+    async with smoke_session(settings) as (ctx, runtime):
         # 1. Image generation
         try:
             results.update(await test_image_generation(ctx, runtime.artifact_store))
@@ -393,8 +382,6 @@ async def main() -> int:
 
         # 4. Verify all artifacts
         artifacts_verified = await verify_artifacts(results, runtime.artifact_store)
-    finally:
-        await close_runtime_services(runtime)
 
     # Summary
     header("Summary")

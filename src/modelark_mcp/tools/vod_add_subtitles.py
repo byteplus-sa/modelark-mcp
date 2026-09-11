@@ -18,6 +18,7 @@ from modelark_mcp.providers.vod_mediakit.subtitles import VodMediaKitSubtitleBur
 from modelark_mcp.runtime import get_principal, get_runtime
 from modelark_mcp.security.url_policy import UrlValidationError, validate_url
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log
 
 HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
 SubtitleFont = Literal[
@@ -137,7 +138,8 @@ async def vod_add_subtitles(
     Returns an asynchronous task ID for vod_get_subtitle_addition_task. When
     both subtitle_url and subtitles are supplied, MediaKit uses subtitle_url.
     The request is not automatically retried after ambiguous failures; supply
-    and reuse client_token when reconciling a timed-out submission.
+    and reuse client_token when reconciling a timed-out submission. Requires MCP
+    task-augmented execution for submission.
     """
     runtime = get_runtime(ctx)
     if not runtime.settings.has_vod_mediakit:
@@ -181,13 +183,15 @@ async def vod_add_subtitles(
     )
     owner = get_principal(ctx)
     service = VodMediaKitSubtitleBurnInService()
-    await ctx.info("Starting VOD AI MediaKit subtitle burn-in")
+    await context_log(ctx, "info", "Starting VOD AI MediaKit subtitle burn-in")
     await ctx.report_progress(progress=20, total=100)
     try:
         async with runtime.provider_limiters.acquire("vod-mediakit", owner):
             submission = await service.submit(request)
     except ProviderError as exc:
-        await ctx.error(f"VOD AI MediaKit subtitle burn-in submission failed: {exc.message}")
+        await context_log(
+            ctx, "error", f"VOD AI MediaKit subtitle burn-in submission failed: {exc.message}"
+        )
         return provider_error_result(exc)
     finally:
         await service.close()

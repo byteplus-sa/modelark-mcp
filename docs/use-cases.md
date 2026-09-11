@@ -1,8 +1,13 @@
 # Use Cases
 
-The ModelArk Seed MCP server exposes BytePlus multimodal generation through
-ten MCP tools (nine core plus an optional media upload helper). Here are
-common scenarios and how to achieve them.
+The ModelArk Seed MCP server exposes a conditional multimodal tool surface.
+Here are common scenarios and how to achieve them.
+
+The JSON blocks below show tool input payloads. Invoke generation, variation,
+transcription, upload, understanding, and provider-submission tools with MCP
+task augmentation. For Seedance, Seed 3D, and MediaKit retrieval, poll in
+foreground with `persist_output=false`, then use optional task augmentation
+with `persist_output=true` when downloading a completed output.
 
 ## 1. Text-to-Image Generation
 
@@ -171,7 +176,9 @@ Create an async video generation task.
 }
 ```
 
-Returns a task ID. Poll for completion with `seedance_get_task`.
+The create call returns an MCP task ID. Poll `tasks/get` until terminal, read
+the provider task ID from its result, then pass that provider ID to
+`seedance_get_task`.
 
 ## 10. Polling for Video Completion
 
@@ -181,14 +188,16 @@ Check the status of a video generation task.
 
 ```json
 {
-  "task_id": "cgt-20260721134956-h5cz9",
-  "persist_output": true
+  "task_id": "provider-task-abc123",
+  "persist_output": false
 }
 ```
 
-On first successful retrieval, the video is automatically downloaded and
-persisted as a durable artifact. Subsequent polls return the cached
-artifact without re-downloading.
+Use `persist_output=false` for foreground status polling. To persist the
+completed output, run the retrieval through an MCP task with
+`persist_output=true` (or omit the field) after the provider task reaches a
+terminal state; subsequent polls return the cached artifact without
+re-downloading.
 
 ## 11. First/Last Frame Video Generation
 
@@ -242,7 +251,9 @@ Create multiple video tasks with different prompts.
 }
 ```
 
-Returns multiple task IDs. Poll each with `seedance_get_task`.
+The variations call returns an MCP task ID. Poll `tasks/get` until terminal,
+read the per-variation provider task IDs from its result, then pass each
+provider ID to `seedance_get_task`.
 
 ## 13. List Recent Video Tasks
 
@@ -288,7 +299,8 @@ Delete (terminal):
 
 Generate a reference image, then use it as input for video generation.
 
-1. Generate an image:
+1. Generate an image as an MCP background task, then poll `tasks/get` until
+   terminal and read its result:
 
 ```
 seedream_generate_image({
@@ -299,7 +311,9 @@ seedream_generate_image({
 })
 ```
 
-2. Use the generated image (as base64) for video:
+2. Use the generated image (as base64) to create a video task with MCP task
+   metadata. Poll the returned MCP task with `tasks/get` until terminal and
+   read its provider task ID from the result:
 
 ```
 seedance_create_task({
@@ -315,10 +329,10 @@ seedance_create_task({
 })
 ```
 
-3. Poll for video completion:
+3. Poll for video completion in the foreground:
 
 ```
-seedance_get_task({"task_id": "<task_id from step 2>"})
+seedance_get_task({"task_id": "<provider task ID from terminal tasks/get>", "persist_output": false})
 ```
 
 ## 16. Batch Storyboard with Seedream

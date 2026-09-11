@@ -30,6 +30,7 @@ from modelark_mcp.providers.retry import call_with_retry
 from modelark_mcp.runtime import billed_provider_slot, get_principal, get_runtime
 from modelark_mcp.tools._cost import log_cost_estimate
 from modelark_mcp.tools._errors import provider_error_result
+from modelark_mcp.tools._task_execution import context_log, persistence_requires_task
 
 
 class Seed3DImageInput(MediaSource):
@@ -55,11 +56,14 @@ class Seed3DGetTaskInput(BaseModel):
 
     task_id: str = Field(
         ...,
-        description="The task ID returned by the corresponding 3D create task tool.",
+        description="Provider task ID from the task-augmented result of the corresponding 3D create task tool.",
     )
     persist_output: bool = Field(
         True,
-        description="Whether to copy provider output URLs into durable artifact storage on first successful retrieval.",
+        description=(
+            "Whether to copy provider output URLs into durable artifact storage on first successful retrieval. "
+            "The default true requires task-augmented execution; use false for a foreground status check."
+        ),
     )
 
 
@@ -253,7 +257,7 @@ async def execute_seed3d_create(
         ):
             task_id, request_id = await call_with_retry(lambda: service.create_task(request))
     except ProviderError as exc:
-        await ctx.error(f"3D task creation failed: {exc.message}")
+        await context_log(ctx, "error", f"3D task creation failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()
@@ -275,8 +279,11 @@ async def seed3d_get_task_impl(
     input: Seed3DGetTaskInput, ctx: Context, family: str
 ) -> Seed3DTaskOutput | ToolResult:
     """Retrieve a Seed3D task and persist the generated 3D file on success."""
+    task_error = persistence_requires_task(ctx, input.persist_output)
+    if task_error is not None:
+        return task_error
     label = _family_label(family)
-    await ctx.info(f"Retrieving {label} task {input.task_id}")
+    await context_log(ctx, "info", f"Retrieving {label} task {input.task_id}")
     await ctx.report_progress(progress=20, total=100)
     runtime = get_runtime(ctx)
     owner = get_principal(ctx)
@@ -286,7 +293,7 @@ async def seed3d_get_task_impl(
     try:
         task, request_id = await call_with_retry(lambda: service.get_task(input.task_id))
     except ProviderError as exc:
-        await ctx.error(f"Failed to retrieve task: {exc.message}")
+        await context_log(ctx, "error", f"Failed to retrieve task: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()
@@ -325,7 +332,7 @@ async def seed3d_get_task_impl(
                         media_type="three_d",
                         error=str(exc),
                     )
-                    await ctx.warning(f"Failed to persist 3D file artifact: {exc}")
+                    await context_log(ctx, "warning", f"Failed to persist 3D file artifact: {exc}")
 
             if task.file_url is None or file_ref is not None:
                 await runtime.task_artifact_cache.set(
@@ -360,7 +367,7 @@ async def seed3d_list_tasks_impl(
 ) -> Seed3DTaskPage | ToolResult:
     """List recent Seed3D tasks for a family."""
     label = _family_label(family)
-    await ctx.info(f"Listing {label} tasks")
+    await context_log(ctx, "info", f"Listing {label} tasks")
     await ctx.report_progress(progress=20, total=100)
     owner = get_principal(ctx)
     owned_task_ids = await get_runtime(ctx).ownership_store.list_task_ids("modelark", owner)
@@ -393,7 +400,7 @@ async def seed3d_list_tasks_impl(
             )
         )
     except ProviderError as exc:
-        await ctx.error(f"Failed to list tasks: {exc.message}")
+        await context_log(ctx, "error", f"Failed to list tasks: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()
@@ -420,8 +427,10 @@ async def seed3d_cancel_or_delete_impl(
 ) -> Seed3DCancelOrDeleteOutput | ToolResult:
     """Cancel (queued) or delete (terminal) a Seed3D task."""
     label = _family_label(family)
-    await ctx.info(
-        f"{label} {input.mode} task {input.task_id} (expected_status={input.expected_status})"
+    await context_log(
+        ctx,
+        "info",
+        f"{label} {input.mode} task {input.task_id} (expected_status={input.expected_status})",
     )
     await ctx.report_progress(progress=20, total=100)
     await get_runtime(ctx).ownership_store.require_owner(
@@ -434,7 +443,7 @@ async def seed3d_cancel_or_delete_impl(
     try:
         task, _ = await call_with_retry(lambda: service.get_task(input.task_id))
     except ProviderError as exc:
-        await ctx.error(f"Failed to fetch task state: {exc.message}")
+        await context_log(ctx, "error", f"Failed to fetch task state: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()
@@ -469,7 +478,7 @@ async def seed3d_cancel_or_delete_impl(
     try:
         request_id = await call_with_retry(lambda: service.delete_task(input.task_id))
     except ProviderError as exc:
-        await ctx.error(f"DELETE failed: {exc.message}")
+        await context_log(ctx, "error", f"DELETE failed: {exc.message}")
         return provider_error_result(exc)
     finally:
         await service.close()

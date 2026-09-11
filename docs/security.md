@@ -308,3 +308,31 @@ with an under-reported size could bypass it. The provider enforces the
 `get_settings()` is `@lru_cache(maxsize=1)`; `refresh_settings()` clears the
 cache. Any auth/host/scope-related env change requires a process restart or
 an explicit `refresh_settings()` call to take effect.
+
+
+## MCP background task boundaries
+
+**MCP task results use the same tenant/principal boundary as provider tasks.**
+`TenantTasksExtension` records task ownership under the `mcp` namespace in the
+runtime ownership database and checks it before get, update, or cancel. JWT mode
+requires the configured tenant claim before accepting a tool call. FastMCP's own
+client/subject namespace remains an additional check, not the application's
+source of tenant isolation. A token for a different tenant cannot retrieve a
+cached media URL even when its OAuth client and subject are identical.
+
+**Authenticated Redis task backends require snapshot encryption at startup.**
+Set `FASTMCP_TASKS_ENCRYPTION_KEY` from a secret manager with at least 32 random
+characters. FastMCP snapshots contain caller tokens and inbound HTTP headers;
+without encryption these would be stored as plaintext. Use backend access
+controls and TLS as well: snapshot encryption does not encrypt every task
+argument or media result. Preserve the same key for retained tasks; replacing it
+makes old snapshots unreadable and their execution fails closed.
+
+Required-task workers atomically claim their MCP task ID in SQLite before
+provider work. Claims survive restarts, so redelivery of an already-started task
+fails with an ambiguous-outcome/reconciliation message instead of automatically
+repeating a billable operation. This is not an exactly-once provider guarantee:
+a new submission has a new ID, and deleting runtime state removes its execution
+history. Keep the single-replica restriction and preserve the database whenever
+retaining a Redis queue. Ownership/execution rows follow the existing state
+retention policy; retained queue state must not outlive that history.
