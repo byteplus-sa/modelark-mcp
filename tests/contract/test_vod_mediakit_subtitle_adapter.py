@@ -9,9 +9,9 @@ import pytest
 import respx
 from pydantic import ValidationError
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
-from modelark_mcp.providers.vod_mediakit.schemas import (
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
+from ark_mcp.providers.vod_mediakit.schemas import (
     VodMediaKitAddSubtitlesRequest,
     VodMediaKitEraseLocation,
     VodMediaKitRemoveSubtitlesRequest,
@@ -20,7 +20,7 @@ from modelark_mcp.providers.vod_mediakit.schemas import (
     VodMediaKitTimeSegment,
     VodMediaKitTimeSegmentFilter,
 )
-from modelark_mcp.providers.vod_mediakit.subtitles import (
+from ark_mcp.providers.vod_mediakit.subtitles import (
     VodMediaKitSubtitleBurnInService,
     VodMediaKitSubtitleRemovalService,
 )

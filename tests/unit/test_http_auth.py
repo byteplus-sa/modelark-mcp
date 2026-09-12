@@ -9,11 +9,11 @@ from fastmcp.server.auth.providers.jwt import RSAKeyPair
 from joserfc import jwk
 from joserfc import jwt as joserfc_jwt
 
-from modelark_mcp.config.env import Settings
-from modelark_mcp.security.http_auth import StrictJWTVerifier, build_auth_provider
+from ark_mcp.config.env import Settings
+from ark_mcp.security.http_auth import StrictJWTVerifier, build_auth_provider
 
 ISSUER = "https://identity.example.com"
-AUDIENCE = "modelark-mcp"
+AUDIENCE = "ark-mcp"
 
 
 @pytest.fixture
@@ -100,7 +100,7 @@ class TestBuildAuthProvider:
             MCP_AUTH_MODE="jwt",
             MCP_JWT_JWKS_URI="https://identity.example.com/.well-known/jwks.json",
             MCP_JWT_ISSUER="https://identity.example.com",
-            MCP_JWT_AUDIENCE="modelark-mcp",
+            MCP_JWT_AUDIENCE="ark-mcp",
         )
         provider = build_auth_provider(settings)
         assert isinstance(provider, StrictJWTVerifier)
@@ -113,7 +113,7 @@ class TestBuildAuthProvider:
             MCP_AUTH_MODE="jwt",
             MCP_JWT_JWKS_URI="https://identity.example.com/.well-known/jwks.json",
             MCP_JWT_ISSUER="https://identity.example.com",
-            MCP_JWT_AUDIENCE="modelark-mcp",
+            MCP_JWT_AUDIENCE="ark-mcp",
             MCP_JWT_PROVIDE_DISCOVERY=True,
             MCP_PUBLIC_BASE_URL="https://mcp.example.com",
             MCP_JWT_SCOPES_SUPPORTED="seedream:generate,vod:enhance",
@@ -128,7 +128,7 @@ class TestBuildAuthProvider:
                 MCP_AUTH_MODE="jwt",
                 MCP_JWT_JWKS_URI="https://identity.example.com/.well-known/jwks.json",
                 MCP_JWT_ISSUER="https://identity.example.com",
-                MCP_JWT_AUDIENCE="modelark-mcp",
+                MCP_JWT_AUDIENCE="ark-mcp",
                 MCP_JWT_PROVIDE_DISCOVERY=True,
             )
 
@@ -139,7 +139,7 @@ class TestBuildAuthProvider:
                 MCP_AUTH_MODE="jwt",
                 MCP_JWT_JWKS_URI="https://identity.example.com/.well-known/jwks.json",
                 MCP_JWT_ISSUER="urn:example:issuer",
-                MCP_JWT_AUDIENCE="modelark-mcp",
+                MCP_JWT_AUDIENCE="ark-mcp",
                 MCP_JWT_PROVIDE_DISCOVERY=True,
                 MCP_PUBLIC_BASE_URL="https://mcp.example.com",
             )
@@ -150,7 +150,7 @@ class TestBuildAuthProvider:
             MCP_AUTH_MODE="jwt",
             MCP_JWT_JWKS_URI="https://identity.example.com/.well-known/jwks.json",
             MCP_JWT_ISSUER="urn:example:issuer",
-            MCP_JWT_AUDIENCE="modelark-mcp",
+            MCP_JWT_AUDIENCE="ark-mcp",
         )
         provider = build_auth_provider(settings)
         assert isinstance(provider, StrictJWTVerifier)

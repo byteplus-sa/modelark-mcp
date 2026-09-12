@@ -14,9 +14,9 @@ from types import SimpleNamespace
 import pytest
 from fastmcp.server.auth import AccessToken
 
-from modelark_mcp.config.env import Settings
-from modelark_mcp.domain.artifacts import ArtifactRef, MediaType
-from modelark_mcp.runtime import (
+from ark_mcp.config.env import Settings
+from ark_mcp.domain.artifacts import ArtifactRef, MediaType
+from ark_mcp.runtime import (
     BudgetExceededError,
     BudgetLedger,
     CostEstimate,
@@ -32,7 +32,7 @@ from modelark_mcp.runtime import (
     create_runtime_services,
     get_principal,
 )
-from modelark_mcp.security.auth_context import AuthContext
+from ark_mcp.security.auth_context import AuthContext
 from tests.fixtures.fake_context import FakeContext
 
 
@@ -408,12 +408,12 @@ async def test_http_principal_comes_from_verified_claims(
         MCP_AUTH_MODE="jwt",
         MCP_JWT_JWKS_URI="https://identity.example.com/jwks.json",
         MCP_JWT_ISSUER="https://identity.example.com",
-        MCP_JWT_AUDIENCE="modelark-mcp",
+        MCP_JWT_AUDIENCE="ark-mcp",
         ARTIFACT_DIR=str(tmp_path / "artifacts"),
     )
     runtime = await create_runtime_services(settings)
     monkeypatch.setattr(
-        "modelark_mcp.runtime.get_access_token",
+        "ark_mcp.runtime.get_access_token",
         lambda: AccessToken(
             token="redacted",
             client_id="client-a",
@@ -489,7 +489,7 @@ class TestStateSweeper:
                 raise
 
         monkeypatch.setattr(
-            "modelark_mcp.runtime._state_sweeper",
+            "ark_mcp.runtime._state_sweeper",
             _fake_sweeper,
         )
 
@@ -709,7 +709,7 @@ class TestArtifactBackendSelection:
         )
         runtime = await create_runtime_services(settings)
         try:
-            from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
+            from ark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
 
             assert isinstance(runtime.artifact_store, FilesystemArtifactStore)
         finally:
@@ -718,7 +718,7 @@ class TestArtifactBackendSelection:
     async def test_object_storage_backend_yields_object_storage_store(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from modelark_mcp.artifacts.object_storage_store import ObjectStorageArtifactStore
+        from ark_mcp.artifacts.object_storage_store import ObjectStorageArtifactStore
 
         fake_gateway = SimpleNamespace(
             upload_bytes=_async_noop(),
@@ -726,7 +726,7 @@ class TestArtifactBackendSelection:
             close=_async_noop(),
         )
         monkeypatch.setattr(
-            "modelark_mcp.artifacts.object_storage_store.make_object_storage_gateway",
+            "ark_mcp.artifacts.object_storage_store.make_object_storage_gateway",
             lambda _settings: fake_gateway,
         )
         settings = Settings(
@@ -780,7 +780,7 @@ class _FakeObjectDownloader:
         max_redirects: int = 5,
     ) -> object:
         del trusted_hosts, max_bytes, max_redirects
-        from modelark_mcp.security.safe_downloader import DownloadedMedia
+        from ark_mcp.security.safe_downloader import DownloadedMedia
 
         return DownloadedMedia(
             body=self._gateway.objects[url.removeprefix("presigned://")],
@@ -796,12 +796,12 @@ class _FakeObjectDownloader:
 def object_store(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[object, _FakeObjectGateway]:
-    from modelark_mcp.artifacts.object_storage_store import ObjectStorageArtifactStore
+    from ark_mcp.artifacts.object_storage_store import ObjectStorageArtifactStore
 
     gateway = _FakeObjectGateway()
     downloader = _FakeObjectDownloader(gateway)
     monkeypatch.setattr(
-        "modelark_mcp.artifacts.object_storage_store.make_object_storage_gateway",
+        "ark_mcp.artifacts.object_storage_store.make_object_storage_gateway",
         lambda _settings: gateway,
     )
     store = ObjectStorageArtifactStore(

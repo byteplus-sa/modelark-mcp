@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from modelark_mcp.config.env import Settings
+from ark_mcp.config.env import Settings
 
 
 class TestSettings:

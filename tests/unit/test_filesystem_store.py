@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore, _is_trusted_host
-from modelark_mcp.artifacts.store import ArtifactPersistenceError
-from modelark_mcp.security.auth_context import AuthContext
-from modelark_mcp.security.safe_downloader import (
+from ark_mcp.artifacts.filesystem_store import FilesystemArtifactStore, _is_trusted_host
+from ark_mcp.artifacts.store import ArtifactPersistenceError
+from ark_mcp.security.auth_context import AuthContext
+from ark_mcp.security.safe_downloader import (
     DownloadedMedia,
     HostPolicy,
     SafeDownloadError,
@@ -318,7 +318,7 @@ async def test_copy_preserves_artifact_size_ceiling(
         downloader=downloader,  # type: ignore[arg-type]
     )
     monkeypatch.setattr(
-        "modelark_mcp.artifacts.filesystem_store.get_media_limits",
+        "ark_mcp.artifacts.filesystem_store.get_media_limits",
         lambda: SimpleNamespace(
             image_max_bytes=4,
             audio_max_bytes=4,

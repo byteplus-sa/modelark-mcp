@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from modelark_mcp.config.env import Settings, get_settings, validate
+from ark_mcp.config.env import Settings, get_settings, validate
 
 
 @pytest.fixture

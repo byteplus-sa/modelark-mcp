@@ -12,10 +12,10 @@ from typing import Any
 import pytest
 from fastmcp.tools import ToolResult
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.modelark.schemas import ChatCompletionProviderResponse
-from modelark_mcp.providers.modelark.understanding import SeedUnderstandingService
-from modelark_mcp.tools.seed_understand import (
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.modelark.schemas import ChatCompletionProviderResponse
+from ark_mcp.providers.modelark.understanding import SeedUnderstandingService
+from ark_mcp.tools.seed_understand import (
     SeedUnderstandInput,
     SeedUnderstandOutput,
     seed_understand,
@@ -253,7 +253,7 @@ class TestSeedUnderstandTool:
         test_env: None,
         fake_ctx: FakeContext,
     ) -> None:
-        from modelark_mcp.domain.media import MediaSourceKind
+        from ark_mcp.domain.media import MediaSourceKind
 
         images = [
             {

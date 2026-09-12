@@ -28,7 +28,7 @@ source:
   - https://github.com/astral-sh/setup-uv
   - https://hub.docker.com/_/python/
 related:
-  - PLAN_MODELARK_SEED_MULTIMODAL_MCP.md
+  - PLAN_ARK_SEED_MULTIMODAL_MCP.md
   - PLAN_PARALLEL_GENERATION.md
 ---
 
@@ -69,7 +69,7 @@ Verified baseline on 2026-07-23:
 - `git diff --check` passes.
 - Pytest reports 389 passed and 18 failed; failures depend on live DNS.
 - The worktree contains 44 modified files, one deletion, and 14 untracked paths.
-- `src/modelark_mcp/artifacts/` is accidentally ignored by `.gitignore` and is
+- `src/ark_mcp/artifacts/` is accidentally ignored by `.gitignore` and is
   absent from `HEAD` even though runtime code imports it.
 - The Docker runtime invokes an unavailable `uv` executable.
 - `pyproject.toml` and `uv.lock` disagree about `cachetools` and `structlog`.
@@ -198,11 +198,11 @@ source directories:
 Then verify these files appear as trackable source paths:
 
 ```text
-src/modelark_mcp/artifacts/__init__.py
-src/modelark_mcp/artifacts/store.py
-src/modelark_mcp/artifacts/filesystem_store.py
-src/modelark_mcp/artifacts/object_store.py
-src/modelark_mcp/artifacts/registry.py
+src/ark_mcp/artifacts/__init__.py
+src/ark_mcp/artifacts/store.py
+src/ark_mcp/artifacts/filesystem_store.py
+src/ark_mcp/artifacts/object_store.py
+src/ark_mcp/artifacts/registry.py
 ```
 
 The registry will be removed in Phase 2 after lifespan injection replaces it;
@@ -238,9 +238,9 @@ worktree changes and keep implementation edits scoped to project files.
 
 ### Phase 0 acceptance
 
-- `git check-ignore src/modelark_mcp/artifacts/filesystem_store.py` returns no
+- `git check-ignore src/ark_mcp/artifacts/filesystem_store.py` returns no
   match.
-- A clean wheel contains every `modelark_mcp.artifacts` module.
+- A clean wheel contains every `ark_mcp.artifacts` module.
 - `uv lock --check` and `uv sync --locked` pass.
 - `uv tree` agrees with the declared direct dependencies.
 
@@ -376,7 +376,7 @@ not rely only on upstream callers.
 
 ### 2.1 Replace mutable module singletons with lifespan services
 
-Create `src/modelark_mcp/runtime.py`:
+Create `src/ark_mcp/runtime.py`:
 
 ```python
 @dataclass(slots=True)
@@ -698,13 +698,13 @@ paths, model IDs, or tenant data.
 
 Add `observability/metrics.py` with low-cardinality metrics:
 
-- `modelark_mcp_tool_requests_total{tool,status}`;
-- `modelark_mcp_tool_duration_seconds{tool}`;
-- `modelark_mcp_provider_requests_total{provider,operation,status}`;
-- `modelark_mcp_provider_duration_seconds{provider,operation}`;
-- `modelark_mcp_artifact_operations_total{operation,status,media_type}`;
-- `modelark_mcp_budget_rejections_total{product}`;
-- `modelark_mcp_retry_attempts_total{provider,operation}`.
+- `ark_mcp_tool_requests_total{tool,status}`;
+- `ark_mcp_tool_duration_seconds{tool}`;
+- `ark_mcp_provider_requests_total{provider,operation,status}`;
+- `ark_mcp_provider_duration_seconds{provider,operation}`;
+- `ark_mcp_artifact_operations_total{operation,status,media_type}`;
+- `ark_mcp_budget_rejections_total{product}`;
+- `ark_mcp_retry_attempts_total{provider,operation}`.
 
 Never label metrics with principal, tenant, prompt, task ID, request ID, model ID,
 or URL. Expose `/metrics` through a custom route and document network-level access
@@ -785,7 +785,7 @@ Use a pinned `uv` builder image/version. In the runtime image, execute the
 installed binary directly instead of invoking absent `uv`:
 
 ```dockerfile
-CMD ["/app/.venv/bin/python", "-m", "modelark_mcp"]
+CMD ["/app/.venv/bin/python", "-m", "ark_mcp"]
 ```
 
 Alternatively use `/app/.venv/bin/fastmcp` only if the module entrypoint cannot
@@ -887,8 +887,8 @@ uv sync --locked
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run mypy src
-uv run pytest tests -q --disable-socket --cov=modelark_mcp --cov-report=term-missing
-uv run bandit -r src/modelark_mcp
+uv run pytest tests -q --disable-socket --cov=ark_mcp --cov-report=term-missing
+uv run bandit -r src/ark_mcp
 uv run pip-audit --strict
 uv run pre-commit run --all-files
 uv build --offline
@@ -898,8 +898,8 @@ Packaging/container verification:
 
 ```bash
 python -m zipfile -l dist/*.whl
-docker build -t modelark-mcp:remediation .
-docker run --rm --name modelark-mcp-remediation modelark-mcp:remediation
+docker build -t ark-mcp:remediation .
+docker run --rm --name ark-mcp-remediation ark-mcp:remediation
 ```
 
 Use an isolated temporary directory and non-production static test tokens for the

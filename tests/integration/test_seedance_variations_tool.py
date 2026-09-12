@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.modelark.seedance import SeedanceService
-from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
-from modelark_mcp.tools.seedance_create_task_variations import (
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.modelark.seedance import SeedanceService
+from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
+from ark_mcp.tools.seedance_create_task_variations import (
     SeedanceVariationsInput,
     SeedanceVariationsOutput,
     seedance_create_task_variations,

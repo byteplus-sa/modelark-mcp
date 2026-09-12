@@ -1,5 +1,5 @@
 ---
-title: Security Hardening Research for ModelArk Seed MCP
+title: Security Hardening Research for Ark Seed MCP
 type: plan
 status: active
 created: 2026-08-29
@@ -32,9 +32,9 @@ related:
 
 # Security Hardening Research
 
-**Research question:** Which security implementations should the ModelArk Seed
+**Research question:** Which security implementations should the Ark Seed
 MCP server adopt to harden its attack surface, given its current posture
-(`docs/security.md`, `src/modelark_mcp/security/`)?
+(`docs/security.md`, `src/ark_mcp/security/`)?
 
 **Method:** Five parallel researcher sub-agents investigated bounded
 sub-questions (MCP-specific threats; SSRF/URL safety; authN/authZ; DoS/rate

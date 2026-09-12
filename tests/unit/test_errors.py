@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
 
 
 class TestNormalizedProviderError:

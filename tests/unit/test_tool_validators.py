@@ -5,22 +5,22 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from modelark_mcp.domain.media import AudioReference, MediaSource, MediaSourceKind
-from modelark_mcp.tools.seed_audio_generate import SeedAudioGenerateInput
-from modelark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
-from modelark_mcp.tools.seedance_2_5_create_task_variations import Seedance25VariationsInput
-from modelark_mcp.tools.seedance_cancel_or_delete_task import (
+from ark_mcp.domain.media import AudioReference, MediaSource, MediaSourceKind
+from ark_mcp.tools.seed_audio_generate import SeedAudioGenerateInput
+from ark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
+from ark_mcp.tools.seedance_2_5_create_task_variations import Seedance25VariationsInput
+from ark_mcp.tools.seedance_cancel_or_delete_task import (
     SeedanceCancelOrDeleteInput,
 )
-from modelark_mcp.tools.seedance_create_task import SeedanceCreateTaskInput
-from modelark_mcp.tools.seedance_create_task_variations import SeedanceVariationsInput
-from modelark_mcp.tools.seedream_edit_image import (
+from ark_mcp.tools.seedance_create_task import SeedanceCreateTaskInput
+from ark_mcp.tools.seedance_create_task_variations import SeedanceVariationsInput
+from ark_mcp.tools.seedream_edit_image import (
     EditCoordinate,
     SeedreamEditInput,
     _coordinate_markup,
 )
-from modelark_mcp.tools.seedream_generate_image import SeedreamGenerateInput
-from modelark_mcp.tools.seedream_generate_image_variations import SeedreamVariationsInput
+from ark_mcp.tools.seedream_generate_image import SeedreamGenerateInput
+from ark_mcp.tools.seedream_generate_image_variations import SeedreamVariationsInput
 
 
 class TestSeedAudioGenerateInput:
@@ -60,7 +60,7 @@ class TestSeedanceCreateTaskInput:
     """Tests for Seedance create task input validation."""
 
     def test_with_images_valid(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceImageInput
+        from ark_mcp.tools.seedance_create_task import SeedanceImageInput
 
         inp = SeedanceCreateTaskInput(
             prompt="A cat",
@@ -70,7 +70,7 @@ class TestSeedanceCreateTaskInput:
         assert len(inp.images or []) == 1
 
     def test_with_videos_valid(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         inp = SeedanceCreateTaskInput(
             prompt="A dog",
@@ -79,7 +79,7 @@ class TestSeedanceCreateTaskInput:
         assert len(inp.videos or []) == 1
 
     def test_blocked_ip_video_url_raises_sanitized_error(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         with pytest.raises(ValidationError) as exc_info:
             SeedanceVideoInput(url="https://10.0.0.1/dog.mp4")
@@ -99,7 +99,7 @@ class TestSeedanceCreateTaskInput:
             SeedanceCreateTaskInput()
 
     def test_prompt_with_video_and_audio_valid(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import (
+        from ark_mcp.tools.seedance_create_task import (
             SeedanceAudioInput,
             SeedanceVideoInput,
         )
@@ -115,7 +115,7 @@ class TestSeedanceCreateTaskInput:
         assert len(inp.audios or []) == 1
 
     def test_audio_only_raises(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceAudioInput
+        from ark_mcp.tools.seedance_create_task import SeedanceAudioInput
 
         with pytest.raises(ValidationError, match="cannot be the sole media input"):
             SeedanceCreateTaskInput(
@@ -123,13 +123,13 @@ class TestSeedanceCreateTaskInput:
             )
 
     def test_audio_input_rejects_image_mime(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceAudioInput
+        from ark_mcp.tools.seedance_create_task import SeedanceAudioInput
 
         with pytest.raises(ValidationError, match="Audio MIME type"):
             SeedanceAudioInput(kind="base64", data="aGVsbG8=", mime_type="image/png")
 
     def test_too_many_images_raises(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceImageInput
+        from ark_mcp.tools.seedance_create_task import SeedanceImageInput
 
         images = [
             SeedanceImageInput(kind="url", url=f"https://example.com/img{i}.png") for i in range(10)
@@ -138,14 +138,14 @@ class TestSeedanceCreateTaskInput:
             SeedanceCreateTaskInput(images=images)
 
     def test_too_many_videos_raises(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         videos = [SeedanceVideoInput(url=f"https://example.com/v{i}.mp4") for i in range(4)]
         with pytest.raises(ValidationError, match="Too many reference videos"):
             SeedanceCreateTaskInput(videos=videos)
 
     def test_duration_out_of_range_raises(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         with pytest.raises(ValidationError):
             SeedanceCreateTaskInput(
@@ -154,7 +154,7 @@ class TestSeedanceCreateTaskInput:
             )
 
     def test_empty_prompt_raises(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         with pytest.raises(ValidationError):
             SeedanceCreateTaskInput(
@@ -163,7 +163,7 @@ class TestSeedanceCreateTaskInput:
             )
 
     def test_prompt_at_max_length_valid(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         inp = SeedanceCreateTaskInput(
             prompt="x" * 32000,
@@ -172,7 +172,7 @@ class TestSeedanceCreateTaskInput:
         assert len(inp.prompt or "") == 32000
 
     def test_prompt_too_long_raises(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         with pytest.raises(ValidationError):
             SeedanceCreateTaskInput(
@@ -182,7 +182,7 @@ class TestSeedanceCreateTaskInput:
 
     def test_ratio_stripped_for_extend_video(self) -> None:
         """Ratio is stripped for extend_video to prevent InvalidParameter.TaskTypeConstraint."""
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         inp = SeedanceCreateTaskInput(
             prompt="extend this video",
@@ -194,7 +194,7 @@ class TestSeedanceCreateTaskInput:
 
     def test_ratio_preserved_for_edit_video(self) -> None:
         """Ratio is not stripped for edit_video."""
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         inp = SeedanceCreateTaskInput(
             prompt="edit this video",
@@ -206,7 +206,7 @@ class TestSeedanceCreateTaskInput:
 
     def test_ratio_preserved_for_auto_task_type(self) -> None:
         """Ratio is not stripped when omni_reference_task_type is omitted."""
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         inp = SeedanceCreateTaskInput(
             prompt="generate a video",
@@ -246,7 +246,7 @@ class TestSeedanceVariationsInput:
     """Tests for Seedance variations input prompt-length validation."""
 
     def test_variation_prompt_at_max_length_valid(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         inp = SeedanceVariationsInput(
             variation_prompts=["x" * 32000],
@@ -256,7 +256,7 @@ class TestSeedanceVariationsInput:
         assert len(inp.variation_prompts[0]) == 32000
 
     def test_variation_prompt_too_long_raises(self) -> None:
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         with pytest.raises(ValidationError):
             SeedanceVariationsInput(
@@ -275,7 +275,7 @@ class TestSeedanceVariationsInput:
 
     def test_inherits_ratio_stripping_for_extend_video(self) -> None:
         """Variations input inherits ratio stripping from base model."""
-        from modelark_mcp.tools.seedance_create_task import SeedanceVideoInput
+        from ark_mcp.tools.seedance_create_task import SeedanceVideoInput
 
         inp = SeedanceVariationsInput(
             variations=2,

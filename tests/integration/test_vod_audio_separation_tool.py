@@ -8,23 +8,23 @@ import pytest
 from fastmcp.tools import ToolResult
 from pydantic import ValidationError
 
-from modelark_mcp.artifacts.store import ArtifactPersistenceError
-from modelark_mcp.domain.artifacts import ArtifactRef
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.vod_mediakit.schemas import (
+from ark_mcp.artifacts.store import ArtifactPersistenceError
+from ark_mcp.domain.artifacts import ArtifactRef
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.vod_mediakit.schemas import (
     SeparateVoiceSubmission,
     SeparateVoiceTask,
 )
-from modelark_mcp.providers.vod_mediakit.separate_voice import (
+from ark_mcp.providers.vod_mediakit.separate_voice import (
     VodMediaKitSeparateVoiceService,
 )
-from modelark_mcp.security.auth_context import AuthContext
-from modelark_mcp.tools.vod_get_audio_separation import (
+from ark_mcp.security.auth_context import AuthContext
+from ark_mcp.tools.vod_get_audio_separation import (
     VodAudioSeparationTaskOutput,
     VodGetAudioSeparationInput,
     vod_get_audio_separation,
 )
-from modelark_mcp.tools.vod_separate_audio import (
+from ark_mcp.tools.vod_separate_audio import (
     VodSeparateAudioInput,
     VodSeparateAudioOutput,
     vod_separate_audio,
@@ -204,7 +204,7 @@ async def test_submit_missing_credential_raises(
     fake_ctx: FakeContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from modelark_mcp.config.env import Settings
+    from ark_mcp.config.env import Settings
 
     settings = Settings(_env_file=None, BYTEPLUS_VOD_MEDIAKIT_API_KEY="")
     assert settings.has_vod_mediakit is False

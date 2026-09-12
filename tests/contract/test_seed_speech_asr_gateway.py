@@ -16,9 +16,9 @@ import httpx
 import pytest
 import respx
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.seed_speech.asr import SeedSpeechAsrService
-from modelark_mcp.providers.seed_speech.asr_http import SeedSpeechAsrHttpGateway
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.seed_speech.asr import SeedSpeechAsrService
+from ark_mcp.providers.seed_speech.asr_http import SeedSpeechAsrHttpGateway
 
 ASR_BASE = "https://voice.test.example.com"
 
@@ -26,7 +26,7 @@ ASR_BASE = "https://voice.test.example.com"
 @pytest.fixture
 def asr_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set env vars so lazily-created gateways use the test base URL."""
-    from modelark_mcp.config.env import get_settings
+    from ark_mcp.config.env import get_settings
 
     monkeypatch.setenv("BYTEPLUS_SEED_SPEECH_API_KEY", "sk-test-asr")
     monkeypatch.setenv("SEED_SPEECH_ASR_BASE_URL", ASR_BASE)

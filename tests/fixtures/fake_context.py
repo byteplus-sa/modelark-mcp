@@ -1,4 +1,4 @@
-"""Test utilities for the ModelArk Seed MCP server.
+"""Test utilities for the Ark Seed MCP server.
 
 Provides a ``FakeContext`` that implements the minimal ``Context`` interface
 needed by tool handlers, without requiring a live MCP connection.

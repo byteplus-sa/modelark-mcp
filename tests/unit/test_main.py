@@ -1,11 +1,11 @@
-"""Entrypoint dispatch tests for ``python -m modelark_mcp``."""
+"""Entrypoint dispatch tests for ``python -m ark_mcp``."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import modelark_mcp.__main__ as entrypoint
+import ark_mcp.__main__ as entrypoint
 
 
 def test_main_runs_stdio_transport(monkeypatch) -> None:

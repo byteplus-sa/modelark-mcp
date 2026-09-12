@@ -23,7 +23,7 @@ source:
   - https://docs.byteplus.com/en/docs/ModelArk/2314182
   - https://docs.byteplus.com/en/docs/ModelArk/2310467
 related:
-  - "[[PLAN_MODELARK_SEED_MULTIMODAL_MCP]]"
+  - "[[PLAN_ARK_SEED_MULTIMODAL_MCP]]"
 ---
 
 <!-- markdownlint-disable MD013 MD025 -->
@@ -33,7 +33,7 @@ related:
 ## Outcome
 
 Add two async 3D generation model families — **Hyper3D** (`hyper3d`) and
-**Hitem3d** (`hitem3d`) — to the ModelArk Seed Multimodal MCP server. Each
+**Hitem3d** (`hitem3d`) — to the Ark Seed Multimodal MCP server. Each
 family exposes a full task lifecycle mirroring Seedance:
 
 - `hyper3d_create_task`, `hyper3d_get_task`, `hyper3d_list_tasks`,
@@ -109,7 +109,7 @@ DELETE semantics (identical to Seedance): `queued`→cancel; `running` and
 
 ## Implementation
 
-### 1. Config — `src/modelark_mcp/config/env.py`
+### 1. Config — `src/ark_mcp/config/env.py`
 
 ```python
 class Seed3DFamily(StrEnum):
@@ -155,7 +155,7 @@ empty, build it from `hyper3d_default_model` (family HYPER3D) and
 `hitem3d_default_model` (family HITEM3D). Add both to the duplicate-ID /
 default-missing check loop.
 
-### 2. Capability registry — `src/modelark_mcp/config/model_capabilities.py`
+### 2. Capability registry — `src/ark_mcp/config/model_capabilities.py`
 
 Add `ModelFamily.SEED3D_HYPER3D = "seed3d_hyper3d"` and
 `ModelFamily.SEED3D_HITEM3D = "seed3d_hitem3d"`.
@@ -179,7 +179,7 @@ Build `_seed3d_capabilities()` keyed by model ID from
 False, 4 images, `("obj","glb","stl","fbx","usdz")`, no seed). Expose
 `get_seed3d_capabilities`, `list_seed3d_models` on `CapabilityRegistry`.
 
-### 3. Provider schemas — `src/modelark_mcp/providers/modelark/schemas.py`
+### 3. Provider schemas — `src/ark_mcp/providers/modelark/schemas.py`
 
 Add a Seed3D section:
 
@@ -225,7 +225,7 @@ class Seed3DTaskListResponse(BaseModel):
     total: int = 0
 ```
 
-### 4. Provider service — `src/modelark_mcp/providers/modelark/seed3d.py`
+### 4. Provider service — `src/ark_mcp/providers/modelark/seed3d.py`
 
 `Seed3DService` mirroring `SeedanceService` (create/get/list/delete against
 `/contents/generations/tasks`), plus:
@@ -237,13 +237,13 @@ class Seed3DTaskListResponse(BaseModel):
   comma-joined `[a,b,c]`.
 - `to_task_summary`, `extract_usage`, `get_created_at`, `get_updated_at`.
 
-### 5. Domain models — `src/modelark_mcp/domain/models.py`
+### 5. Domain models — `src/ark_mcp/domain/models.py`
 
 Add `Seed3DTaskStatus` (with `_missing_` → UNKNOWN), `Seed3DTaskError`,
 `Seed3DTaskUsage`, `Seed3DTaskSummary`, `Seed3DTaskSettings`
 (`file_format`, `subdivision_level` — both optional, `extra="allow"`).
 
-### 6. Artifacts — `src/modelark_mcp/domain/artifacts.py`
+### 6. Artifacts — `src/ark_mcp/domain/artifacts.py`
 
 Add `MediaType.THREE_D = "three_d"`.
 
@@ -260,7 +260,7 @@ Add `MediaType.THREE_D = "three_d"`.
 Persistence in get-tools uses `mime_type="application/zip"` (the provider
 packs the generated 3D file into a zip).
 
-### 7. Tools — `src/modelark_mcp/tools/`
+### 7. Tools — `src/ark_mcp/tools/`
 
 Shared module `_seed3d_shared.py`:
 
@@ -292,13 +292,13 @@ Eight tool modules:
 Each tool module exports `TOOL_ANNOTATIONS` and its output model (create
 tools export their own; lifecycle tools re-export shared output models).
 
-### 8. Cost — `src/modelark_mcp/tools/_cost.py`
+### 8. Cost — `src/ark_mcp/tools/_cost.py`
 
 Add `COST_PER_3D_TASK_HYPER3D = 0.25` and `COST_PER_3D_TASK_HITEM3D = 1.0`
 (conservative USD estimates; provider bills in CNY/token). Add a `"3d"`
 branch in `estimate_cost` keyed on `model_id`.
 
-### 9. Server registration — `src/modelark_mcp/server.py`
+### 9. Server registration — `src/ark_mcp/server.py`
 
 After the ModelArk block, add:
 
@@ -318,7 +318,7 @@ if settings.has_seed3d:
   model binding vars.
 - `README.md`: mention 3D generation.
 - `.env.example`: add the new vars (flag default commented `false`).
-- `.agents/skills/modelark-mcp/SKILL.md`: add 3D generation section and
+- `.agents/skills/ark-mcp/SKILL.md`: add 3D generation section and
   registration rule (requires `BYTEPLUS_MODELARK_3D_ENABLED=true`).
 
 ### 11. Tests

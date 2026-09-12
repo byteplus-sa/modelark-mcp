@@ -14,9 +14,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from modelark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
-from modelark_mcp.security.auth_context import AuthContext
-from modelark_mcp.tools.seed_media_get_artifact import (
+from ark_mcp.artifacts.filesystem_store import FilesystemArtifactStore
+from ark_mcp.security.auth_context import AuthContext
+from ark_mcp.tools.seed_media_get_artifact import (
     SeedMediaGetArtifactInput,
     SeedMediaGetArtifactOutput,
     seed_media_get_artifact,
@@ -36,11 +36,11 @@ def _ctx_for(
     monkeypatch: pytest.MonkeyPatch,
 ) -> FakeContext:
     monkeypatch.setattr(
-        "modelark_mcp.tools.seed_media_get_artifact.get_runtime",
+        "ark_mcp.tools.seed_media_get_artifact.get_runtime",
         lambda _ctx: SimpleNamespace(artifact_store=store),
     )
     monkeypatch.setattr(
-        "modelark_mcp.tools.seed_media_get_artifact.get_principal",
+        "ark_mcp.tools.seed_media_get_artifact.get_principal",
         lambda _ctx: AuthContext(principal_id=principal_id, tenant_id=tenant_id),
     )
     return FakeContext()

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from modelark_mcp.domain.artifacts import ArtifactRef
-from modelark_mcp.domain.models import VariationResult, VariationSummary
+from ark_mcp.domain.artifacts import ArtifactRef
+from ark_mcp.domain.models import VariationResult, VariationSummary
 
 
 class TestVariationResult:

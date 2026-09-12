@@ -6,7 +6,7 @@ authentication. Local stdio remains the simplest operating mode.
 ## Build the container
 
 ```bash
-docker build --tag modelark-mcp:latest .
+docker build --tag ark-mcp:latest .
 ```
 
 The image uses pinned Python and uv versions, installs the locked production
@@ -18,17 +18,17 @@ be supplied at runtime.
 
 ```bash
 docker run --detach \
-  --name modelark-mcp \
+  --name ark-mcp \
   --publish 127.0.0.1:3000:3000 \
   --env BYTEPLUS_MODELARK_API_KEY \
   --env BYTEPLUS_SEED_SPEECH_API_KEY \
   --env MCP_JWT_JWKS_URI=https://id.example.com/.well-known/jwks.json \
   --env MCP_JWT_ISSUER=https://id.example.com/ \
-  --env MCP_JWT_AUDIENCE=modelark-mcp \
+  --env MCP_JWT_AUDIENCE=ark-mcp \
   --env MCP_ALLOWED_HOSTS=mcp.example.com,127.0.0.1 \
   --env MCP_ALLOWED_ORIGINS=https://client.example.com \
-  --volume modelark-artifacts:/app/.artifacts \
-  modelark-mcp:latest
+  --volume ark-mcp-artifacts:/app/.artifacts \
+  ark-mcp:latest
 ```
 
 Place a TLS-terminating reverse proxy in front of the loopback-published port.
@@ -60,8 +60,8 @@ implemented. The important container settings are:
 
 ```yaml
 containers:
-  - name: modelark-mcp
-    image: modelark-mcp:latest
+  - name: ark-mcp
+    image: ark-mcp:latest
     ports:
       - name: http
         containerPort: 3000
@@ -71,7 +71,7 @@ containers:
       - {name: MCP_AUTH_MODE, value: jwt}
       - {name: MCP_JWT_JWKS_URI, value: "https://id.example.com/.well-known/jwks.json"}
       - {name: MCP_JWT_ISSUER, value: "https://id.example.com/"}
-      - {name: MCP_JWT_AUDIENCE, value: modelark-mcp}
+      - {name: MCP_JWT_AUDIENCE, value: ark-mcp}
       - {name: MCP_ALLOWED_HOSTS, value: mcp.example.com}
       - {name: MCP_ALLOWED_ORIGINS, value: "https://client.example.com"}
     readinessProbe:

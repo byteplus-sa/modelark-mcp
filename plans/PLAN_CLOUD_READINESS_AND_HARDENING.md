@@ -14,7 +14,7 @@ tags:
   - tests
   - docs
 source:
-  - "Internal security/cloud-readiness audit of modelark-mcp (2026-08-21), grouped findings C1/C2/H1/H2/H3/H4/H5/H8, B1-B13, T1-T4, D1-D8"
+  - "Internal security/cloud-readiness audit of ark-mcp (2026-08-21), grouped findings C1/C2/H1/H2/H3/H4/H5/H8, B1-B13, T1-T4, D1-D8"
 related:
   - plans/PLAN_CODEBASE_GAP_REMEDIATION.md
   - specs/SPEC_VOD_MEDIAKIT_PROVIDER_CONTRACT.md
@@ -22,7 +22,7 @@ related:
 
 # Cloud Readiness and Hardening Implementation Plan
 
-**Goal:** Make the ModelArk Seed MCP server safe and correct under multi-replica cloud
+**Goal:** Make the Ark Seed MCP server safe and correct under multi-replica cloud
 deployment and hostile input: scheduled state TTL sweeps, an object-storage artifact
 backend, strict JWT/transport/auth hardening, guarded provider JSON parsing, correct
 billing/cost guards, SSRF/ASR security fixes, comprehensive regression tests, and
@@ -34,7 +34,7 @@ docs/CI/packaging that match the shipped server.
 - Docs/specs read: [`AGENTS.md`], [`docs/runtime.md`], [`docs/deployment.md`],
   [`docs/security.md`], [`docs/models.md`], [`docs/api-reference.md`], [`docs/tools.md`],
   [`specs/SPEC_VOD_MEDIAKIT_PROVIDER_CONTRACT.md`], [`.agents/skills/writing-plans/SKILL.md`].
-- Code inspected: `src/modelark_mcp/{runtime.py,server.py,__main__.py,config/env.py,
+- Code inspected: `src/ark_mcp/{runtime.py,server.py,__main__.py,config/env.py,
   security/auth_context.py,security/http_auth.py,security/http_middleware.py,
   security/url_policy.py,artifacts/store.py,artifacts/filesystem_store.py,
   providers/object_storage.py,providers/s3/client.py,providers/tos/client.py,
@@ -58,7 +58,7 @@ existing `TaskOwnershipStore`/`TaskArtifactCache` protocols and a new
 move off the pod filesystem when object storage is configured. Enforce TTL by scheduling a
 lifespan sweeper (`asyncio` task inside `build_lifespan`) that calls `delete_expired` and new
 pruning methods. Harden the HTTP surface by sub-classing `FastMCP` so the body/rate-limit
-ASGI middleware is applied in `create_server()` (both `python -m modelark_mcp` and
+ASGI middleware is applied in `create_server()` (both `python -m ark_mcp` and
 `fastmcp run`), and pin JWT algorithm + require `exp` via a `JWTVerifier` subclass.
 
 **Parallelization Summary:** Yes — six lanes with disjoint write scopes. Lanes A (security),
@@ -117,35 +117,35 @@ sequenceDiagram
 
 | Path | Owner | Responsibility | Notes / conflicts |
 | --- | --- | --- | --- |
-| `src/modelark_mcp/security/auth_context.py` | Lane A | Fix `is_local` transport check (B1) | disjoint |
-| `src/modelark_mcp/security/http_auth.py` | Lane A | `StrictJWTVerifier` + pin algorithm (H3) | disjoint |
-| `src/modelark_mcp/security/http_middleware.py` | Lane A | Proxy-aware rate limit key + eviction (H4-class) | read by Lane D for wiring — D starts after A |
-| `src/modelark_mcp/observability/logger.py` | Lane A | Recurse redaction into tuple/set (B11) | disjoint |
-| `src/modelark_mcp/tools/speech_to_text.py` | Lane A | stdio gate + size cap (H6), trusted-host allowlist (H7), Field descriptions (B12), pass one `request_id` per call (B9 tool-half) | B owns `providers/seed_speech/asr.py` half; contract below |
-| `src/modelark_mcp/providers/modelark/seedance.py` | Lane B | Guard `response.json()` (B2); status mapping via tolerant enum (B4) | disjoint from C |
-| `src/modelark_mcp/providers/modelark/seedream.py` | Lane B | Guard `response.json()` (B2); data-URI base64 (B3) | disjoint |
-| `src/modelark_mcp/providers/modelark/understanding.py` | Lane B | Guard `response.json()` (B2) | disjoint |
-| `src/modelark_mcp/domain/models.py` | Lane B | Add `UNKNOWN` + `_missing_` to `SeedanceTaskStatus` (B4) | C must NOT edit this file |
-| `src/modelark_mcp/providers/seed_speech/asr_http.py` | Lane B | Codec/rate from `audio_format` (B7); terminal/missing status → failure (B8) | disjoint |
-| `src/modelark_mcp/providers/seed_speech/asr.py` | Lane B | `transcribe(..., request_id=None)` (B9 provider-half) | A passes it from speech_to_text |
-| `src/modelark_mcp/providers/seed_speech/seed_audio.py` | Lane B | Reject HTTP 200 + `code != 0` (B13) | disjoint |
-| `src/modelark_mcp/providers/vod_mediakit/transcode.py` | Lane B | `_sanitize_task_error` never returns `None` message (B10) | disjoint |
-| `src/modelark_mcp/providers/vod_mediakit/separate_voice.py` | Lane B | Same B10 fallback via shared helper | disjoint |
-| `src/modelark_mcp/tools/seedance_create_task.py` | Lane C | Seedance 2.5 model guard + pass `model_id` to cost (B6) | disjoint |
-| `src/modelark_mcp/tools/seedance_create_task_variations.py` | Lane C | Same B6 guard + `model_id` cost | disjoint |
-| `src/modelark_mcp/tools/seedance_get_task.py` | Lane C | Partial-persist cache never loses `last_frame` (B5) | disjoint |
-| `src/modelark_mcp/tools/_cost.py` | Lane C | Verify `_video_cost_for_model` keyed on `model_id` (no code change expected) | read-only check |
-| `src/modelark_mcp/runtime.py` | Lane D | State factory, sweeper, prune methods (C1/C2/H8) | disjoint |
-| `src/modelark_mcp/artifacts/object_storage_store.py` | Lane D | New `ObjectStorageArtifactStore(ArtifactStore)` (H8) | disjoint |
-| `src/modelark_mcp/artifacts/store.py` | Lane D | Read-only (protocol already complete) | do not change |
-| `src/modelark_mcp/providers/object_storage.py` | Lane D | Factory already correct; only testable surface (T3) | B must NOT touch; E writes tests |
-| `src/modelark_mcp/config/env.py` | Lane D | `STATE_BACKEND`, `artifact_backend` gain `object_storage`, sweep/prune settings | F must NOT touch |
-| `src/modelark_mcp/server.py` | Lane D | `HardenedFastMCP.http_app` middleware (H4), `/ready` uses resolved settings (H5) | contended — D sole owner |
-| `src/modelark_mcp/__main__.py` | Lane D | `stateless_http=True` + `uvicorn_config` graceful shutdown; drop duplicate middleware (H2/H4) | D sole owner |
+| `src/ark_mcp/security/auth_context.py` | Lane A | Fix `is_local` transport check (B1) | disjoint |
+| `src/ark_mcp/security/http_auth.py` | Lane A | `StrictJWTVerifier` + pin algorithm (H3) | disjoint |
+| `src/ark_mcp/security/http_middleware.py` | Lane A | Proxy-aware rate limit key + eviction (H4-class) | read by Lane D for wiring — D starts after A |
+| `src/ark_mcp/observability/logger.py` | Lane A | Recurse redaction into tuple/set (B11) | disjoint |
+| `src/ark_mcp/tools/speech_to_text.py` | Lane A | stdio gate + size cap (H6), trusted-host allowlist (H7), Field descriptions (B12), pass one `request_id` per call (B9 tool-half) | B owns `providers/seed_speech/asr.py` half; contract below |
+| `src/ark_mcp/providers/modelark/seedance.py` | Lane B | Guard `response.json()` (B2); status mapping via tolerant enum (B4) | disjoint from C |
+| `src/ark_mcp/providers/modelark/seedream.py` | Lane B | Guard `response.json()` (B2); data-URI base64 (B3) | disjoint |
+| `src/ark_mcp/providers/modelark/understanding.py` | Lane B | Guard `response.json()` (B2) | disjoint |
+| `src/ark_mcp/domain/models.py` | Lane B | Add `UNKNOWN` + `_missing_` to `SeedanceTaskStatus` (B4) | C must NOT edit this file |
+| `src/ark_mcp/providers/seed_speech/asr_http.py` | Lane B | Codec/rate from `audio_format` (B7); terminal/missing status → failure (B8) | disjoint |
+| `src/ark_mcp/providers/seed_speech/asr.py` | Lane B | `transcribe(..., request_id=None)` (B9 provider-half) | A passes it from speech_to_text |
+| `src/ark_mcp/providers/seed_speech/seed_audio.py` | Lane B | Reject HTTP 200 + `code != 0` (B13) | disjoint |
+| `src/ark_mcp/providers/vod_mediakit/transcode.py` | Lane B | `_sanitize_task_error` never returns `None` message (B10) | disjoint |
+| `src/ark_mcp/providers/vod_mediakit/separate_voice.py` | Lane B | Same B10 fallback via shared helper | disjoint |
+| `src/ark_mcp/tools/seedance_create_task.py` | Lane C | Seedance 2.5 model guard + pass `model_id` to cost (B6) | disjoint |
+| `src/ark_mcp/tools/seedance_create_task_variations.py` | Lane C | Same B6 guard + `model_id` cost | disjoint |
+| `src/ark_mcp/tools/seedance_get_task.py` | Lane C | Partial-persist cache never loses `last_frame` (B5) | disjoint |
+| `src/ark_mcp/tools/_cost.py` | Lane C | Verify `_video_cost_for_model` keyed on `model_id` (no code change expected) | read-only check |
+| `src/ark_mcp/runtime.py` | Lane D | State factory, sweeper, prune methods (C1/C2/H8) | disjoint |
+| `src/ark_mcp/artifacts/object_storage_store.py` | Lane D | New `ObjectStorageArtifactStore(ArtifactStore)` (H8) | disjoint |
+| `src/ark_mcp/artifacts/store.py` | Lane D | Read-only (protocol already complete) | do not change |
+| `src/ark_mcp/providers/object_storage.py` | Lane D | Factory already correct; only testable surface (T3) | B must NOT touch; E writes tests |
+| `src/ark_mcp/config/env.py` | Lane D | `STATE_BACKEND`, `artifact_backend` gain `object_storage`, sweep/prune settings | F must NOT touch |
+| `src/ark_mcp/server.py` | Lane D | `HardenedFastMCP.http_app` middleware (H4), `/ready` uses resolved settings (H5) | contended — D sole owner |
+| `src/ark_mcp/__main__.py` | Lane D | `stateless_http=True` + `uvicorn_config` graceful shutdown; drop duplicate middleware (H2/H4) | D sole owner |
 | `fastmcp.json` | Lane D | Add `boto3` + `tos` to `environment.dependencies` (H1) | F must NOT touch |
 | `tests/**` | Lane E | All new regression tests + T1–T4 | starts after A/B/C/D |
 | `docs/**`, `README.md`, `plans/**` | Lane F | D1–D4, models.md | disjoint from src |
-| `.agents/skills/modelark-mcp/SKILL.md` | Lane F | Presign TTL correction | disjoint |
+| `.agents/skills/ark-mcp/SKILL.md` | Lane F | Presign TTL correction | disjoint |
 | `pyproject.toml` (license + pytest `markers`), `LICENSE`, `Dockerfile`, `.dockerignore`, `.github/workflows/*` | Lane F | D6–D8, dockerignore entries, live-test marker registration | sole owner of `pyproject.toml` — Lane E must not edit it |
 
 **Integration owner:** the main agent owns `server.py` integration, the
@@ -156,7 +156,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task A1: Fix local-principal spoofing (B1)
 
-**Files:** `src/modelark_mcp/security/auth_context.py`
+**Files:** `src/ark_mcp/security/auth_context.py`
 
 **Depends on:** None
 
@@ -174,7 +174,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task A2: Require `exp` and pin algorithm on JWT verifier (H3)
 
-**Files:** `src/modelark_mcp/security/http_auth.py`
+**Files:** `src/ark_mcp/security/http_auth.py`
 
 **Depends on:** None
 
@@ -201,7 +201,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task A3: Proxy-aware rate limit key + always-on bucket eviction (H4, middleware class)
 
-**Files:** `src/modelark_mcp/security/http_middleware.py`
+**Files:** `src/ark_mcp/security/http_middleware.py`
 
 **Depends on:** None
 
@@ -222,7 +222,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task A4: Redaction recurses into tuple/set (B11)
 
-**Files:** `src/modelark_mcp/observability/logger.py`
+**Files:** `src/ark_mcp/observability/logger.py`
 
 **Depends on:** None
 
@@ -237,7 +237,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task A5: speech_to_text hardening (H6, H7, B12, B9 tool-half)
 
-**Files:** `src/modelark_mcp/tools/speech_to_text.py`
+**Files:** `src/ark_mcp/tools/speech_to_text.py`
 
 **Depends on:** None (contract with Task B6 defined below)
 
@@ -248,7 +248,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
   `if settings.mcp_transport != "stdio": raise ValueError("audio_file_path is only supported in stdio transport mode.")`;
   after `p.is_file()` check, reject `p.stat().st_size > _STT_MAX_BYTES`.
 - [ ] Step 2 (H7): Replace `trusted_hosts=lambda _host: True` (line 94) with the shared
-  BytePlus allowlist: `from modelark_mcp.artifacts.filesystem_store import _is_trusted_host`
+  BytePlus allowlist: `from ark_mcp.artifacts.filesystem_store import _is_trusted_host`
   and pass `trusted_hosts=_is_trusted_host`.
 - [ ] Step 3 (B12): Add `Field(description=...)` to `SpeechToTextInput.audio` (line 76) and
   `SpeechToTextInput.options` (line 77).
@@ -263,9 +263,9 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task B1: Guard ModelArk success-path JSON parsing (B2)
 
-**Files:** `src/modelark_mcp/providers/modelark/seedance.py`,
-`src/modelark_mcp/providers/modelark/seedream.py`,
-`src/modelark_mcp/providers/modelark/understanding.py`
+**Files:** `src/ark_mcp/providers/modelark/seedance.py`,
+`src/ark_mcp/providers/modelark/seedream.py`,
+`src/ark_mcp/providers/modelark/understanding.py`
 
 **Depends on:** None
 
@@ -289,7 +289,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task B2: Seedream base64 images as data URIs (B3)
 
-**Files:** `src/modelark_mcp/providers/modelark/seedream.py`
+**Files:** `src/ark_mcp/providers/modelark/seedream.py`
 
 **Depends on:** None
 
@@ -305,7 +305,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task B3: Tolerate unknown Seedance status strings (B4)
 
-**Files:** `src/modelark_mcp/domain/models.py`
+**Files:** `src/ark_mcp/domain/models.py`
 
 **Depends on:** None
 
@@ -323,7 +323,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task B4: ASR submit codec derives from audio_format (B7)
 
-**Files:** `src/modelark_mcp/providers/seed_speech/asr_http.py`
+**Files:** `src/ark_mcp/providers/seed_speech/asr_http.py`
 
 **Depends on:** None
 
@@ -340,7 +340,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task B5: ASR query terminal/missing status must not read as success (B8)
 
-**Files:** `src/modelark_mcp/providers/seed_speech/asr_http.py`
+**Files:** `src/ark_mcp/providers/seed_speech/asr_http.py`
 
 **Depends on:** None
 
@@ -361,7 +361,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task B6: ASR request_id minted once, passed through (B9 provider-half)
 
-**Files:** `src/modelark_mcp/providers/seed_speech/asr.py`
+**Files:** `src/ark_mcp/providers/seed_speech/asr.py`
 
 **Depends on:** None (contract with Task A5)
 
@@ -378,7 +378,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task B7: Reject HTTP 200 with non-zero Seed Audio code (B13)
 
-**Files:** `src/modelark_mcp/providers/seed_speech/seed_audio.py`
+**Files:** `src/ark_mcp/providers/seed_speech/seed_audio.py`
 
 **Depends on:** None
 
@@ -390,15 +390,15 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
   operation="generate_audio", http_status=response.status_code, code=str(body.code),
   message=body.message or f"Seed Audio failed with code {body.code}",
   request_id=log_id, retryable=False, ambiguous_completion=False))` — importing
-  `NormalizedProviderError`/`ProviderError` from `modelark_mcp.domain.errors`.
+  `NormalizedProviderError`/`ProviderError` from `ark_mcp.domain.errors`.
 - [ ] Step 2: Test (Lane E) — extend `tests/contract/test_seed_audio_adapter.py`: a 200 with
   `{"code": 3001, "message": "boom"}` raises `ProviderError` (not a misleading downstream
   `ValueError` from `seed_audio_generate.py:277`); a 200 with `code == 0` returns normally.
 
 ### Task B8: MediaKit failed-task error fallback never None (B10)
 
-**Files:** `src/modelark_mcp/providers/vod_mediakit/transcode.py`,
-`src/modelark_mcp/providers/vod_mediakit/separate_voice.py`
+**Files:** `src/ark_mcp/providers/vod_mediakit/transcode.py`,
+`src/ark_mcp/providers/vod_mediakit/separate_voice.py`
 
 **Depends on:** None
 
@@ -418,15 +418,15 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task C1: Seedance 2.0 create/variations reject 2.5 models and bill correctly (B6)
 
-**Files:** `src/modelark_mcp/tools/seedance_create_task.py`,
-`src/modelark_mcp/tools/seedance_create_task_variations.py`
+**Files:** `src/ark_mcp/tools/seedance_create_task.py`,
+`src/ark_mcp/tools/seedance_create_task_variations.py`
 
 **Depends on:** None
 
 **Can run in parallel with:** A, B, F
 
 - [ ] Step 1: In `seedance_create_task.py`, import `ModelFamily` from
-  `modelark_mcp.config.model_capabilities`; after `caps = registry.get_video_capabilities(...)`
+  `ark_mcp.config.model_capabilities`; after `caps = registry.get_video_capabilities(...)`
   (line 195) raise `ValueError` when `caps.family is ModelFamily.SEEDANCE_2_5`, mirroring
   the 2.5 tool guard at `seedance_2_5_create_task.py:191-196`.
 - [ ] Step 2: Change `log_cost_estimate(product="video", variations=1)` (line 256) to pass
@@ -445,7 +445,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task C2: get_task partial persist never permanently loses last_frame (B5)
 
-**Files:** `src/modelark_mcp/tools/seedance_get_task.py`
+**Files:** `src/ark_mcp/tools/seedance_get_task.py`
 
 **Depends on:** None
 
@@ -468,7 +468,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task D1: State backend selection + artifact backend env (C1/H8 config)
 
-**Files:** `src/modelark_mcp/config/env.py`
+**Files:** `src/ark_mcp/config/env.py`
 
 **Depends on:** None (D internal)
 
@@ -489,7 +489,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task D2: `ObjectStorageArtifactStore` (H8)
 
-**Files:** `src/modelark_mcp/artifacts/object_storage_store.py` (new)
+**Files:** `src/ark_mcp/artifacts/object_storage_store.py` (new)
 
 **Depends on:** D1
 
@@ -522,7 +522,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task D3: Runtime state factory, prune methods, and lifespan sweeper (C1/C2)
 
-**Files:** `src/modelark_mcp/runtime.py`
+**Files:** `src/ark_mcp/runtime.py`
 
 **Depends on:** D1, D2
 
@@ -569,7 +569,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task D4: Server wiring — middleware in create_server + `/ready` uses resolved settings (H4/H5)
 
-**Files:** `src/modelark_mcp/server.py`
+**Files:** `src/ark_mcp/server.py`
 
 **Depends on:** A (finalized `RateLimitMiddleware`), D1
 
@@ -604,7 +604,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task D5: `__main__` stateless HTTP + graceful shutdown; drop duplicate middleware (H2/H4)
 
-**Files:** `src/modelark_mcp/__main__.py`
+**Files:** `src/ark_mcp/__main__.py`
 
 **Depends on:** D4
 
@@ -667,7 +667,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 - [ ] Step 1: Implement every Step-2/3 test listed in Tasks A1–A5, B1–B8, C1–C2, D1–D5,
   asserting behavior (not implementation) as specified per task.
-- [ ] Step 2: Run `uv run pytest --disable-socket --allow-unix-socket --cov=modelark_mcp
+- [ ] Step 2: Run `uv run pytest --disable-socket --allow-unix-socket --cov=ark_mcp
   --cov-report=term-missing` and require every new test to pass and overall coverage to stay
   ≥ 85% (`pyproject.toml:124`).
 
@@ -701,7 +701,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 - [ ] Step 1: Replace the three references (`README.md:173`, `docs/getting-started.md:81`,
   `docs/troubleshooting.md:44`) with the existing `make check-env` /
-  `uv run python -c "from modelark_mcp.config.env import validate; validate()"` command.
+  `uv run python -c "from ark_mcp.config.env import validate; validate()"` command.
 
 ### Task F2: Document the six missing tools + Seedance 2.5 tools (D2/D3)
 
@@ -724,7 +724,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 ### Task F3: Plans hygiene + docs/models.md + SKILL presign TTL (D4 + follow-up)
 
-**Files:** `plans/*.md`, `docs/models.md`, `.agents/skills/modelark-mcp/SKILL.md`
+**Files:** `plans/*.md`, `docs/models.md`, `.agents/skills/ark-mcp/SKILL.md`
 
 **Depends on:** None
 
@@ -741,7 +741,7 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
   `SEEDANCE_2_5 = "seedance_2_5"`, `SEED_2_1_PRO = "seed_2_1_pro"`,
   `SEED_2_1_TURBO = "seed_2_1_turbo"` (see `config/model_capabilities.py:27-38`) and add
   `SEEDANCE_2_5` to the `SeedanceFamily` note (env.py:36-40).
-- [ ] Step 3: Correct `.agents/skills/modelark-mcp/SKILL.md:391` "Presigned URLs expire after
+- [ ] Step 3: Correct `.agents/skills/ark-mcp/SKILL.md:391` "Presigned URLs expire after
   10 minutes (600s)" → default is 1800s (30 min) via `TOS_PRESIGN_TTL_SECONDS`/
   `S3_PRESIGN_TTL_SECONDS` (`env.py:270-274,284-289`).
 
@@ -771,10 +771,10 @@ final reporting (per `references/subagent-execution.md` in the writing-plans ski
 
 | Lane | Agent Role | Write Scope | Task(s) | Can Start After | Conflict Guard |
 | --- | --- | --- | --- | --- | --- |
-| Worker A | `worker` | `src/modelark_mcp/security/**`, `src/modelark_mcp/observability/logger.py`, `src/modelark_mcp/tools/speech_to_text.py` | A1–A5 | Immediately | Must not edit `providers/**`, `server.py`, `domain/models.py`, `runtime.py` |
-| Worker B | `worker` | `src/modelark_mcp/providers/{modelark,seed_speech,vod_mediakit}/**`, `src/modelark_mcp/domain/models.py` | B1–B8 | Immediately | Must not edit `providers/object_storage.py`, `tools/**`, `server.py` |
-| Worker C | `worker` | `src/modelark_mcp/tools/{seedance_create_task.py,seedance_create_task_variations.py,seedance_get_task.py,_cost.py}` | C1–C2 | Immediately | Must not edit `tools/speech_to_text.py`, `domain/models.py`, `providers/**` |
-| Worker D | `worker` | `src/modelark_mcp/{runtime.py,server.py,__main__.py,config/env.py}`, `src/modelark_mcp/artifacts/**`, `src/modelark_mcp/providers/object_storage.py`, `fastmcp.json` | D1–D6 | After A (wires A's finalized `RateLimitMiddleware`; consumes A's speech_to_text `request_id` contract) | Must not edit `security/**`, `domain/models.py`, `tools/speech_to_text.py` |
+| Worker A | `worker` | `src/ark_mcp/security/**`, `src/ark_mcp/observability/logger.py`, `src/ark_mcp/tools/speech_to_text.py` | A1–A5 | Immediately | Must not edit `providers/**`, `server.py`, `domain/models.py`, `runtime.py` |
+| Worker B | `worker` | `src/ark_mcp/providers/{modelark,seed_speech,vod_mediakit}/**`, `src/ark_mcp/domain/models.py` | B1–B8 | Immediately | Must not edit `providers/object_storage.py`, `tools/**`, `server.py` |
+| Worker C | `worker` | `src/ark_mcp/tools/{seedance_create_task.py,seedance_create_task_variations.py,seedance_get_task.py,_cost.py}` | C1–C2 | Immediately | Must not edit `tools/speech_to_text.py`, `domain/models.py`, `providers/**` |
+| Worker D | `worker` | `src/ark_mcp/{runtime.py,server.py,__main__.py,config/env.py}`, `src/ark_mcp/artifacts/**`, `src/ark_mcp/providers/object_storage.py`, `fastmcp.json` | D1–D6 | After A (wires A's finalized `RateLimitMiddleware`; consumes A's speech_to_text `request_id` contract) | Must not edit `security/**`, `domain/models.py`, `tools/speech_to_text.py` |
 | Worker E | `worker` | `tests/**` | E1–E3 | After A, B, C, D | Must not edit `src/**`; must not touch `pyproject.toml` (F owns it, including pytest `markers`) |
 | Worker F | `worker` | `docs/**`, `plans/**`, `README.md`, `.agents/skills/**`, `pyproject.toml` (license + pytest `markers`), `LICENSE`, `Dockerfile`, `.dockerignore`, `.github/workflows/**` | F1–F4 | Immediately | Must not edit `fastmcp.json`, `config/env.py`, `src/**`, `tests/**` |
 
@@ -788,17 +788,17 @@ conflict resolution, full validation, and final reporting.
 ## Validation
 
 - `uv sync` — clean lockfile install (matches `Makefile:40`).
-- `uv run pytest --disable-socket --allow-unix-socket --cov=modelark_mcp --cov-report=term-missing`
+- `uv run pytest --disable-socket --allow-unix-socket --cov=ark_mcp --cov-report=term-missing`
   — full offline suite green, coverage ≥ 85% (`ci.yml:49`, `pyproject.toml:124`).
 - `uv run ruff check src tests scripts` and `uv run ruff format --check src tests scripts`
   — lint + format clean (`Makefile:65-66`, `ci.yml:42-43`).
 - `uv run mypy src` — strict type check clean (`Makefile:72`, `ci.yml:46`).
 - `uv lock --check` — lockfile up to date (`ci.yml:37`).
-- `uv run bandit -q -r src/modelark_mcp` — no new security findings (`ci.yml:52`).
+- `uv run bandit -q -r src/ark_mcp` — no new security findings (`ci.yml:52`).
 - `uv run detect-secrets scan --baseline .secrets.baseline` — no secrets (`ci.yml:58`).
 - `make check-env` — env validation still passes (`Makefile:101`).
 - Smoke: `make start` (stdio) and `MCP_TRANSPORT=http MCP_AUTH_MODE=jwt ... uv run python -m
-  modelark_mcp` then `curl /health` and `curl /ready` return 200; `/ready` provider probes
+  ark_mcp` then `curl /health` and `curl /ready` return 200; `/ready` provider probes
   honor an overridden base URL (Task D4).
 
 ## Documentation And Follow-Up
@@ -808,7 +808,7 @@ conflict resolution, full validation, and final reporting.
   `docs/deployment.md` (state backend boundary + replica=1 guard + sweeper),
   `docs/artifacts.md` (`object_storage` backend), `docs/security.md` (JWT `exp` requirement,
   algorithm pin, proxy-aware rate limiting, STT stdio gate), `docs/api-reference.md` and
-  `docs/tools.md` (Task F2). Update `.agents/skills/modelark-mcp/SKILL.md` tool schemas for
+  `docs/tools.md` (Task F2). Update `.agents/skills/ark-mcp/SKILL.md` tool schemas for
   any changed input models (`speech_to_text` descriptions, Seedance family guard error).
 - Known risks or non-blocking follow-up:
   - Redis/Postgres `STATE_BACKEND` implementations are out of scope — the deliverable is a

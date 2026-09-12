@@ -30,28 +30,28 @@ truststore.inject_into_ssl()
 
 from _smoke_context import SmokeClient, require_tool_success, smoke_session  # noqa: E402
 
-from modelark_mcp.config.env import get_settings  # noqa: E402
-from modelark_mcp.tools.seed_audio_generate import (  # noqa: E402
+from ark_mcp.config.env import get_settings  # noqa: E402
+from ark_mcp.tools.seed_audio_generate import (  # noqa: E402
     SeedAudioGenerateInput,
     SeedAudioGenerateOutput,
 )
-from modelark_mcp.tools.seedance_create_task import (  # noqa: E402
+from ark_mcp.tools.seedance_create_task import (  # noqa: E402
     SeedanceCreateTaskInput,
     SeedanceCreateTaskOutput,
     SeedanceImageInput,
 )
-from modelark_mcp.tools.seedance_get_task import (  # noqa: E402
+from ark_mcp.tools.seedance_get_task import (  # noqa: E402
     SeedanceGetTaskInput,
     SeedanceTaskOutput,
 )
-from modelark_mcp.tools.seedream_generate_image import (  # noqa: E402
+from ark_mcp.tools.seedream_generate_image import (  # noqa: E402
     SeedreamGenerateInput,
     SeedreamGenerateOutput,
 )
 
 if TYPE_CHECKING:
-    from modelark_mcp.artifacts.store import ArtifactStore
-    from modelark_mcp.runtime import RuntimeServices
+    from ark_mcp.artifacts.store import ArtifactStore
+    from ark_mcp.runtime import RuntimeServices
 
 ARTIFACTS_DIR = Path(".artifacts")
 
@@ -115,14 +115,14 @@ async def test_image_generation(ctx: SmokeClient, store: ArtifactStore) -> dict[
 async def test_audio_generation(ctx: SmokeClient, store: ArtifactStore) -> dict[str, str]:
     """Generate audio via seed_audio_generate and verify the artifact."""
     header("Seed Audio: Audio Generation")
-    print("Generating audio: 'Welcome to the ModelArk Seed Multimodal MCP Server...'")
+    print("Generating audio: 'Welcome to the Ark Seed Multimodal MCP Server...'")
 
     result = require_tool_success(
         await ctx.call(
             "seed_audio_generate",
             SeedAudioGenerateInput(
                 text_prompt=(
-                    "Welcome to the ModelArk Seed Multimodal MCP Server. "
+                    "Welcome to the Ark Seed Multimodal MCP Server. "
                     "This is a live smoke test of the Seed Audio generation tool. "
                     "The generated audio is persisted as a durable artifact."
                 ),
@@ -336,7 +336,7 @@ async def verify_artifacts(artifact_ids: dict[str, str], store: ArtifactStore) -
 
 
 async def main() -> int:
-    header("ModelArk Seed MCP — Live Smoke Test")
+    header("Ark Seed MCP — Live Smoke Test")
     print(f"Timestamp: {datetime.now(UTC).isoformat()}")
     print(f"Artifacts dir: {ARTIFACTS_DIR.resolve()}")
 

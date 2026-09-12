@@ -1,6 +1,6 @@
 # Use Cases
 
-The ModelArk Seed MCP server exposes a conditional multimodal tool surface.
+The Ark Seed MCP server exposes a conditional multimodal tool surface.
 Here are common scenarios and how to achieve them.
 
 The JSON blocks below show tool input payloads. Invoke generation, variation,
@@ -112,7 +112,7 @@ Generate speech from a text prompt.
 
 ```json
 {
-  "text_prompt": "Welcome to the ModelArk Seed Multimodal MCP Server.",
+  "text_prompt": "Welcome to the Ark Seed Multimodal MCP Server.",
   "output": {
     "format": "wav",
     "sample_rate": 44100

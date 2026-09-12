@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modelark_mcp.tools._task_execution import persistence_requires_task
+from ark_mcp.tools._task_execution import persistence_requires_task
 from tests.fixtures.fake_context import FakeContext
 
 

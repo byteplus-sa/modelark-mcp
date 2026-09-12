@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 
-from modelark_mcp.security.safe_downloader import SafeDownloader, SafeDownloadError
+from ark_mcp.security.safe_downloader import SafeDownloader, SafeDownloadError
 
 
 def public_resolver(_hostname: str, _port: int) -> tuple[str, ...]:

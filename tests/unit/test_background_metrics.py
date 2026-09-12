@@ -9,7 +9,7 @@ from fastmcp import Client, FastMCP
 from fastmcp.tools import ToolResult
 from fastmcp_tasks import TasksExtension, call_tool_task
 
-from modelark_mcp.observability import metrics
+from ark_mcp.observability import metrics
 
 
 @pytest.fixture
@@ -79,10 +79,10 @@ async def test_foreground_wrapper_preserves_single_measurement(instruments):
 async def test_registered_server_worker_records_pre_provider_failure(
     instruments, monkeypatch, tmp_path
 ):
-    from modelark_mcp.config.env import get_settings
-    from modelark_mcp.config.model_capabilities import refresh_capability_registry
-    from modelark_mcp.providers.modelark.understanding import SeedUnderstandingService
-    from modelark_mcp.server import create_server
+    from ark_mcp.config.env import get_settings
+    from ark_mcp.config.model_capabilities import refresh_capability_registry
+    from ark_mcp.providers.modelark.understanding import SeedUnderstandingService
+    from ark_mcp.server import create_server
 
     monkeypatch.setenv("BYTEPLUS_MODELARK_API_KEY", "test-placeholder")
     monkeypatch.setenv("ARTIFACT_DIR", str(tmp_path / "artifacts"))

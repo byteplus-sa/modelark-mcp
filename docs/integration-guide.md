@@ -1,6 +1,6 @@
 # Integration Guide
 
-How to connect the ModelArk Seed MCP server to popular MCP clients.
+How to connect the Ark Seed MCP server to popular MCP clients.
 
 ## Prerequisites
 
@@ -13,10 +13,10 @@ How to connect the ModelArk Seed MCP server to popular MCP clients.
 
 The server runs as a `stdio` process — the MCP client spawns it as a
 subprocess and communicates over stdin/stdout. The entry point is
-`python -m modelark_mcp`, which injects `truststore` for macOS TLS
+`python -m ark_mcp`, which injects `truststore` for macOS TLS
 certificate verification before starting the FastMCP server.
 
-Use `python -m modelark_mcp` in client configurations so transport security
+Use `python -m ark_mcp` in client configurations so transport security
 settings are applied consistently. The server module also injects `truststore`
 before provider clients are created.
 
@@ -63,7 +63,7 @@ from fastmcp_tasks import call_tool_task
 
 async def main():
     transport = StdioTransport(
-        command=sys.executable, args=["-m", "modelark_mcp"]
+        command=sys.executable, args=["-m", "ark_mcp"]
     )
     async with Client(transport) as client:
         submission = await call_tool_task(
@@ -154,15 +154,15 @@ Add the server to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "modelark-seed": {
+    "ark-seed": {
       "command": "uv",
       "args": [
         "--directory",
-        "/path/to/modelark-mcp",
+        "/path/to/ark-mcp",
         "run",
         "python",
         "-m",
-        "modelark_mcp"
+        "ark_mcp"
       ],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_ark_api_key"  # pragma: allowlist secret,
@@ -173,7 +173,7 @@ Add the server to your `claude_desktop_config.json`:
 }
 ```
 
-Replace `/path/to/modelark-mcp` with the absolute path to your repository.
+Replace `/path/to/ark-mcp` with the absolute path to your repository.
 
 Fully quit and restart Claude Desktop. The tools appear under the hammer
 icon. If you use the `.env` file approach, you can omit the `env` block.
@@ -186,16 +186,16 @@ Create `.cursor/mcp.json` in your project root (or
 ```json
 {
   "mcpServers": {
-    "modelark-seed": {
+    "ark-seed": {
       "type": "stdio",
       "command": "uv",
       "args": [
         "--directory",
-        "/path/to/modelark-mcp",
+        "/path/to/ark-mcp",
         "run",
         "python",
         "-m",
-        "modelark_mcp"
+        "ark_mcp"
       ],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_ark_api_key"  # pragma: allowlist secret,
@@ -212,16 +212,16 @@ environment variables:
 ```json
 {
   "mcpServers": {
-    "modelark-seed": {
+    "ark-seed": {
       "type": "stdio",
       "command": "uv",
       "args": [
         "--directory",
-        "/path/to/modelark-mcp",
+        "/path/to/ark-mcp",
         "run",
         "python",
         "-m",
-        "modelark_mcp"
+        "ark_mcp"
       ],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "${env:BYTEPLUS_MODELARK_API_KEY}",
@@ -242,16 +242,16 @@ Create `.vscode/mcp.json` in your workspace root:
 ```json
 {
   "servers": {
-    "modelark-seed": {
+    "ark-seed": {
       "type": "stdio",
       "command": "uv",
       "args": [
         "--directory",
-        "/path/to/modelark-mcp",
+        "/path/to/ark-mcp",
         "run",
         "python",
         "-m",
-        "modelark_mcp"
+        "ark_mcp"
       ],
       "envFile": "${workspaceFolder}/.env"
     },
@@ -276,7 +276,7 @@ The MCP Inspector provides a web UI for testing tools interactively.
 make inspect
 ```
 
-This launches `fastmcp inspect src/modelark_mcp/server.py:mcp`; the server
+This launches `fastmcp inspect src/ark_mcp/server.py:mcp`; the server
 module injects `truststore` before provider clients are created.
 
 **Option 2: npx inspector (recommended for macOS)**
@@ -286,7 +286,7 @@ export BYTEPLUS_MODELARK_API_KEY=your_key  # pragma: allowlist secret
 export BYTEPLUS_SEED_SPEECH_API_KEY=your_key  # pragma: allowlist secret
 
 npx @modelcontextprotocol/inspector \
-  uv --directory /path/to/modelark-mcp run python -m modelark_mcp
+  uv --directory /path/to/ark-mcp run python -m ark_mcp
 ```
 
 The browser UI opens—select **STDIO** transport and click **Connect**.
@@ -306,7 +306,7 @@ Then connect the Inspector to `http://127.0.0.1:3000/mcp`.
 ### SSL Certificate Errors (macOS)
 
 If you see `CERTIFICATE_VERIFY_FAILED`, confirm `truststore` is installed and
-start through `python -m modelark_mcp` so the complete entrypoint runs.
+start through `python -m ark_mcp` so the complete entrypoint runs.
 
 ### "API key not configured" Error
 
@@ -324,7 +324,7 @@ The server skips registering tools for products without credentials. Check:
    `/Users/yourname/.local/bin/uv`)
 2. Verify the `--directory` path is correct and absolute
 3. Check the client's logs for stderr output from the server
-4. Test manually: `uv --directory /path/to/modelark-mcp run python -m modelark_mcp`
+4. Test manually: `uv --directory /path/to/ark-mcp run python -m ark_mcp`
    (should start and wait for stdin)
 
 ### Tools Missing

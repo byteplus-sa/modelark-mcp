@@ -91,4 +91,4 @@ usage fields.
 | Multiple audio outputs | `seed_audio_generate_variations` |
 | Multiple video tasks | `seedance_create_task_variations` |
 
-[`run_variation_batch`]: ../src/modelark_mcp/tools/_parallel.py
+[`run_variation_batch`]: ../src/ark_mcp/tools/_parallel.py

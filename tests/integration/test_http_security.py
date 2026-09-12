@@ -15,12 +15,12 @@ import respx
 from fastmcp.server.auth import AccessToken, TokenVerifier
 from starlette.middleware import Middleware
 
-from modelark_mcp.config.env import Settings
-from modelark_mcp.security.http_middleware import (
+from ark_mcp.config.env import Settings
+from ark_mcp.security.http_middleware import (
     RateLimitMiddleware,
     RequestBodyLimitMiddleware,
 )
-from modelark_mcp.server import create_server
+from ark_mcp.server import create_server
 
 
 def _jwt_settings(tmp_path: Path) -> Settings:
@@ -31,7 +31,7 @@ def _jwt_settings(tmp_path: Path) -> Settings:
         MCP_AUTH_MODE="jwt",
         MCP_JWT_JWKS_URI="https://identity.example.com/.well-known/jwks.json",
         MCP_JWT_ISSUER="https://identity.example.com",
-        MCP_JWT_AUDIENCE="modelark-mcp",
+        MCP_JWT_AUDIENCE="ark-mcp",
         MCP_ALLOWED_HOSTS="testserver",
         MCP_ALLOWED_ORIGINS="https://client.example.com",
         ARTIFACT_DIR=str(tmp_path / "artifacts"),
@@ -109,7 +109,7 @@ async def test_health_ready_and_metrics(tmp_path: Path) -> None:
     assert ready.status_code == 200
     assert ready.json() == {"status": "ready"}
     assert metrics.status_code == 200
-    assert "modelark_mcp_tool_requests_total" in metrics.text
+    assert "ark_mcp_tool_requests_total" in metrics.text
 
 
 async def test_mcp_rejects_missing_token(tmp_path: Path) -> None:
@@ -155,7 +155,7 @@ async def test_mcp_accepts_valid_token(tmp_path: Path) -> None:
             },
         )
     assert response.status_code == 200
-    assert response.json()["result"]["serverInfo"]["name"] == "ModelArk Seed Multimodal"
+    assert response.json()["result"]["serverInfo"]["name"] == "Ark Seed Multimodal"
 
 
 async def test_invalid_origin_is_rejected(tmp_path: Path) -> None:
@@ -263,8 +263,8 @@ async def test_vod_subtitle_scopes_reject_enhancement_only_token(
 
 
 async def test_vod_scope_allows_dispatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from modelark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
-    from modelark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission
+    from ark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
+    from ark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission
 
     async def enhance(
         _self: VodMediaKitEnhancementService, _request: object
@@ -373,7 +373,7 @@ async def test_ready_without_provider_check(tmp_path: Path) -> None:
 async def test_ready_with_provider_check_enabled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from modelark_mcp.providers.base import BaseHttpGateway
+    from ark_mcp.providers.base import BaseHttpGateway
 
     async def _ok_health(self: BaseHttpGateway, *, timeout_seconds: float = 2.0) -> bool:
         return True
@@ -410,7 +410,7 @@ async def test_ready_with_provider_check_enabled(
 async def test_ready_degraded_when_provider_down(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from modelark_mcp.providers.base import BaseHttpGateway
+    from ark_mcp.providers.base import BaseHttpGateway
 
     async def _down_health(self: BaseHttpGateway, *, timeout_seconds: float = 2.0) -> bool:
         return False
@@ -444,7 +444,7 @@ async def test_ready_degraded_when_provider_down(
 
 
 async def test_rate_limit_allows_under_threshold(tmp_path: Path) -> None:
-    from modelark_mcp.security.http_middleware import RateLimitMiddleware
+    from ark_mcp.security.http_middleware import RateLimitMiddleware
 
     settings = _jwt_settings(tmp_path)
     server = create_server(settings, auth_provider=_verifier())
@@ -472,7 +472,7 @@ async def test_rate_limit_allows_under_threshold(tmp_path: Path) -> None:
 
 
 async def test_rate_limit_blocks_over_threshold(tmp_path: Path) -> None:
-    from modelark_mcp.security.http_middleware import RateLimitMiddleware
+    from ark_mcp.security.http_middleware import RateLimitMiddleware
 
     settings = _jwt_settings(tmp_path)
     server = create_server(settings, auth_provider=_verifier())
@@ -503,7 +503,7 @@ async def test_rate_limit_blocks_over_threshold(tmp_path: Path) -> None:
 
 
 async def test_rate_limit_retry_after_header(tmp_path: Path) -> None:
-    from modelark_mcp.security.http_middleware import RateLimitMiddleware
+    from ark_mcp.security.http_middleware import RateLimitMiddleware
 
     settings = _jwt_settings(tmp_path)
     server = create_server(settings, auth_provider=_verifier())
@@ -590,9 +590,7 @@ class TestRateLimitMiddlewareBucketing:
 
     async def test_bucket_count_stays_bounded(self, monkeypatch: pytest.MonkeyPatch) -> None:
         clock = [0.0]
-        monkeypatch.setattr(
-            "modelark_mcp.security.http_middleware.time.monotonic", lambda: clock[0]
-        )
+        monkeypatch.setattr("ark_mcp.security.http_middleware.time.monotonic", lambda: clock[0])
         middleware = RateLimitMiddleware(None, rpm=60000, burst=60000)  # type: ignore[arg-type]
         for index in range(middleware._MAX_BUCKETS + 100):
             await middleware._consume(f"ip-{index}")

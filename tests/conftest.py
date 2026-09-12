@@ -23,6 +23,7 @@ _SETTINGS_ENV_PREFIXES = (
     "PRINCIPAL_",
     "DAILY_",
     "MODELARK_",
+    "ARK_",
     "PERSISTENCE_",
     "READINESS_",
     "RATE_LIMIT_",
@@ -46,7 +47,7 @@ def isolate_settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("SEEDREAM_MODEL_BINDINGS", "[]")
     monkeypatch.setenv("SEEDANCE_MODEL_BINDINGS", "[]")
     monkeypatch.setenv("SEED_UNDERSTANDING_MODEL_BINDINGS", "[]")
-    from modelark_mcp.config.env import get_settings
+    from ark_mcp.config.env import get_settings
 
     get_settings.cache_clear()
     yield
@@ -57,7 +58,7 @@ def isolate_settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 def deterministic_public_dns(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Resolve test hostnames without consulting external DNS."""
     monkeypatch.setattr(
-        "modelark_mcp.security.url_policy.system_resolver",
+        "ark_mcp.security.url_policy.system_resolver",
         lambda _hostname, _port: ("93.184.216.34",),
     )
     yield

@@ -12,9 +12,9 @@ from fastmcp_tasks.encryption import SnapshotDecryptionError, snapshot_codec
 from fastmcp_tasks.settings import tasks_settings
 from pydantic import SecretStr
 
-from modelark_mcp.config.env import Settings
-from modelark_mcp.security.tasks import TenantTasksExtension, guard_task_execution
-from modelark_mcp.server import create_server
+from ark_mcp.config.env import Settings
+from ark_mcp.security.tasks import TenantTasksExtension, guard_task_execution
+from ark_mcp.server import create_server
 from tests.integration.test_http_security import _jwt_settings
 
 
@@ -55,7 +55,7 @@ async def test_restarted_execution_does_not_repeat_accepted_provider_work(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "modelark_mcp.security.tasks.get_task_context",
+        "ark_mcp.security.tasks.get_task_context",
         lambda: SimpleNamespace(task_id="recovered-task"),
     )
     settings = Settings(_env_file=None, ARTIFACT_DIR=str(tmp_path))
@@ -82,7 +82,7 @@ async def test_restarted_execution_does_not_repeat_accepted_provider_work(
 async def test_foreground_handler_does_not_require_execution_claim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("modelark_mcp.security.tasks.get_task_context", lambda: None)
+    monkeypatch.setattr("ark_mcp.security.tasks.get_task_context", lambda: None)
     handler = AsyncMock(return_value="completed")
     assert await guard_task_execution(handler)() == "completed"
     handler.assert_awaited_once()

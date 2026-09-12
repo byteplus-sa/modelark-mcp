@@ -12,9 +12,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from modelark_mcp.providers.object_storage import ObjectStorageGateway
-from modelark_mcp.providers.s3.client import S3Gateway
-from modelark_mcp.providers.tos.client import TosGateway
+from ark_mcp.providers.object_storage import ObjectStorageGateway
+from ark_mcp.providers.s3.client import S3Gateway
+from ark_mcp.providers.tos.client import TosGateway
 
 
 def _mock_tos_client() -> MagicMock:

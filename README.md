@@ -1,4 +1,4 @@
-# ModelArk Seed Multimodal MCP Server
+# Ark Seed Multimodal MCP Server
 
 A Python [Model Context Protocol](https://modelcontextprotocol.io) server
 built on [FastMCP](https://gofastmcp.com) that exposes BytePlus multimodal
@@ -103,7 +103,7 @@ flowchart TB
     OC[OpenCode]
     TR[TRAE IDE]
   end
-  subgraph Server["ModelArk MCP Server (FastMCP)"]
+  subgraph Server["Ark MCP Server (FastMCP)"]
     Tools["Tools<br/>Seedream · Seedance · Seed Audio · VOD AI MediaKit · Artifacts · Object storage"]
     Domain["Domain layer<br/>models · capability registry · errors"]
     Runtime["Runtime services<br/>concurrency · budget · ownership · retry"]
@@ -164,8 +164,8 @@ sequenceDiagram
 
 ```bash
 # Clone the repository
-git clone <repo-url> modelark-mcp
-cd modelark-mcp
+git clone <repo-url> ark-mcp
+cd ark-mcp
 
 # Install dependencies
 uv sync
@@ -225,9 +225,9 @@ The server runs as a `stdio` process. Configure it in your MCP client:
 ```json
 {
   "mcpServers": {
-    "modelark-seed": {
+    "ark-seed": {
       "command": "uv",
-      "args": ["--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark_mcp"],
+      "args": ["--directory", "/path/to/ark-mcp", "run", "python", "-m", "ark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
         "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
@@ -244,11 +244,11 @@ Codex reads MCP servers from `~/.codex/config.toml` (global) or
 with one `[mcp_servers.<name>]` table per server:
 
 ```toml
-[mcp_servers.modelark-seed]
+[mcp_servers.ark-seed]
 command = "uv"
-args = ["--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark_mcp"]
+args = ["--directory", "/path/to/ark-mcp", "run", "python", "-m", "ark_mcp"]
 
-[mcp_servers.modelark-seed.env]
+[mcp_servers.ark-seed.env]
 BYTEPLUS_MODELARK_API_KEY = "your_modelark_key"
 BYTEPLUS_SEED_SPEECH_API_KEY = "your_seed_speech_key"
 ```
@@ -263,9 +263,9 @@ top-level `mcp` key with `type: "local"` and `command` as an array:
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "modelark-seed": {
+    "ark-seed": {
       "type": "local",
-      "command": ["uv", "--directory", "/path/to/modelark-mcp", "run", "python", "-m", "modelark_mcp"],
+      "command": ["uv", "--directory", "/path/to/ark-mcp", "run", "python", "-m", "ark_mcp"],
       "enabled": true,
       "environment": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
@@ -286,9 +286,9 @@ TRAE uses the standard `mcpServers` JSON shape, added either via
 ```json
 {
   "mcpServers": {
-    "modelark-seed": {
+    "ark-seed": {
       "command": "uv",
-      "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "modelark_mcp"],
+      "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "ark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
         "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
@@ -315,9 +315,9 @@ then paste:
 ```json
 {
   "mcpServers": {
-    "modelark-seed": {
+    "ark-seed": {
       "command": "uv",
-      "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "modelark_mcp"],
+      "args": ["--directory", "${workspaceFolder}", "run", "python", "-m", "ark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "your_modelark_key",
         "BYTEPLUS_SEED_SPEECH_API_KEY": "your_seed_speech_key"
@@ -378,8 +378,8 @@ make check-env     # Validate environment configuration
 ## Project Layout
 
 ```text
-modelark-mcp/
-├── src/modelark_mcp/
+ark-mcp/
+├── src/ark_mcp/
 │   ├── server.py              # Deterministic FastMCP factory and registration
 │   ├── __main__.py            # Entry point (truststore injection)
 │   ├── runtime.py             # Lifespan-owned stores, limits, budgets, ownership

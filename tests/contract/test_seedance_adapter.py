@@ -10,12 +10,12 @@ import httpx
 import pytest
 import respx
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.modelark.client import ModelArkGateway
-from modelark_mcp.providers.modelark.schemas import (
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.modelark.client import ModelArkGateway
+from ark_mcp.providers.modelark.schemas import (
     SeedanceContentItem,
 )
-from modelark_mcp.providers.modelark.seedance import SeedanceService
+from ark_mcp.providers.modelark.seedance import SeedanceService
 
 MODELARK_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3"
 
@@ -406,7 +406,7 @@ class TestSeedanceTaskSummary:
     """Tests for task summary and usage extraction."""
 
     def test_to_task_summary(self) -> None:
-        from modelark_mcp.providers.modelark.schemas import SeedanceTaskResponse
+        from ark_mcp.providers.modelark.schemas import SeedanceTaskResponse
 
         task = SeedanceTaskResponse(
             id="task-1",
@@ -421,7 +421,7 @@ class TestSeedanceTaskSummary:
         assert summary.model == "dreamina-seedance-2-0-260128"
 
     def test_extract_usage_none(self) -> None:
-        from modelark_mcp.providers.modelark.schemas import SeedanceTaskResponse
+        from ark_mcp.providers.modelark.schemas import SeedanceTaskResponse
 
         task = SeedanceTaskResponse(
             id="task-1",
@@ -431,7 +431,7 @@ class TestSeedanceTaskSummary:
         assert SeedanceService.extract_usage(task) is None
 
     def test_extract_usage_present(self) -> None:
-        from modelark_mcp.providers.modelark.schemas import (
+        from ark_mcp.providers.modelark.schemas import (
             SeedanceGenerationUsage,
             SeedanceTaskResponse,
         )
@@ -486,13 +486,13 @@ class TestSeedanceUnknownStatus:
     """Unknown provider status strings map to SeedanceTaskStatus.UNKNOWN."""
 
     def test_unknown_status_enum_member(self) -> None:
-        from modelark_mcp.domain.models import SeedanceTaskStatus
+        from ark_mcp.domain.models import SeedanceTaskStatus
 
         assert SeedanceTaskStatus("invented_status") is SeedanceTaskStatus.UNKNOWN
 
     def test_to_task_summary_unknown_status(self) -> None:
-        from modelark_mcp.domain.models import SeedanceTaskStatus
-        from modelark_mcp.providers.modelark.schemas import SeedanceTaskResponse
+        from ark_mcp.domain.models import SeedanceTaskStatus
+        from ark_mcp.providers.modelark.schemas import SeedanceTaskResponse
 
         task = SeedanceTaskResponse(
             id="task-1",
@@ -505,8 +505,8 @@ class TestSeedanceUnknownStatus:
         assert summary.status is SeedanceTaskStatus.UNKNOWN
 
     def test_get_task_output_validates_with_unknown_status(self) -> None:
-        from modelark_mcp.domain.models import SeedanceTaskStatus
-        from modelark_mcp.tools.seedance_get_task import SeedanceTaskOutput
+        from ark_mcp.domain.models import SeedanceTaskStatus
+        from ark_mcp.tools.seedance_get_task import SeedanceTaskOutput
 
         output = SeedanceTaskOutput(
             task_id="task-1",
@@ -518,8 +518,8 @@ class TestSeedanceUnknownStatus:
         assert output.status is SeedanceTaskStatus.UNKNOWN
 
     def test_list_tasks_output_validates_with_unknown_status(self) -> None:
-        from modelark_mcp.domain.models import SeedanceTaskStatus
-        from modelark_mcp.tools.seedance_list_tasks import SeedanceTaskPage
+        from ark_mcp.domain.models import SeedanceTaskStatus
+        from ark_mcp.tools.seedance_list_tasks import SeedanceTaskPage
 
         page = SeedanceTaskPage(
             tasks=[

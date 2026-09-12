@@ -10,8 +10,8 @@ import sys
 
 import httpx
 
-from modelark_mcp.config.env import get_settings
-from modelark_mcp.providers.object_storage import make_object_storage_gateway
+from ark_mcp.config.env import get_settings
+from ark_mcp.providers.object_storage import make_object_storage_gateway
 
 
 async def main() -> int:
@@ -99,12 +99,12 @@ async def main() -> int:
 
         # Step 8: Create an actual Seedance task using the S3 presigned URL
         print("\n--- Step 8: Create Seedance task with S3 video reference ---")
-        from modelark_mcp.providers.modelark.client import ModelArkGateway
-        from modelark_mcp.providers.modelark.schemas import (
+        from ark_mcp.providers.modelark.client import ModelArkGateway
+        from ark_mcp.providers.modelark.schemas import (
             SeedanceContentItem,
             SeedanceCreateProviderRequest,
         )
-        from modelark_mcp.providers.modelark.seedance import SeedanceService
+        from ark_mcp.providers.modelark.seedance import SeedanceService
 
         gateway_modelark = ModelArkGateway()
         service = SeedanceService(gateway=gateway_modelark)

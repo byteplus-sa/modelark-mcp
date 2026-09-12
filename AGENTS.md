@@ -2,7 +2,7 @@
 
 ## Project
 
-ModelArk Seed Multimodal MCP Server — a Python MCP server (FastMCP on uv)
+Ark Seed Multimodal MCP Server — a Python MCP server (FastMCP on uv)
 that exposes BytePlus multimodal generation through a small, typed, safe tool
 surface:
 
@@ -31,13 +31,13 @@ Seedance, Seedream, Seed 3D, and Seed 2.1 Understanding share the ModelArk
 data-plane host and Bearer authentication. Seed Audio and Speech-to-Text are
 hosted by Seed Speech and use `X-Api-Key`. VOD AI MediaKit uses a separate
 Bearer key. The server uses three provider gateways behind one normalized
-domain layer. See `plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md` for the full
+domain layer. See `plans/PLAN_ARK_SEED_MULTIMODAL_MCP.md` for the full
 design.
 
 ## Repository Layout
 
 ```text
-modelark-mcp/
+ark-mcp/
 ├── AGENTS.md          # project conventions for agents (this file)
 ├── CLAUDE.md          # redirects to AGENTS.md
 ├── README.md          # project overview and quickstart
@@ -51,7 +51,7 @@ modelark-mcp/
 ├── specs/             # future-looking specs and design docs
 ├── docs/              # project documentation
 ├── scripts/           # live smoke tests and utility scripts
-├── src/modelark_mcp/  # server source (Python package)
+├── src/ark_mcp/  # server source (Python package)
 └── tests/             # tests (pytest)
 ```
 

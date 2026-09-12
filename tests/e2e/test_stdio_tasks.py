@@ -17,10 +17,10 @@ async def test_stdio_background_task_completes_with_mocked_provider(tmp_path):
         textwrap.dedent("""
         import asyncio
         from unittest.mock import AsyncMock
-        from modelark_mcp.config.env import Settings
-        from modelark_mcp.providers.modelark.schemas import ChatCompletionProviderResponse
-        from modelark_mcp.providers.modelark.understanding import SeedUnderstandingService
-        from modelark_mcp.server import create_server
+        from ark_mcp.config.env import Settings
+        from ark_mcp.providers.modelark.schemas import ChatCompletionProviderResponse
+        from ark_mcp.providers.modelark.understanding import SeedUnderstandingService
+        from ark_mcp.server import create_server
 
         SeedUnderstandingService.generate = AsyncMock(return_value=(
             ChatCompletionProviderResponse.model_validate({

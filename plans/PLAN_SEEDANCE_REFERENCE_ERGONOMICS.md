@@ -5,7 +5,7 @@ status: in-progress
 created: 2026-09-04
 updated: 2026-09-04
 tags: [seedance, media, presign, ergonomics, coercion]
-related: [PLAN_MODELARK_SEED_MULTIMODAL_MCP.md]
+related: [PLAN_ARK_SEED_MULTIMODAL_MCP.md]
 ---
 
 # Seedance Reference Ergonomics & Batch Presign Implementation Plan
@@ -17,8 +17,8 @@ image references.
 
 **Source Context:**
 - User request: "MCP Server Updates — Improving developer/agent ergonomics and backend resilience."
-- Docs/specs read: `AGENTS.md`, `docs/tools.md`, `docs/api-reference.md`, `docs/security.md`, `docs/use-cases.md`, `docs/s3-object-storage.md`, `docs/api-keys.md`, `.agents/skills/modelark-mcp/SKILL.md`.
-- Code inspected: `src/modelark_mcp/tools/_seedance_shared.py`, `seedance_create_task.py`, `seedance_2_5_create_task.py`, `seedance_create_task_variations.py`, `seedance_2_5_create_task_variations.py`, `media_presign.py`, `media_upload.py`, `seed_understand.py`, `src/modelark_mcp/domain/media.py`, `domain/models.py`, `providers/object_storage.py`, `providers/tos/client.py`, `providers/s3/client.py`, `runtime.py`, `server.py`, `tools/_parallel.py`, `tools/_errors.py`, `security/url_policy.py`; tests `tests/unit/test_tool_validators.py`, `tests/unit/test_seedance_2_5_input.py`, `tests/integration/test_media_presign_tool.py`, `tests/integration/test_seedance_tool.py`, `tests/integration/test_mcp_conformance.py`, `tests/fixtures/fake_context.py`.
+- Docs/specs read: `AGENTS.md`, `docs/tools.md`, `docs/api-reference.md`, `docs/security.md`, `docs/use-cases.md`, `docs/s3-object-storage.md`, `docs/api-keys.md`, `.agents/skills/ark-mcp/SKILL.md`.
+- Code inspected: `src/ark_mcp/tools/_seedance_shared.py`, `seedance_create_task.py`, `seedance_2_5_create_task.py`, `seedance_create_task_variations.py`, `seedance_2_5_create_task_variations.py`, `media_presign.py`, `media_upload.py`, `seed_understand.py`, `src/ark_mcp/domain/media.py`, `domain/models.py`, `providers/object_storage.py`, `providers/tos/client.py`, `providers/s3/client.py`, `runtime.py`, `server.py`, `tools/_parallel.py`, `tools/_errors.py`, `security/url_policy.py`; tests `tests/unit/test_tool_validators.py`, `tests/unit/test_seedance_2_5_input.py`, `tests/integration/test_media_presign_tool.py`, `tests/integration/test_seedance_tool.py`, `tests/integration/test_mcp_conformance.py`, `tests/fixtures/fake_context.py`.
 
 **Architecture Decision:** Auto-coercion is implemented as `@model_validator(mode="before")` class methods on the shared `SeedanceImageInput` / `SeedanceAudioInput` / `SeedanceVideoInput` models in `_seedance_shared.py`. Because every Seedance create/variations tool reuses these shared models, coercion is inherited everywhere for free with zero per-tool changes. The batch presign tool is a new handler that reuses the existing `presign_get` gateway protocol and the `object_key_ownership_store.require_owner` ledger, returning per-key results (partial failures captured inline) rather than all-or-nothing. Item 3 is folded into the coercion validator: an unrecognized dict shape raises a tailored `ValueError` showing the expected `SeedanceImageInput` JSON structure.
 
@@ -47,21 +47,21 @@ flowchart LR
 
 | Path | Owner | Responsibility | Notes |
 | --- | --- | --- | --- |
-| `src/modelark_mcp/tools/_seedance_shared.py` | Main agent | Add `mode="before"` coercion validators to `SeedanceImageInput`, `SeedanceAudioInput`, `SeedanceVideoInput` | Shared by all Seedance tools |
-| `src/modelark_mcp/tools/media_presign.py` | Main agent | Extract `validate_object_key` helper (reused by batch) | Keep existing `MediaPresignInput` behavior |
-| `src/modelark_mcp/tools/media_presign_batch.py` | Main agent | New batch presign tool + input/output models | New file |
-| `src/modelark_mcp/server.py` | Main agent | Register `media_presign_batch` under `has_object_storage`, scope `media:presign` | Registration only; field descriptions live in the input-model files |
+| `src/ark_mcp/tools/_seedance_shared.py` | Main agent | Add `mode="before"` coercion validators to `SeedanceImageInput`, `SeedanceAudioInput`, `SeedanceVideoInput` | Shared by all Seedance tools |
+| `src/ark_mcp/tools/media_presign.py` | Main agent | Extract `validate_object_key` helper (reused by batch) | Keep existing `MediaPresignInput` behavior |
+| `src/ark_mcp/tools/media_presign_batch.py` | Main agent | New batch presign tool + input/output models | New file |
+| `src/ark_mcp/server.py` | Main agent | Register `media_presign_batch` under `has_object_storage`, scope `media:presign` | Registration only; field descriptions live in the input-model files |
 | `tests/unit/test_seedance_input_coercion.py` | Main agent | New unit tests for coercion + tailored error | New file |
 | `tests/integration/test_media_presign_batch_tool.py` | Main agent | New integration tests for batch presign | New file |
 | `tests/integration/test_mcp_conformance.py` | Main agent | Add `media_presign_batch` to `test_all_tools_registered` | Single assertion set |
 | `docs/tools.md`, `docs/api-reference.md`, `docs/security.md`, `docs/api-keys.md`, `docs/use-cases.md`, `docs/s3-object-storage.md`, `README.md` | Main agent | Document batch tool + auto-coercion | Keep docs in lockstep with shipped code |
-| `.agents/skills/modelark-mcp/SKILL.md` | Main agent | Update presign pattern + tool tables + coercion notes | Canonical skill source |
+| `.agents/skills/ark-mcp/SKILL.md` | Main agent | Update presign pattern + tool tables + coercion notes | Canonical skill source |
 
 ## Implementation Tasks
 
 ### Task 1: Auto-coercion validators in `_seedance_shared.py`
 
-**Files:** `src/modelark_mcp/tools/_seedance_shared.py`
+**Files:** `src/ark_mcp/tools/_seedance_shared.py`
 
 **Depends on:** None
 
@@ -76,7 +76,7 @@ flowchart LR
 
 ### Task 2: Batch presign tool
 
-**Files:** `src/modelark_mcp/tools/media_presign.py`, `src/modelark_mcp/tools/media_presign_batch.py`, `src/modelark_mcp/server.py`
+**Files:** `src/ark_mcp/tools/media_presign.py`, `src/ark_mcp/tools/media_presign_batch.py`, `src/ark_mcp/server.py`
 
 **Depends on:** None
 
@@ -104,7 +104,7 @@ flowchart LR
 
 ### Task 4: Docs and skill updates
 
-**Files:** `docs/tools.md`, `docs/api-reference.md`, `docs/security.md`, `docs/api-keys.md`, `docs/use-cases.md`, `docs/s3-object-storage.md`, `README.md`, `.agents/skills/modelark-mcp/SKILL.md`
+**Files:** `docs/tools.md`, `docs/api-reference.md`, `docs/security.md`, `docs/api-keys.md`, `docs/use-cases.md`, `docs/s3-object-storage.md`, `README.md`, `.agents/skills/ark-mcp/SKILL.md`
 
 **Depends on:** Tasks 1, 2
 
@@ -113,7 +113,7 @@ flowchart LR
 - [ ] `docs/security.md`: add `media_presign_batch` to the `media:presign` scope row and mention it in the object-storage credentials paragraph.
 - [ ] `docs/api-keys.md`, `docs/use-cases.md`: mention the batch tool in the presign workflow notes.
 - [ ] `docs/s3-object-storage.md`: add a `media_presign_batch` row to its Tools table (the table at the bottom enumerates `media_upload`/`media_presign`), update the JWT-scope note to include the batch tool, and mention it in the "Re-presigning existing objects" prose.
-- [ ] `.agents/skills/modelark-mcp/SKILL.md`: update the "Batch presign" step to reference `media_presign_batch`; add it to the tool list/table and the `media_presign` reference; note auto-coercion in the Seedance reference examples.
+- [ ] `.agents/skills/ark-mcp/SKILL.md`: update the "Batch presign" step to reference `media_presign_batch`; add it to the tool list/table and the `media_presign` reference; note auto-coercion in the Seedance reference examples.
 - [ ] `README.md`: update the tool inventory if it enumerates tools.
 
 **Validation:** `uv run ruff format src tests && uv run ruff check src tests`
@@ -122,7 +122,7 @@ flowchart LR
 
 **Depends on:** Tasks 3, 4
 
-- [ ] `uv run pytest --cov=modelark_mcp --cov-report=term-missing -q` (must stay ≥85% coverage).
+- [ ] `uv run pytest --cov=ark_mcp --cov-report=term-missing -q` (must stay ≥85% coverage).
 - [ ] `uv run ruff check src tests scripts && uv run ruff format --check src tests scripts`.
 - [ ] `uv run mypy src`.
 
@@ -134,7 +134,7 @@ No parallel worker lanes are proposed: the source changes are small and share in
 
 ## Validation
 
-- `uv run pytest --cov=modelark_mcp --cov-report=term-missing`: all pass, coverage ≥85%.
+- `uv run pytest --cov=ark_mcp --cov-report=term-missing`: all pass, coverage ≥85%.
 - `uv run ruff check src tests scripts`: no findings.
 - `uv run ruff format --check src tests scripts`: no diffs.
 - `uv run mypy src`: no errors.

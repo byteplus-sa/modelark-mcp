@@ -14,8 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from modelark_mcp.config.env import Settings, get_settings
-from modelark_mcp.server import create_server
+from ark_mcp.config.env import Settings, get_settings
+from ark_mcp.server import create_server
 
 
 @pytest.fixture

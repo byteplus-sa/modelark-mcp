@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from modelark_mcp.security.url_policy import (
+from ark_mcp.security.url_policy import (
     UrlValidationError,
     validate_url,
     validate_url_syntax,

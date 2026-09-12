@@ -12,8 +12,8 @@ from typing import cast
 
 import pytest
 
-from modelark_mcp.artifacts.store import ArtifactStore
-from modelark_mcp.runtime import RuntimeServices, close_runtime_services, create_runtime_services
+from ark_mcp.artifacts.store import ArtifactStore
+from ark_mcp.runtime import RuntimeServices, close_runtime_services, create_runtime_services
 from tests.fixtures.fake_context import FakeContext
 
 
@@ -37,8 +37,8 @@ def test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TOS_BUCKET", "test-bucket")
 
     # Clear cached settings and capability registry.
-    from modelark_mcp.config.env import get_settings
-    from modelark_mcp.config.model_capabilities import refresh_capability_registry
+    from ark_mcp.config.env import get_settings
+    from ark_mcp.config.model_capabilities import refresh_capability_registry
 
     get_settings.cache_clear()
     refresh_capability_registry()
@@ -51,7 +51,7 @@ def test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 async def fake_ctx(test_env: None) -> AsyncIterator[FakeContext]:
-    from modelark_mcp.config.env import get_settings
+    from ark_mcp.config.env import get_settings
     from tests.fixtures.fake_context import FakeContext
 
     runtime = await create_runtime_services(get_settings())

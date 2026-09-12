@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide covers installing, configuring, and running the ModelArk Seed
+This guide covers installing, configuring, and running the Ark Seed
 Multimodal MCP Server.
 
 ## Prerequisites
@@ -14,8 +14,8 @@ Multimodal MCP Server.
 Clone the repository and install dependencies:
 
 ```bash
-git clone <repo-url> modelark-mcp
-cd modelark-mcp
+git clone <repo-url> ark-mcp
+cd ark-mcp
 cp .env.example .env
 uv sync
 ```
@@ -42,7 +42,7 @@ tools. This means you can run with only Seedream enabled, for example.
 ```bash
 make start
 # or
-uv run python -m modelark_mcp
+uv run python -m ark_mcp
 ```
 
 ### Streamable HTTP (loopback development)
@@ -50,7 +50,7 @@ uv run python -m modelark_mcp
 ```bash
 make start-http
 # or
-MCP_TRANSPORT=http MCP_PORT=3000 uv run python -m modelark_mcp
+MCP_TRANSPORT=http MCP_PORT=3000 uv run python -m ark_mcp
 ```
 
 Non-loopback HTTP is fail-closed and requires JWT issuer, audience, JWKS,
@@ -79,7 +79,7 @@ Validate your environment configuration:
 ```bash
 make check-env
 # or
-uv run python -c "from modelark_mcp.config.env import validate; validate()"
+uv run python -c "from ark_mcp.config.env import validate; validate()"
 ```
 
 This checks that required environment variables are present and
@@ -102,9 +102,9 @@ Add the server to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "modelark-seed": {
+    "ark-seed": {
       "command": "uv",
-      "args": ["run", "--directory", "/path/to/modelark-mcp", "python", "-m", "modelark_mcp"],
+      "args": ["run", "--directory", "/path/to/ark-mcp", "python", "-m", "ark_mcp"],
       "env": {
         "BYTEPLUS_MODELARK_API_KEY": "<your-key>",
         "BYTEPLUS_SEED_SPEECH_API_KEY": "<your-key>"

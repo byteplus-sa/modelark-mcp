@@ -8,26 +8,26 @@ from unittest.mock import AsyncMock
 import pytest
 from fastmcp.tools import ToolResult
 
-from modelark_mcp.artifacts.store import ArtifactPersistenceError
-from modelark_mcp.domain.artifacts import ArtifactRef
-from modelark_mcp.providers.vod_mediakit.schemas import SubtitleSubmission, SubtitleTask
-from modelark_mcp.providers.vod_mediakit.subtitles import (
+from ark_mcp.artifacts.store import ArtifactPersistenceError
+from ark_mcp.domain.artifacts import ArtifactRef
+from ark_mcp.providers.vod_mediakit.schemas import SubtitleSubmission, SubtitleTask
+from ark_mcp.providers.vod_mediakit.subtitles import (
     VodMediaKitSubtitleBurnInService,
     VodMediaKitSubtitleRemovalService,
 )
-from modelark_mcp.security.auth_context import AuthContext
-from modelark_mcp.tools.vod_add_subtitles import VodAddSubtitlesInput, vod_add_subtitles
-from modelark_mcp.tools.vod_get_subtitle_addition_task import (
+from ark_mcp.security.auth_context import AuthContext
+from ark_mcp.tools.vod_add_subtitles import VodAddSubtitlesInput, vod_add_subtitles
+from ark_mcp.tools.vod_get_subtitle_addition_task import (
     VodGetSubtitleAdditionTaskInput,
     VodSubtitleAdditionTaskOutput,
     vod_get_subtitle_addition_task,
 )
-from modelark_mcp.tools.vod_get_subtitle_removal_task import (
+from ark_mcp.tools.vod_get_subtitle_removal_task import (
     VodGetSubtitleRemovalTaskInput,
     VodSubtitleRemovalTaskOutput,
     vod_get_subtitle_removal_task,
 )
-from modelark_mcp.tools.vod_remove_subtitles import (
+from ark_mcp.tools.vod_remove_subtitles import (
     VodRemoveSubtitlesInput,
     vod_remove_subtitles,
 )

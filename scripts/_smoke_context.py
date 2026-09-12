@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
     from fastmcp import Client
 
-    from modelark_mcp.config.env import Settings
-    from modelark_mcp.runtime import RuntimeServices
+    from ark_mcp.config.env import Settings
+    from ark_mcp.runtime import RuntimeServices
 
 
 @dataclass
@@ -104,8 +104,8 @@ async def smoke_session(settings: Settings) -> AsyncIterator[tuple[SmokeClient, 
     """Own one real server lifespan and expose its artifact store to the scripts."""
     from fastmcp import Client
 
-    from modelark_mcp.runtime import create_runtime_services
-    from modelark_mcp.server import create_server
+    from ark_mcp.runtime import create_runtime_services
+    from ark_mcp.server import create_server
 
     runtime: RuntimeServices | None = None
 

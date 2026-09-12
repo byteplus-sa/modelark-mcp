@@ -27,7 +27,7 @@ delegated to a bucket lifecycle policy — `delete_expired` is a no-op there.
 | Env var | Default | Notes |
 |---|---|---|
 | `ARTIFACT_BACKEND` | `"filesystem"` | `filesystem` or `object_storage` (requires TOS/S3 credentials) |
-| `ARTIFACT_DIR` | `~/.modelark-mcp/artifacts` | local media + `runtime.sqlite3` state; resolved via `Path(...).expanduser().resolve()` |
+| `ARTIFACT_DIR` | `~/.ark-mcp/artifacts` | local media + `runtime.sqlite3` state; resolved via `Path(...).expanduser().resolve()` |
 | `ARTIFACT_TTL_SECONDS` | `604800` (7 days) | must be `> 0` |
 
 `FilesystemArtifactStore` (`artifacts/filesystem_store.py`) lays out
@@ -94,7 +94,7 @@ artifacts **sharded by the first 2 characters of the UUIDv4 id**:
 5. `expires_at = now + ttl_seconds`; build `ArtifactRef(uri=f"seed-media://artifacts/{artifact_id}", ...)`.
 6. Atomic-write the artifact bytes, then atomic-write the
    `ArtifactMetadata` sidecar.
-7. Increment `modelark_mcp_artifact_operations_total{operation="put", status="success", media_type}`.
+7. Increment `ark_mcp_artifact_operations_total{operation="put", status="success", media_type}`.
 
 `copy_from_trusted_url` passes a host-suffix allowlist
 (`.bytepluses.com`, `.byteplus.com`, `.bytedance.com`, `.bytednsdoc.com`,

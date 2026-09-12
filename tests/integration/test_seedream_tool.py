@@ -12,11 +12,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastmcp.tools import ToolResult
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.modelark.schemas import SeedreamProviderResponse
-from modelark_mcp.providers.modelark.seedream import SeedreamService
-from modelark_mcp.security.safe_downloader import DownloadedMedia
-from modelark_mcp.tools.seedream_generate_image import (
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.modelark.schemas import SeedreamProviderResponse
+from ark_mcp.providers.modelark.seedream import SeedreamService
+from ark_mcp.security.safe_downloader import DownloadedMedia
+from ark_mcp.tools.seedream_generate_image import (
     SeedreamGenerateInput,
     SeedreamGenerateOutput,
     seedream_generate_image,
@@ -57,9 +57,9 @@ class TestSeedreamGenerateImageTool:
 
         # Mock the HTTP download for copy_from_trusted_url.
         with (
-            patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store),
+            patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store),
             patch(
-                "modelark_mcp.security.safe_downloader.SafeDownloader.download",
+                "ark_mcp.security.safe_downloader.SafeDownloader.download",
                 new=AsyncMock(
                     return_value=DownloadedMedia(
                         body=b"fake-png-data",
@@ -95,7 +95,7 @@ class TestSeedreamGenerateImageTool:
             {"created": 1721400000, "data": [{"b64_json": img_b64}]},
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seedream_generate_image(
                 SeedreamGenerateInput(prompt="test image"), fake_ctx
             )
@@ -141,7 +141,7 @@ class TestSeedreamGenerateImageTool:
             },
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store"):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store"):
             result = await seedream_generate_image(
                 SeedreamGenerateInput(prompt="test", persist=False), fake_ctx
             )
@@ -164,7 +164,7 @@ class TestSeedreamGenerateImageTool:
         test_env: None,
         fake_ctx: FakeContext,
     ) -> None:
-        from modelark_mcp.domain.media import MediaSource, MediaSourceKind
+        from ark_mcp.domain.media import MediaSource, MediaSourceKind
 
         images = [
             MediaSource(kind=MediaSourceKind.url, url=f"https://example.com/{i}.png")

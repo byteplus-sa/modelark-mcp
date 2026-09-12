@@ -5,13 +5,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from modelark_mcp.tools._seedance_shared import (
+from ark_mcp.tools._seedance_shared import (
     SeedanceAudioInput,
     SeedanceImageInput,
     SeedanceVideoInput,
 )
-from modelark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
-from modelark_mcp.tools.seedance_2_5_create_task_variations import (
+from ark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
+from ark_mcp.tools.seedance_2_5_create_task_variations import (
     Seedance25VariationsInput,
 )
 

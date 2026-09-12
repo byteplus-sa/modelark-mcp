@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modelark_mcp.security.auth_context import PrincipalContext
+from ark_mcp.security.auth_context import PrincipalContext
 
 
 class TestPrincipalContextIsLocal:

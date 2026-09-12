@@ -10,9 +10,9 @@ import httpx
 import pytest
 from fastmcp.server.auth import AccessToken, TokenVerifier
 
-from modelark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
-from modelark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission
-from modelark_mcp.server import create_server
+from ark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
+from ark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission
+from ark_mcp.server import create_server
 from tests.integration.test_http_security import _jwt_settings
 
 

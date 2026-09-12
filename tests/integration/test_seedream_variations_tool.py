@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.modelark.schemas import SeedreamProviderResponse
-from modelark_mcp.providers.modelark.seedream import SeedreamService
-from modelark_mcp.tools.seedream_generate_image_variations import (
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.modelark.schemas import SeedreamProviderResponse
+from ark_mcp.providers.modelark.seedream import SeedreamService
+from ark_mcp.tools.seedream_generate_image_variations import (
     SeedreamVariationsInput,
     SeedreamVariationsOutput,
     seedream_generate_image_variations,
@@ -61,7 +61,7 @@ class TestSeedreamVariationsTool:
             },
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seedream_generate_image_variations(
                 SeedreamVariationsInput(
                     prompt="a red circle",
@@ -107,7 +107,7 @@ class TestSeedreamVariationsTool:
             },
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seedream_generate_image_variations(
                 SeedreamVariationsInput(
                     prompt="test",
@@ -137,7 +137,7 @@ class TestSeedreamVariationsTool:
             },
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seedream_generate_image_variations(
                 SeedreamVariationsInput(
                     variation_prompts=["prompt A", "prompt B"],
@@ -185,7 +185,7 @@ class TestSeedreamVariationsTool:
             {None: {"created": 1721400000, "data": [{"b64_json": img_b64}]}},
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seedream_generate_image_variations(
                 SeedreamVariationsInput(prompt="test", variations=1),
                 fake_ctx,
@@ -248,7 +248,7 @@ class TestSeedreamVariationsTool:
             {None: {"created": 1721400000, "data": [{"b64_json": img_b64}]}},
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seedream_generate_image_variations(
                 SeedreamVariationsInput(prompt="test", variations=2, base_seed=None),
                 fake_ctx,

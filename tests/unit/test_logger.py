@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from modelark_mcp.observability import logger
+from ark_mcp.observability import logger
 
 
 def _parse_stderr(capsys: pytest.CaptureFixture[str]) -> list[dict[str, object]]:
@@ -164,7 +164,7 @@ class TestNestedRedaction:
         assert records[0]["items"][0]["name"] == "item1"
 
     def test_redact_preserves_set_and_frozenset_types(self) -> None:
-        from modelark_mcp.observability.logger import _redact
+        from ark_mcp.observability.logger import _redact
 
         assert _redact({"a", "b"}) == {"a", "b"}
         assert isinstance(_redact({"a", "b"}), set)
@@ -172,7 +172,7 @@ class TestNestedRedaction:
         assert isinstance(_redact(frozenset({"a", "b"})), frozenset)
 
     def test_redact_recurses_through_nested_set_containers(self) -> None:
-        from modelark_mcp.observability.logger import _redact
+        from ark_mcp.observability.logger import _redact
 
         redacted = _redact({(1, 2), frozenset({"x"})})
         assert isinstance(redacted, set)
@@ -199,7 +199,7 @@ class TestLogLevels:
         assert records[0]["level"] == "ERROR"
 
     def test_debug_level(self, capsys: pytest.CaptureFixture[str]) -> None:
-        from modelark_mcp.observability.logger import set_level
+        from ark_mcp.observability.logger import set_level
 
         set_level("DEBUG")
         try:

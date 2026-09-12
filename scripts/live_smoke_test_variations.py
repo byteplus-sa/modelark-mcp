@@ -25,33 +25,33 @@ truststore.inject_into_ssl()
 
 from _smoke_context import SmokeClient, require_tool_success, smoke_session  # noqa: E402
 
-from modelark_mcp.config.env import get_settings  # noqa: E402
-from modelark_mcp.tools.seed_audio_generate_variations import (  # noqa: E402
+from ark_mcp.config.env import get_settings  # noqa: E402
+from ark_mcp.tools.seed_audio_generate_variations import (  # noqa: E402
     SeedAudioVariationsInput,
     SeedAudioVariationsOutput,
 )
-from modelark_mcp.tools.seedance_create_task import SeedanceImageInput  # noqa: E402
-from modelark_mcp.tools.seedance_create_task_variations import (  # noqa: E402
+from ark_mcp.tools.seedance_create_task import SeedanceImageInput  # noqa: E402
+from ark_mcp.tools.seedance_create_task_variations import (  # noqa: E402
     SeedanceVariationsInput,
     SeedanceVariationsOutput,
 )
-from modelark_mcp.tools.seedance_get_task import (  # noqa: E402
+from ark_mcp.tools.seedance_get_task import (  # noqa: E402
     SeedanceGetTaskInput,
     SeedanceTaskOutput,
 )
-from modelark_mcp.tools.seedance_list_tasks import (  # noqa: E402
+from ark_mcp.tools.seedance_list_tasks import (  # noqa: E402
     SeedanceListTasksInput,
     SeedanceTaskPage,
 )
-from modelark_mcp.tools.seedream_generate_image_variations import (  # noqa: E402
+from ark_mcp.tools.seedream_generate_image_variations import (  # noqa: E402
     SeedreamVariationsInput,
     SeedreamVariationsOutput,
 )
 
 if TYPE_CHECKING:
-    from modelark_mcp.artifacts.store import ArtifactStore
-    from modelark_mcp.domain.artifacts import ArtifactRef
-    from modelark_mcp.runtime import RuntimeServices
+    from ark_mcp.artifacts.store import ArtifactStore
+    from ark_mcp.domain.artifacts import ArtifactRef
+    from ark_mcp.runtime import RuntimeServices
 
 ARTIFACTS_DIR = Path(".artifacts")
 
@@ -236,7 +236,7 @@ async def test_seedance_variations(
 
 
 async def main() -> int:
-    header("ModelArk Seed MCP — Live Variation Smoke Test")
+    header("Ark Seed MCP — Live Variation Smoke Test")
 
     settings = get_settings()
     print(f"  ModelArk configured: {settings.has_modelark}")

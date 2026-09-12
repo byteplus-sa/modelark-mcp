@@ -13,13 +13,13 @@ import pytest
 import respx
 from pydantic import ValidationError
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
-from modelark_mcp.providers.vod_mediakit.schemas import (
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
+from ark_mcp.providers.vod_mediakit.schemas import (
     VodMediaKitTranscodeRequest,
     VodMediaKitTranscodeVideoOptions,
 )
-from modelark_mcp.providers.vod_mediakit.transcode import VodMediaKitTranscodeService
+from ark_mcp.providers.vod_mediakit.transcode import VodMediaKitTranscodeService
 
 BASE_URL = "https://mediakit.ap-southeast-1.bytepluses.com/api/v1"
 SUBMIT_ENDPOINT = f"{BASE_URL}/tools/transcode-video"

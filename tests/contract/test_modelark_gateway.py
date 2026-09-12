@@ -15,7 +15,7 @@ import httpx
 import pytest
 import respx
 
-from modelark_mcp.providers.modelark.client import ModelArkGateway
+from ark_mcp.providers.modelark.client import ModelArkGateway
 
 MODELARK_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3"
 

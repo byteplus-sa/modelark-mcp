@@ -13,9 +13,9 @@ from unittest.mock import patch
 import pytest
 from fastmcp.tools import ToolResult
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
-from modelark_mcp.tools.seed_audio_generate import (
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.seed_speech.seed_audio import SeedAudioService
+from ark_mcp.tools.seed_audio_generate import (
     SeedAudioGenerateInput,
     SeedAudioGenerateOutput,
     seed_audio_generate,
@@ -34,7 +34,7 @@ def _patch_audio_service(monkeypatch: pytest.MonkeyPatch, response_data: dict[st
         *,
         request_id: str | None = None,
     ) -> tuple[Any, str | None]:
-        from modelark_mcp.providers.seed_speech.schemas import (
+        from ark_mcp.providers.seed_speech.schemas import (
             SeedAudioProviderResponse,
         )
 
@@ -67,7 +67,7 @@ class TestSeedAudioGenerateTool:
             },
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seed_audio_generate(
                 SeedAudioGenerateInput(text_prompt="Hello world"), fake_ctx
             )
@@ -106,7 +106,7 @@ class TestSeedAudioGenerateTool:
             },
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seed_audio_generate(
                 SeedAudioGenerateInput(text_prompt="Hello", persist=True), fake_ctx
             )
@@ -128,7 +128,7 @@ class TestSeedAudioGenerateTool:
             {"code": 0, "audio": audio_b64, "duration": 1.0, "original_duration": 1.0},
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             await seed_audio_generate(SeedAudioGenerateInput(text_prompt="Hi"), fake_ctx)
 
         # Should have reported progress at 10, 30, 50, 80, 100.
@@ -145,7 +145,7 @@ class TestSeedAudioGenerateTool:
         fake_ctx: FakeContext,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from modelark_mcp.domain.errors import NormalizedProviderError
+        from ark_mcp.domain.errors import NormalizedProviderError
 
         async def mock_generate(
             self: SeedAudioService,

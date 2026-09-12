@@ -13,10 +13,10 @@ import pytest
 import respx
 from pydantic import ValidationError
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
-from modelark_mcp.providers.vod_mediakit.schemas import VodMediaKitSeparateVoiceRequest
-from modelark_mcp.providers.vod_mediakit.separate_voice import (
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.vod_mediakit.client import VodMediaKitGateway
+from ark_mcp.providers.vod_mediakit.schemas import VodMediaKitSeparateVoiceRequest
+from ark_mcp.providers.vod_mediakit.separate_voice import (
     VodMediaKitSeparateVoiceService,
 )
 

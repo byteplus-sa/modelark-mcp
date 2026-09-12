@@ -195,7 +195,7 @@ S3-compatible storage.
 |---|---|---|
 | `ARTIFACT_BACKEND` | `filesystem` | `filesystem` (local disk) or `object_storage` (TOS/S3) |
 | `STATE_BACKEND` | `sqlite` | Task ownership/budget/cache backend; only `sqlite` (single instance) is implemented |
-| `ARTIFACT_DIR` | `~/.modelark-mcp/artifacts` | Media, metadata, ownership, and budget state |
+| `ARTIFACT_DIR` | `~/.ark-mcp/artifacts` | Media, metadata, ownership, and budget state |
 | `ARTIFACT_TTL_SECONDS` | `604800` | Artifact retention, in seconds |
 | `ARTIFACT_SWEEP_INTERVAL_SECONDS` | `3600` | Interval between background artifact/state expiry sweeps |
 | `STATE_PRUNE_MAX_AGE_DAYS` | `30` | Max age for ownership/budget/cache rows before pruning |
@@ -219,7 +219,7 @@ budget, cache, and limiter implementations before horizontal scaling is safe.
 | `FASTMCP_DOCKET_URL` | `memory://` | FastMCP background-task backend used by generation, transcription, upload, provider submission, understanding, and optional media-persistence calls; Redis can retain task state across restarts of the same single-replica deployment; it does not make SQLite state horizontally scalable |
 | `FASTMCP_TASKS_ENCRYPTION_KEY` | unset | Required for JWT-authenticated Redis task backends; use at least 32 random characters and keep the same key across restarts |
 | `FASTMCP_DOCKET_CONCURRENCY` | `10` | Maximum active background tasks per worker; provider/principal limits still apply |
-| `MODELARK_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
+| `ARK_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
 
 Logs are structured JSON on stderr. Provider credentials and sensitive media
 fields are redacted. The default in-memory task backend is process-local; a

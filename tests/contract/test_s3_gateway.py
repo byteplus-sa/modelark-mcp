@@ -13,8 +13,8 @@ from unittest.mock import MagicMock
 import pytest
 from botocore.exceptions import ClientError
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.s3.client import S3Gateway
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.s3.client import S3Gateway
 
 
 def _make_client_error(

@@ -12,31 +12,31 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastmcp.tools import ToolResult
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.modelark.schemas import (
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.modelark.schemas import (
     SeedanceGenerationUsage,
     SeedanceTaskResponse,
 )
-from modelark_mcp.providers.modelark.seedance import SeedanceService
-from modelark_mcp.security.safe_downloader import DownloadedMedia
-from modelark_mcp.tools.seedance_cancel_or_delete_task import (
+from ark_mcp.providers.modelark.seedance import SeedanceService
+from ark_mcp.security.safe_downloader import DownloadedMedia
+from ark_mcp.tools.seedance_cancel_or_delete_task import (
     SeedanceCancelOrDeleteInput,
     SeedanceCancelOrDeleteOutput,
     seedance_cancel_or_delete_task,
 )
-from modelark_mcp.tools.seedance_create_task import (
+from ark_mcp.tools.seedance_create_task import (
     SeedanceAudioInput,
     SeedanceCreateTaskInput,
     SeedanceCreateTaskOutput,
     SeedanceVideoInput,
     seedance_create_task,
 )
-from modelark_mcp.tools.seedance_get_task import (
+from ark_mcp.tools.seedance_get_task import (
     SeedanceGetTaskInput,
     SeedanceTaskOutput,
     seedance_get_task,
 )
-from modelark_mcp.tools.seedance_list_tasks import (
+from ark_mcp.tools.seedance_list_tasks import (
     SeedanceListTasksInput,
     SeedanceTaskPage,
     seedance_list_tasks,
@@ -263,9 +263,9 @@ class TestSeedanceGetTaskTool:
         monkeypatch.setattr(SeedanceService, "close", _mock_close)
 
         with (
-            patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store),
+            patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store),
             patch(
-                "modelark_mcp.security.safe_downloader.SafeDownloader.download",
+                "ark_mcp.security.safe_downloader.SafeDownloader.download",
                 new=AsyncMock(
                     return_value=DownloadedMedia(
                         body=b"fake-video-bytes",
@@ -301,7 +301,7 @@ class TestSeedanceGetTaskTool:
         # Pre-populate cache to simulate a previous get call.
         from datetime import UTC, datetime
 
-        from modelark_mcp.domain.artifacts import ArtifactRef
+        from ark_mcp.domain.artifacts import ArtifactRef
 
         cached_ref = ArtifactRef(
             id="cached-video-id",
@@ -333,7 +333,7 @@ class TestSeedanceGetTaskTool:
         monkeypatch.setattr(SeedanceService, "get_task", mock_get)
         monkeypatch.setattr(SeedanceService, "close", _mock_close)
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seedance_get_task(SeedanceGetTaskInput(task_id="task-cached"), fake_ctx)
 
         # Should return the cached ref, not download again.
@@ -348,7 +348,7 @@ class TestSeedanceGetTaskTool:
         fake_ctx: FakeContext,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from modelark_mcp.providers.modelark.schemas import SeedanceErrorDetail
+        from ark_mcp.providers.modelark.schemas import SeedanceErrorDetail
 
         task = SeedanceTaskResponse(
             id="task-fail",
@@ -383,7 +383,7 @@ class TestSeedanceListTasksTool:
         fake_ctx: FakeContext,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from modelark_mcp.providers.modelark.schemas import (
+        from ark_mcp.providers.modelark.schemas import (
             SeedanceTaskListResponse,
         )
 

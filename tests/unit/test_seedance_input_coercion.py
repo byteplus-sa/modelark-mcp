@@ -5,12 +5,12 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from modelark_mcp.tools._seedance_shared import (
+from ark_mcp.tools._seedance_shared import (
     SeedanceAudioInput,
     SeedanceVideoInput,
 )
-from modelark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
-from modelark_mcp.tools.seedance_create_task import SeedanceCreateTaskInput
+from ark_mcp.tools.seedance_2_5_create_task import Seedance25CreateTaskInput
+from ark_mcp.tools.seedance_create_task import SeedanceCreateTaskInput
 
 
 class TestSeedanceImageCoercion:

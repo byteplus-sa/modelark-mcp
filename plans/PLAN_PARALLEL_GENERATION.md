@@ -21,7 +21,7 @@ source:
   - https://gofastmcp.com/servers/tools
   - https://limeng.mintlify.app/en/zmodelImage/byteplus/seedream-4-0-text-to-image
 related:
-  - "[[PLAN_MODELARK_SEED_MULTIMODAL_MCP]]"
+  - "[[PLAN_ARK_SEED_MULTIMODAL_MCP]]"
 ---
 
 <!-- markdownlint-disable MD013 MD025 -->
@@ -137,12 +137,12 @@ flowchart TD
 ## Shared Models
 
 ```python
-# src/modelark_mcp/domain/models.py (additions)
+# src/ark_mcp/domain/models.py (additions)
 
 from __future__ import annotations
 from typing import Any
 from pydantic import BaseModel, Field
-from modelark_mcp.domain.artifacts import ArtifactRef
+from ark_mcp.domain.artifacts import ArtifactRef
 
 
 class VariationResult(BaseModel):
@@ -180,7 +180,7 @@ import from `tools/`.
 ## Shared Parallel Helper
 
 ```python
-# src/modelark_mcp/tools/_parallel.py
+# src/ark_mcp/tools/_parallel.py
 
 from __future__ import annotations
 
@@ -258,7 +258,7 @@ coroutine in `asyncio.wait_for` for per-variation timeout control.
 ### 1. `seedream_generate_image_variations`
 
 ```python
-# src/modelark_mcp/tools/seedream_generate_image_variations.py
+# src/ark_mcp/tools/seedream_generate_image_variations.py
 
 class SeedreamVariationsInput(BaseModel):
     """Input for parallel Seedream image generation."""
@@ -323,7 +323,7 @@ usage can be retrieved from the provider's billing dashboard.
 ### 2. `seed_audio_generate_variations`
 
 ```python
-# src/modelark_mcp/tools/seed_audio_generate_variations.py
+# src/ark_mcp/tools/seed_audio_generate_variations.py
 
 class SeedAudioVariationsInput(BaseModel):
     """Input for parallel Seed Audio generation."""
@@ -378,7 +378,7 @@ are needed, use the single-generation `seed_audio_generate` tool.
 ### 3. `seedance_create_task_variations`
 
 ```python
-# src/modelark_mcp/tools/seedance_create_task_variations.py
+# src/ark_mcp/tools/seedance_create_task_variations.py
 
 class SeedanceVariationsInput(SeedanceCreateTaskInput):
     """Input for parallel Seedance video task creation.
@@ -466,7 +466,7 @@ async def seedream_generate_image_variations(
     seeds = generate_seeds(input.base_seed, input.variations)
     prompts = resolve_prompts(input.prompt, input.variation_prompts, input.variations)
 
-    from modelark_mcp.server import get_artifact_store
+    from ark_mcp.server import get_artifact_store
     store = get_artifact_store()
 
     images_data = [src.model_dump() for src in input.images] if input.images else None
@@ -683,7 +683,7 @@ assert `== "auto"`.
 ## File Organization
 
 ```text
-src/modelark_mcp/
+src/ark_mcp/
 ├── domain/
 │   └── models.py                  # MODIFIED: add VariationResult, VariationSummary
 ├── tools/
@@ -713,7 +713,7 @@ under the same credential gates as their single-generation counterparts:
 ```python
 if settings.has_seed_audio:
     # ... existing seed_audio_generate ...
-    from modelark_mcp.tools.seed_audio_generate_variations import (
+    from ark_mcp.tools.seed_audio_generate_variations import (
         TOOL_ANNOTATIONS as audio_var_annotations,
         seed_audio_generate_variations,
     )
@@ -724,7 +724,7 @@ if settings.has_seed_audio:
 
 if settings.has_modelark:
     # ... existing seedream and seedance tools ...
-    from modelark_mcp.tools.seedream_generate_image_variations import (
+    from ark_mcp.tools.seedream_generate_image_variations import (
         TOOL_ANNOTATIONS as seedream_var_annotations,
         seedream_generate_image_variations,
     )
@@ -733,7 +733,7 @@ if settings.has_modelark:
         annotations={**seedream_var_annotations},
     )(seedream_generate_image_variations)
 
-    from modelark_mcp.tools.seedance_create_task_variations import (
+    from ark_mcp.tools.seedance_create_task_variations import (
         TOOL_ANNOTATIONS as seedance_var_annotations,
         seedance_create_task_variations,
     )

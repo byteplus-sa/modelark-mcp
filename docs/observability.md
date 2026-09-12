@@ -31,17 +31,17 @@ Four module-level functions, all `(message: str, **fields: Any) -> None`:
 
 | Env var | Default | Notes |
 |---|---|---|
-| `MODELARK_LOG_LEVEL` | `INFO` | recognized: `DEBUG`, `INFO`, `WARNING`, `ERROR`; an unknown value silently falls back to `INFO` |
+| `ARK_LOG_LEVEL` | `INFO` | recognized: `DEBUG`, `INFO`, `WARNING`, `ERROR`; an unknown value silently falls back to `INFO` |
 
 `set_level(level)` overrides at runtime (called once from `create_server`,
 which passes the resolved `Settings.log_level`); `get_level()` returns the
 current name. `set_level` normalizes via `.upper()` (it does not trim
 whitespace) and **raises `ValueError`** for unrecognized levels — it does
 not fall back. The silent fallback to `INFO` happens only at module-import
-time, where `MODELARK_LOG_LEVEL` is looked up in the level map with a
+time, where `ARK_LOG_LEVEL` is looked up in the level map with a
 default of `20` (INFO).
 
-Through the normal `Settings` path, `MODELARK_LOG_LEVEL` is a
+Through the normal `Settings` path, `ARK_LOG_LEVEL` is a
 `Literal["DEBUG","INFO","WARNING","ERROR"]` field with a before-validator
 that uppercases; an untrimmed value such as `" info "` becomes `" INFO "`
 and is rejected by Pydantic before `set_level` is ever called.
@@ -80,18 +80,18 @@ labels). All Histograms use the `prometheus_client` default buckets
 
 | Metric | Type | Labels | What it measures | Label values |
 |---|---|---|---|---|
-| `modelark_mcp_tool_requests_total` | Counter | `tool`, `status` | Foreground outcomes, background acceptance, and worker outcomes | `accepted`, `success`, `error`, `exception`, `cancelled` |
-| `modelark_mcp_tool_duration_seconds` | Histogram | `tool` | Foreground execution or background worker execution duration, including failure and cancellation | — |
-| `modelark_mcp_tool_admission_duration_seconds` | Histogram | `tool` | Accepted background task submission duration, excluding worker execution | — |
-| `modelark_mcp_provider_requests_total` | Counter | `provider`, `operation`, `status` | outbound provider HTTP requests | `operation` = HTTP method lowercased; `status` = `success` (HTTP < 400) / `error` (HTTP ≥ 400) / `exception` |
-| `modelark_mcp_provider_duration_seconds` | Histogram | `provider`, `operation` | provider HTTP request duration (observed in `finally`) | `operation` = HTTP method lowercased |
-| `modelark_mcp_artifact_operations_total` | Counter | `operation`, `status`, `media_type` | artifact store put/get | `operation` = `put` / `get`; only `status="success"` is emitted in current call sites |
-| `modelark_mcp_budget_rejections_total` | Counter | `product` | requests rejected for exceeding daily budget | one inc per rejection |
-| `modelark_mcp_retry_attempts_total` | Counter | `provider`, `operation` | retried provider attempts (excluding the initial attempt) | one inc per retry |
+| `ark_mcp_tool_requests_total` | Counter | `tool`, `status` | Foreground outcomes, background acceptance, and worker outcomes | `accepted`, `success`, `error`, `exception`, `cancelled` |
+| `ark_mcp_tool_duration_seconds` | Histogram | `tool` | Foreground execution or background worker execution duration, including failure and cancellation | — |
+| `ark_mcp_tool_admission_duration_seconds` | Histogram | `tool` | Accepted background task submission duration, excluding worker execution | — |
+| `ark_mcp_provider_requests_total` | Counter | `provider`, `operation`, `status` | outbound provider HTTP requests | `operation` = HTTP method lowercased; `status` = `success` (HTTP < 400) / `error` (HTTP ≥ 400) / `exception` |
+| `ark_mcp_provider_duration_seconds` | Histogram | `provider`, `operation` | provider HTTP request duration (observed in `finally`) | `operation` = HTTP method lowercased |
+| `ark_mcp_artifact_operations_total` | Counter | `operation`, `status`, `media_type` | artifact store put/get | `operation` = `put` / `get`; only `status="success"` is emitted in current call sites |
+| `ark_mcp_budget_rejections_total` | Counter | `product` | requests rejected for exceeding daily budget | one inc per rejection |
+| `ark_mcp_retry_attempts_total` | Counter | `provider`, `operation` | retried provider attempts (excluding the initial attempt) | one inc per retry |
 
 VOD AI MediaKit mutation POSTs are intentionally not passed through the automatic
 retry helper because they are non-idempotent and a timeout may be ambiguous.
-Consequently, `modelark_mcp_retry_attempts_total` should not increase for the
+Consequently, `ark_mcp_retry_attempts_total` should not increase for the
 submission. Read-only task polling may retry provider-marked
 retryable failures such as HTTP 429.
 

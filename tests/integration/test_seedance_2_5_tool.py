@@ -10,18 +10,18 @@ from typing import Any
 
 import pytest
 
-from modelark_mcp.providers.modelark.seedance import SeedanceService
-from modelark_mcp.tools._seedance_shared import (
+from ark_mcp.providers.modelark.seedance import SeedanceService
+from ark_mcp.tools._seedance_shared import (
     SeedanceAudioInput,
     SeedanceImageInput,
     SeedanceVideoInput,
 )
-from modelark_mcp.tools.seedance_2_5_create_task import (
+from ark_mcp.tools.seedance_2_5_create_task import (
     Seedance25CreateTaskInput,
     Seedance25CreateTaskOutput,
     seedance_2_5_create_task,
 )
-from modelark_mcp.tools.seedance_2_5_create_task_variations import (
+from ark_mcp.tools.seedance_2_5_create_task_variations import (
     Seedance25VariationsInput,
     Seedance25VariationsOutput,
     seedance_2_5_create_task_variations,
@@ -44,8 +44,8 @@ def seedance_2_5_env(test_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SEEDANCE_DEFAULT_MODEL", "dreamina-seedance-2-5-260628")
     monkeypatch.setenv("SEEDANCE_MODEL_FAMILY", "seedance_2_5")
 
-    from modelark_mcp.config.env import get_settings
-    from modelark_mcp.config.model_capabilities import refresh_capability_registry
+    from ark_mcp.config.env import get_settings
+    from ark_mcp.config.model_capabilities import refresh_capability_registry
 
     get_settings.cache_clear()
     refresh_capability_registry()
@@ -58,8 +58,8 @@ def seedance_2_5_env(test_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 async def seedance_2_5_ctx(seedance_2_5_env: None) -> FakeContext:
-    from modelark_mcp.config.env import get_settings
-    from modelark_mcp.runtime import close_runtime_services, create_runtime_services
+    from ark_mcp.config.env import get_settings
+    from ark_mcp.runtime import close_runtime_services, create_runtime_services
     from tests.fixtures.fake_context import FakeContext
 
     runtime = await create_runtime_services(get_settings())

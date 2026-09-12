@@ -2,7 +2,7 @@
   "$schema": "https://gofastmcp.com/public/schemas/fastmcp.json/v1.json",
   "source": {
     "type": "filesystem",
-    "path": "src/modelark_mcp/server.py",
+    "path": "src/ark_mcp/server.py",
     "entrypoint": "mcp"
   },
   "environment": {

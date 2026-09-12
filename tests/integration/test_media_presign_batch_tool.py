@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.tools.media_presign_batch import (
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.tools.media_presign_batch import (
     MediaPresignBatchInput,
     MediaPresignBatchOutput,
     media_presign_batch,
@@ -38,7 +38,7 @@ class TestMediaPresignBatchSuccess:
         mock_gw = _mock_gateway(["https://s3.example.com/url-1", "https://s3.example.com/url-2"])
 
         with patch(
-            "modelark_mcp.tools.media_presign_batch.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign_batch.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign_batch(
@@ -62,7 +62,7 @@ class TestMediaPresignBatchSuccess:
         mock_gw = _mock_gateway()
 
         with patch(
-            "modelark_mcp.tools.media_presign_batch.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign_batch.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign_batch(
@@ -81,7 +81,7 @@ class TestMediaPresignBatchPartialFailure:
         mock_gw = _mock_gateway()
 
         with patch(
-            "modelark_mcp.tools.media_presign_batch.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign_batch.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign_batch(
@@ -120,7 +120,7 @@ class TestMediaPresignBatchPartialFailure:
         mock_gw.presign_get = _fail_then_succeed
 
         with patch(
-            "modelark_mcp.tools.media_presign_batch.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign_batch.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign_batch(
@@ -147,7 +147,7 @@ class TestMediaPresignBatchPartialFailure:
         mock_gw.presign_get = _boom
 
         with patch(
-            "modelark_mcp.tools.media_presign_batch.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign_batch.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign_batch(
@@ -165,16 +165,16 @@ class TestMediaPresignBatchOwnership:
     async def test_unknown_key_rejected_for_remote_principal(
         self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from modelark_mcp.security.auth_context import AuthContext
+        from ark_mcp.security.auth_context import AuthContext
 
         monkeypatch.setattr(
-            "modelark_mcp.tools.media_presign_batch.get_principal",
+            "ark_mcp.tools.media_presign_batch.get_principal",
             lambda _ctx: AuthContext(principal_id="alice", tenant_id="tenant-a", transport="http"),
         )
         mock_gw = _mock_gateway()
 
         with patch(
-            "modelark_mcp.tools.media_presign_batch.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign_batch.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign_batch(
@@ -194,7 +194,7 @@ class TestMediaPresignBatchErrors:
     async def test_no_object_storage_credentials_raises(
         self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from modelark_mcp.config.env import get_settings
+        from ark_mcp.config.env import get_settings
 
         no_storage = get_settings().model_copy(
             update={
@@ -206,9 +206,7 @@ class TestMediaPresignBatchErrors:
                 "s3_bucket": "",
             }
         )
-        monkeypatch.setattr(
-            "modelark_mcp.tools.media_presign_batch.get_settings", lambda: no_storage
-        )
+        monkeypatch.setattr("ark_mcp.tools.media_presign_batch.get_settings", lambda: no_storage)
 
         with pytest.raises(ValueError, match="Object storage is not configured"):
             await media_presign_batch(

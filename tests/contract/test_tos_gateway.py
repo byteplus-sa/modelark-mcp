@@ -13,8 +13,8 @@ from unittest.mock import MagicMock
 import pytest
 from tos.exceptions import TosClientError, TosServerError
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.tos.client import TosGateway
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.tos.client import TosGateway
 
 
 class _FakeOutput:
@@ -43,7 +43,7 @@ def mock_client() -> MagicMock:
 
 @pytest.fixture
 def gateway(mock_client: MagicMock) -> TosGateway:
-    from modelark_mcp.config.env import get_settings
+    from ark_mcp.config.env import get_settings
 
     get_settings.cache_clear()
     return TosGateway(

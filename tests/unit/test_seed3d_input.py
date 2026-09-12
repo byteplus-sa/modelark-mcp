@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from modelark_mcp.providers.modelark.seed3d import Seed3DService
-from modelark_mcp.tools.hitem3d_create_task import Hitem3dCreateTaskInput
-from modelark_mcp.tools.hyper3d_create_task import Hyper3DCreateTaskInput
+from ark_mcp.providers.modelark.seed3d import Seed3DService
+from ark_mcp.tools.hitem3d_create_task import Hitem3dCreateTaskInput
+from ark_mcp.tools.hyper3d_create_task import Hyper3DCreateTaskInput
 
 
 class TestSeed3DCommandBuilding:

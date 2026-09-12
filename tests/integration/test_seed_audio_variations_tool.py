@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.seed_speech.schemas import SeedAudioProviderResponse
-from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
-from modelark_mcp.tools.seed_audio_generate_variations import (
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.seed_speech.schemas import SeedAudioProviderResponse
+from ark_mcp.providers.seed_speech.seed_audio import SeedAudioService
+from ark_mcp.tools.seed_audio_generate_variations import (
     SeedAudioVariationsInput,
     SeedAudioVariationsOutput,
     seed_audio_generate_variations,
@@ -62,7 +62,7 @@ class TestSeedAudioVariationsTool:
             },
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seed_audio_generate_variations(
                 SeedAudioVariationsInput(
                     text_prompt="hello",
@@ -101,7 +101,7 @@ class TestSeedAudioVariationsTool:
             },
         )
 
-        with patch("modelark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
+        with patch("ark_mcp.artifacts.registry.get_artifact_store", return_value=temp_store):
             result = await seed_audio_generate_variations(
                 SeedAudioVariationsInput(
                     variation_prompts=["good", "bad", "good"],
@@ -123,7 +123,7 @@ class TestSeedAudioVariationsTool:
     async def test_media_mixing_raises(self) -> None:
         from pydantic import ValidationError
 
-        from modelark_mcp.domain.media import AudioReference, MediaSource, MediaSourceKind
+        from ark_mcp.domain.media import AudioReference, MediaSource, MediaSourceKind
 
         with pytest.raises(ValidationError, match="mutually exclusive"):
             SeedAudioVariationsInput(

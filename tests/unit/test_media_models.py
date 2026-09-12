@@ -8,7 +8,7 @@ import struct
 import pytest
 from pydantic import ValidationError
 
-from modelark_mcp.domain.media import AudioReference, MediaSource, MediaSourceKind
+from ark_mcp.domain.media import AudioReference, MediaSource, MediaSourceKind
 
 
 def _make_wav_base64(duration_seconds: float, sample_rate: int = 8000) -> str:

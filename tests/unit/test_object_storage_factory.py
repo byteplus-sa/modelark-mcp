@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from modelark_mcp.config.env import Settings
-from modelark_mcp.providers.object_storage import make_object_storage_gateway
-from modelark_mcp.providers.s3.client import S3Gateway
-from modelark_mcp.providers.tos.client import TosGateway
+from ark_mcp.config.env import Settings
+from ark_mcp.providers.object_storage import make_object_storage_gateway
+from ark_mcp.providers.s3.client import S3Gateway
+from ark_mcp.providers.tos.client import TosGateway
 
 
 def _tos_settings() -> Settings:

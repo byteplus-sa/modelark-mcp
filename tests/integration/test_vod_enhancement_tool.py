@@ -8,18 +8,18 @@ from unittest.mock import AsyncMock
 import pytest
 from fastmcp.tools import ToolResult
 
-from modelark_mcp.artifacts.store import ArtifactPersistenceError
-from modelark_mcp.domain.artifacts import ArtifactRef
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
-from modelark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission, EnhancementTask
-from modelark_mcp.security.auth_context import AuthContext
-from modelark_mcp.tools.vod_enhance_video import (
+from ark_mcp.artifacts.store import ArtifactPersistenceError
+from ark_mcp.domain.artifacts import ArtifactRef
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.vod_mediakit.enhancement import VodMediaKitEnhancementService
+from ark_mcp.providers.vod_mediakit.schemas import EnhancementSubmission, EnhancementTask
+from ark_mcp.security.auth_context import AuthContext
+from ark_mcp.tools.vod_enhance_video import (
     VodEnhanceVideoInput,
     VodEnhanceVideoOutput,
     vod_enhance_video,
 )
-from modelark_mcp.tools.vod_get_enhancement_task import (
+from ark_mcp.tools.vod_get_enhancement_task import (
     VodEnhancementTaskOutput,
     VodGetEnhancementTaskInput,
     vod_get_enhancement_task,

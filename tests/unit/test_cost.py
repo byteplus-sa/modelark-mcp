@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from modelark_mcp.tools._cost import (
+from ark_mcp.tools._cost import (
     COST_PER_AUDIO_SECOND,
     COST_PER_IMAGE,
     COST_PER_VIDEO_TASK,
@@ -190,7 +190,7 @@ class TestLogCostEstimate:
 
     def test_log_cost_estimate_calls_logger(self, capsys: pytest.CaptureFixture[str]) -> None:
         capsys.readouterr()
-        with patch("modelark_mcp.tools._cost.log_info") as mock_log:
+        with patch("ark_mcp.tools._cost.log_info") as mock_log:
             log_cost_estimate(product="image", variations=1)
             mock_log.assert_called_once_with(
                 "cost_estimate",
@@ -204,18 +204,18 @@ class TestEstimateCost3D:
     """Tests for estimate_cost with 3d product."""
 
     def test_hyper3d_default(self) -> None:
-        from modelark_mcp.tools._cost import COST_PER_3D_TASK_HYPER3D
+        from ark_mcp.tools._cost import COST_PER_3D_TASK_HYPER3D
 
         assert estimate_cost(product="3d", variations=1) == COST_PER_3D_TASK_HYPER3D
 
     def test_hitem3d_family(self) -> None:
-        from modelark_mcp.tools._cost import COST_PER_3D_TASK_HITEM3D
+        from ark_mcp.tools._cost import COST_PER_3D_TASK_HITEM3D
 
         cost = estimate_cost(product="3d", variations=2, seed3d_family="seed3d_hitem3d")
         assert cost == round(2 * COST_PER_3D_TASK_HITEM3D, 2)
 
     def test_hyper3d_family(self) -> None:
-        from modelark_mcp.tools._cost import COST_PER_3D_TASK_HYPER3D
+        from ark_mcp.tools._cost import COST_PER_3D_TASK_HYPER3D
 
         cost = estimate_cost(product="3d", variations=1, seed3d_family="seed3d_hyper3d")
         assert cost == COST_PER_3D_TASK_HYPER3D

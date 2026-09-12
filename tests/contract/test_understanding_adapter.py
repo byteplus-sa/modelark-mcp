@@ -11,9 +11,9 @@ import httpx
 import pytest
 import respx
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.modelark.client import ModelArkGateway
-from modelark_mcp.providers.modelark.understanding import SeedUnderstandingService
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.modelark.client import ModelArkGateway
+from ark_mcp.providers.modelark.understanding import SeedUnderstandingService
 
 MODELARK_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3"
 
@@ -456,7 +456,7 @@ class TestUnderstandingModelFamilyAutoDetection:
     """
 
     def test_default_model_resolves_to_turbo(self) -> None:
-        from modelark_mcp.config.env import Settings
+        from ark_mcp.config.env import Settings
 
         settings = Settings(_env_file=None)
         assert settings.seed_understanding_default_model == "dola-seed-2-1-turbo-260628"
@@ -466,7 +466,7 @@ class TestUnderstandingModelFamilyAutoDetection:
         assert binding.family.value == "turbo"
 
     def test_dola_seed_evolving_auto_resolves_to_pro(self) -> None:
-        from modelark_mcp.config.env import Settings
+        from ark_mcp.config.env import Settings
 
         settings = Settings(
             _env_file=None,
@@ -481,7 +481,7 @@ class TestUnderstandingModelFamilyAutoDetection:
     def test_unknown_custom_id_without_family_raises(self) -> None:
         from pydantic import ValidationError
 
-        from modelark_mcp.config.env import Settings
+        from ark_mcp.config.env import Settings
 
         with pytest.raises((ValueError, ValidationError)):
             Settings(

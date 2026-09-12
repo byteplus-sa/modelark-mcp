@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from modelark_mcp.config.model_capabilities import (
+from ark_mcp.config.model_capabilities import (
     ImageCapabilities,
     ModelFamily,
     Seed3DCapabilities,
@@ -101,8 +101,8 @@ class TestSeedance25Capabilities:
         """When SEEDANCE_MODEL_BINDINGS includes a 2.5 binding, caps are correct."""
         import os
 
-        from modelark_mcp.config.env import refresh_settings
-        from modelark_mcp.config.model_capabilities import refresh_capability_registry
+        from ark_mcp.config.env import refresh_settings
+        from ark_mcp.config.model_capabilities import refresh_capability_registry
 
         old_bindings = os.environ.get("SEEDANCE_MODEL_BINDINGS", "")
         old_default = os.environ.get("SEEDANCE_DEFAULT_MODEL", "")
@@ -130,8 +130,8 @@ class TestSeedance25Capabilities:
         """2.5 model accepts duration up to 30 but not 31."""
         import os
 
-        from modelark_mcp.config.env import refresh_settings
-        from modelark_mcp.config.model_capabilities import refresh_capability_registry
+        from ark_mcp.config.env import refresh_settings
+        from ark_mcp.config.model_capabilities import refresh_capability_registry
 
         old_default = os.environ.get("SEEDANCE_DEFAULT_MODEL", "")
         try:
@@ -154,8 +154,8 @@ class TestSeedance25Capabilities:
         """2.5 model accepts 480p/720p/1080p but not 4k."""
         import os
 
-        from modelark_mcp.config.env import refresh_settings
-        from modelark_mcp.config.model_capabilities import refresh_capability_registry
+        from ark_mcp.config.env import refresh_settings
+        from ark_mcp.config.model_capabilities import refresh_capability_registry
 
         old_default = os.environ.get("SEEDANCE_DEFAULT_MODEL", "")
         try:
@@ -180,7 +180,7 @@ class TestSeed3DCapabilities:
     """Tests for the Seed3D capability registry."""
 
     def test_hyper3d_default_resolution(self) -> None:
-        from modelark_mcp.config.env import get_settings
+        from ark_mcp.config.env import get_settings
 
         registry = get_capability_registry()
         settings = get_settings()
@@ -191,7 +191,7 @@ class TestSeed3DCapabilities:
         assert caps.max_reference_images == 5
 
     def test_hitem3d_default_resolution(self) -> None:
-        from modelark_mcp.config.env import get_settings
+        from ark_mcp.config.env import get_settings
 
         registry = get_capability_registry()
         settings = get_settings()

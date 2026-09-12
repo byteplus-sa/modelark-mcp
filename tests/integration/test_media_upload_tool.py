@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastmcp.tools import ToolResult
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.tools.media_upload import (
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.tools.media_upload import (
     MediaUploadInput,
     MediaUploadOutput,
     media_upload,
@@ -36,9 +36,7 @@ class TestMediaUploadBase64:
         data = base64.b64encode(b"fake-video-bytes").decode()
         mock_gw = _mock_gateway()
 
-        with patch(
-            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
-        ):
+        with patch("ark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="video",
@@ -62,9 +60,7 @@ class TestMediaUploadBase64:
         data = base64.b64encode(b"img").decode()
         mock_gw = _mock_gateway()
 
-        with patch(
-            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
-        ):
+        with patch("ark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="image",
@@ -83,9 +79,7 @@ class TestMediaUploadBase64:
         data = base64.b64encode(b"img").decode()
         mock_gw = _mock_gateway()
 
-        with patch(
-            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
-        ):
+        with patch("ark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="image",
@@ -111,9 +105,7 @@ class TestMediaUploadFilePath:
 
         mock_gw = _mock_gateway()
 
-        with patch(
-            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
-        ):
+        with patch("ark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="video",
@@ -150,10 +142,10 @@ class TestMediaUploadFilePath:
     ) -> None:
         from pathlib import Path
 
-        from modelark_mcp.config.env import get_settings
+        from ark_mcp.config.env import get_settings
 
         http_settings = get_settings().model_copy(update={"mcp_transport": "http"})
-        monkeypatch.setattr("modelark_mcp.tools.media_upload.get_settings", lambda: http_settings)
+        monkeypatch.setattr("ark_mcp.tools.media_upload.get_settings", lambda: http_settings)
 
         video_file = Path(str(tmp_path)) / "clip.mp4"
         video_file.write_bytes(b"data")
@@ -221,7 +213,7 @@ class TestMediaUploadErrors:
     async def test_no_object_storage_credentials_raises(
         self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from modelark_mcp.config.env import get_settings
+        from ark_mcp.config.env import get_settings
 
         no_storage = get_settings().model_copy(
             update={
@@ -233,7 +225,7 @@ class TestMediaUploadErrors:
                 "s3_bucket": "",
             }
         )
-        monkeypatch.setattr("modelark_mcp.tools.media_upload.get_settings", lambda: no_storage)
+        monkeypatch.setattr("ark_mcp.tools.media_upload.get_settings", lambda: no_storage)
 
         with pytest.raises(ValueError, match="Object storage is not configured"):
             await media_upload(
@@ -262,9 +254,7 @@ class TestMediaUploadErrors:
             )
         )
 
-        with patch(
-            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
-        ):
+        with patch("ark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="video",
@@ -285,7 +275,7 @@ class TestMediaUploadS3Backend:
     async def test_s3_backend_uses_s3_provider_slot(
         self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from modelark_mcp.config.env import get_settings
+        from ark_mcp.config.env import get_settings
 
         s3_settings = get_settings().model_copy(
             update={
@@ -298,14 +288,12 @@ class TestMediaUploadS3Backend:
                 "object_storage_backend": "s3",
             }
         )
-        monkeypatch.setattr("modelark_mcp.tools.media_upload.get_settings", lambda: s3_settings)
+        monkeypatch.setattr("ark_mcp.tools.media_upload.get_settings", lambda: s3_settings)
 
         mock_gw = _mock_gateway()
         data = base64.b64encode(b"fake").decode()
 
-        with patch(
-            "modelark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw
-        ):
+        with patch("ark_mcp.tools.media_upload.make_object_storage_gateway", return_value=mock_gw):
             result = await media_upload(
                 MediaUploadInput(
                     media_type="image",

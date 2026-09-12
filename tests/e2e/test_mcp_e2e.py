@@ -23,22 +23,22 @@ from fastmcp.exceptions import ToolError
 from fastmcp_tasks import call_tool_task
 from mcp.shared.exceptions import MCPError
 
-from modelark_mcp.config.env import get_settings
-from modelark_mcp.config.model_capabilities import refresh_capability_registry
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.modelark.schemas import (
+from ark_mcp.config.env import get_settings
+from ark_mcp.config.model_capabilities import refresh_capability_registry
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.modelark.schemas import (
     ChatCompletionProviderResponse,
     SeedanceTaskListResponse,
     SeedanceTaskResponse,
 )
-from modelark_mcp.providers.modelark.seedance import SeedanceService
-from modelark_mcp.providers.modelark.understanding import SeedUnderstandingService
-from modelark_mcp.providers.seed_speech.schemas import SeedAudioProviderResponse
-from modelark_mcp.providers.seed_speech.seed_audio import SeedAudioService
-from modelark_mcp.security.safe_downloader import DownloadedMedia
+from ark_mcp.providers.modelark.seedance import SeedanceService
+from ark_mcp.providers.modelark.understanding import SeedUnderstandingService
+from ark_mcp.providers.seed_speech.schemas import SeedAudioProviderResponse
+from ark_mcp.providers.seed_speech.seed_audio import SeedAudioService
+from ark_mcp.security.safe_downloader import DownloadedMedia
 
 if TYPE_CHECKING:
-    from modelark_mcp.server import FastMCP
+    from ark_mcp.server import FastMCP
 
 ARK_BASE = "https://ark.test.example.com/api/v3"
 
@@ -62,7 +62,7 @@ def e2e_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> object:
     get_settings.cache_clear()
     refresh_capability_registry()
 
-    from modelark_mcp.server import create_server
+    from ark_mcp.server import create_server
 
     yield SimpleNamespace(mcp=create_server(get_settings()))
 
@@ -393,7 +393,7 @@ class TestSeedreamGenerateImageE2E:
 
         with (
             patch(
-                "modelark_mcp.security.safe_downloader.SafeDownloader.download",
+                "ark_mcp.security.safe_downloader.SafeDownloader.download",
                 new=AsyncMock(
                     return_value=DownloadedMedia(
                         body=b"downloaded-png-data",
@@ -436,7 +436,7 @@ class TestHealthResourceE2E:
         item = content[0]
         assert hasattr(item, "text")
         text = item.text
-        assert "ModelArk Seed MCP Server" in text
+        assert "Ark Seed MCP Server" in text
         assert "healthy" in text
         assert "ModelArk configured: True" in text
         assert "Seed Audio configured: True" in text

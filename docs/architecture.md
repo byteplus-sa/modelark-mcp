@@ -1,8 +1,8 @@
 # Architecture
 
-This document describes the structure of the ModelArk Seed Multimodal MCP
+This document describes the structure of the Ark Seed Multimodal MCP
 Server as shipped today. For the original design rationale, see
-[../plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md](../plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md).
+[../plans/PLAN_ARK_SEED_MULTIMODAL_MCP.md](../plans/PLAN_ARK_SEED_MULTIMODAL_MCP.md).
 
 ## Design goals
 
@@ -28,7 +28,7 @@ Server as shipped today. For the original design rationale, see
 ## Layered structure
 
 ```text
-src/modelark_mcp/
+src/ark_mcp/
 ├── __main__.py            # entry point; truststore injection; transport wiring
 ├── server.py              # FastMCP factory; tool/resource/route registration
 ├── config/                # settings (env), model capability registry

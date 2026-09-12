@@ -18,9 +18,9 @@ import respx
 from fastmcp.tools import ToolResult
 from pydantic import ValidationError
 
-from modelark_mcp.config.env import get_settings
-from modelark_mcp.runtime import close_runtime_services, create_runtime_services
-from modelark_mcp.tools.speech_to_text import (
+from ark_mcp.config.env import get_settings
+from ark_mcp.runtime import close_runtime_services, create_runtime_services
+from ark_mcp.tools.speech_to_text import (
     _STT_MAX_BYTES,
     AsrAudioInput,
     SpeechToTextInput,

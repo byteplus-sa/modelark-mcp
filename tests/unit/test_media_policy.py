@@ -7,7 +7,7 @@ import struct
 
 import pytest
 
-from modelark_mcp.security.media_policy import (
+from ark_mcp.security.media_policy import (
     MediaValidationError,
     check_audio_duration_from_base64,
     check_base64_size,

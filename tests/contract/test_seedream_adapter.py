@@ -10,9 +10,9 @@ import httpx
 import pytest
 import respx
 
-from modelark_mcp.domain.errors import ProviderError
-from modelark_mcp.providers.modelark.client import ModelArkGateway
-from modelark_mcp.providers.modelark.seedream import SeedreamService
+from ark_mcp.domain.errors import ProviderError
+from ark_mcp.providers.modelark.client import ModelArkGateway
+from ark_mcp.providers.modelark.seedream import SeedreamService
 
 MODELARK_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3"
 

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from modelark_mcp.domain.media import MediaSource, MediaSourceKind
-from modelark_mcp.tools.seedream_edit_image import (
+from ark_mcp.domain.media import MediaSource, MediaSourceKind
+from ark_mcp.tools.seedream_edit_image import (
     EditBbox,
     EditCoordinate,
     SeedreamEditInput,

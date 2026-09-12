@@ -10,7 +10,7 @@ logs use stderr.
 ```bash
 make start
 # equivalent
-uv run python -m modelark_mcp
+uv run python -m ark_mcp
 ```
 
 Use this mode when an MCP client launches the server as a subprocess. The
@@ -21,7 +21,7 @@ local principal owns artifacts and Seedance tasks created by that process.
 Loopback development can use local auth:
 
 ```bash
-MCP_TRANSPORT=http MCP_HOST=127.0.0.1 uv run python -m modelark_mcp
+MCP_TRANSPORT=http MCP_HOST=127.0.0.1 uv run python -m ark_mcp
 ```
 
 Network deployment must use JWT verification:
@@ -32,10 +32,10 @@ MCP_HOST=0.0.0.0 \
 MCP_AUTH_MODE=jwt \
 MCP_JWT_JWKS_URI=https://id.example.com/.well-known/jwks.json \
 MCP_JWT_ISSUER=https://id.example.com/ \
-MCP_JWT_AUDIENCE=modelark-mcp \
+MCP_JWT_AUDIENCE=ark-mcp \
 MCP_ALLOWED_HOSTS=mcp.example.com \
 MCP_ALLOWED_ORIGINS=https://client.example.com \
-uv run python -m modelark_mcp
+uv run python -m ark_mcp
 ```
 
 The server validates JWT signature, issuer, audience, scopes, principal, and

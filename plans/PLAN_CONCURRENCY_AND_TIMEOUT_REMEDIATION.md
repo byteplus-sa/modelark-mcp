@@ -13,7 +13,7 @@ tags:
   - fastmcp
   - modelark
 related:
-  - plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md
+  - plans/PLAN_ARK_SEED_MULTIMODAL_MCP.md
   - plans/PLAN_PARALLEL_GENERATION.md
   - plans/PLAN_CODEBASE_GAP_REMEDIATION.md
 ---
@@ -59,9 +59,9 @@ The serialization and timeouts come from four concrete, verifiable sources.
 
 ### 1. Per-principal limiter collapses all local calls into one pool
 
-`ProviderLimiters` (`src/modelark_mcp/runtime.py`) enforces two layers:
+`ProviderLimiters` (`src/ark_mcp/runtime.py`) enforces two layers:
 
-```44:67:src/modelark_mcp/runtime.py
+```44:67:src/ark_mcp/runtime.py
     def __init__(
         self,
         *,
@@ -85,7 +85,7 @@ semaphore. Combined with Seedream Pro / Seed Audio synchronous latencies of
 ### 2. Synchronous SQLite runs on the event loop, serialized per store
 
 `SQLiteTaskOwnershipStore`, `SQLiteObjectKeyOwnershipStore`,
-`SQLiteTaskArtifactCache`, and `BudgetLedger` (`src/modelark_mcp/runtime.py`)
+`SQLiteTaskArtifactCache`, and `BudgetLedger` (`src/ark_mcp/runtime.py`)
 each hold a plain synchronous `sqlite3.Connection` guarded by one
 `asyncio.Lock`. `BudgetLedger.reserve` runs inside `billed_provider_slot`,
 which wraps **every** billable call, so every generation serializes through
@@ -104,7 +104,7 @@ serialization. This must be documented and mitigated, not silently absorbed.
 
 ### 4. HTTP body limit vs. media limit mismatch on upload
 
-`media_upload` (`src/modelark_mcp/tools/media_upload.py`) advertises video
+`media_upload` (`src/ark_mcp/tools/media_upload.py`) advertises video
 uploads against `MediaLimits.video_max_bytes = 200 MiB`
 (`security/media_policy.py`), but the ASGI `RequestBodyLimitMiddleware` is
 wired to `mcp_http_max_body_bytes`, default `10_485_760` (10 MiB,
@@ -137,14 +137,14 @@ and out of scope here.)
    media off JSON-RPC where possible.** Raise `mcp_http_max_body_bytes` to
    cover the 200 MiB video path, and strengthen the skill/docs guidance to use
    the presign + client-side PUT pattern for large references (already
-   documented in `.claude/skills/modelark-mcp/SKILL.md`, but the body cap
+   documented in `.claude/skills/ark-mcp/SKILL.md`, but the body cap
    defeats it).
 
 ## Implementation Tasks
 
 ### Task A: Fix per-principal self-throttling in local mode
 
-**Files:** `src/modelark_mcp/runtime.py`
+**Files:** `src/ark_mcp/runtime.py`
 
 - [x] In `ProviderLimiters.acquire`, when `owner.is_local`, acquire only the
   provider semaphore (skip the principal semaphore).
@@ -161,7 +161,7 @@ ModelArk calls.
 
 ### Task B: Offload SQLite + WAL
 
-**Files:** `src/modelark_mcp/runtime.py`
+**Files:** `src/ark_mcp/runtime.py`
 
 - [x] Add a shared helper that opens the connection with
   `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;` and a
@@ -184,7 +184,7 @@ completes while a commit runs).
 ### Task C: Document client-timeout behavior
 
 **Files:** `docs/troubleshooting.md`, `docs/configuration.md`,
-`.claude/skills/modelark-mcp/SKILL.md`
+`.claude/skills/ark-mcp/SKILL.md`
 
 - [x] Add a "Client timeouts vs provider latency" section: Seedream Pro /
   Seedance synchronous generation can exceed 60 s; a client MCP timeout does
@@ -199,8 +199,8 @@ completes while a commit runs).
 
 ### Task D: Reconcile upload body limit
 
-**Files:** `src/modelark_mcp/config/env.py`, `docs/configuration.md`,
-`.claude/skills/modelark-mcp/SKILL.md`
+**Files:** `src/ark_mcp/config/env.py`, `docs/configuration.md`,
+`.claude/skills/ark-mcp/SKILL.md`
 
 - [x] Raise `mcp_http_max_body_bytes` default to cover the video path
   (≥ 200 MiB + JSON-RPC/Base64 overhead, e.g. `268_435_456`), or add a
@@ -223,7 +223,7 @@ startup error.
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run mypy src
-uv run pytest --disable-socket --allow-unix-socket --cov=modelark_mcp --cov-report=term-missing
+uv run pytest --disable-socket --allow-unix-socket --cov=ark_mcp --cov-report=term-missing
 ```
 
 Coverage must stay ≥ 85% (`pyproject.toml:124`).
@@ -232,10 +232,10 @@ Coverage must stay ≥ 85% (`pyproject.toml:124`).
 
 - `mcp/server/lowlevel/server.py` (installed, v3.4.4 era) — concurrent
   `tg.start_soon` dispatch, lines 679–690.
-- `src/modelark_mcp/runtime.py` — `ProviderLimiters`, SQLite stores.
-- `src/modelark_mcp/config/env.py` — `PROVIDER_MAX_CONCURRENCY` (5),
+- `src/ark_mcp/runtime.py` — `ProviderLimiters`, SQLite stores.
+- `src/ark_mcp/config/env.py` — `PROVIDER_MAX_CONCURRENCY` (5),
   `PRINCIPAL_MAX_CONCURRENCY` (3), `mcp_http_max_body_bytes` (10 MiB),
   `request_timeout_ms` (600000).
-- `src/modelark_mcp/security/media_policy.py` — `MediaLimits.video_max_bytes`
+- `src/ark_mcp/security/media_policy.py` — `MediaLimits.video_max_bytes`
   (200 MiB).
 - `docs/runtime.md`, `docs/transports.md`, `docs/troubleshooting.md`.

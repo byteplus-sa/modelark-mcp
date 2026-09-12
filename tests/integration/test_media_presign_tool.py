@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastmcp.tools import ToolResult
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.tools.media_presign import (
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.tools.media_presign import (
     MediaPresignInput,
     MediaPresignOutput,
     media_presign,
@@ -36,7 +36,7 @@ class TestMediaPresignSuccess:
         mock_gw = _mock_gateway()
 
         with patch(
-            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign(
@@ -55,7 +55,7 @@ class TestMediaPresignSuccess:
         mock_gw = _mock_gateway()
 
         with patch(
-            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign(
@@ -73,7 +73,7 @@ class TestMediaPresignSuccess:
         mock_gw = _mock_gateway()
 
         with patch(
-            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign(
@@ -88,7 +88,7 @@ class TestMediaPresignSuccess:
         mock_gw = _mock_gateway()
 
         with patch(
-            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             await media_presign(
@@ -105,7 +105,7 @@ class TestMediaPresignTosBackend:
     async def test_tos_backend_uses_tos_provider_slot(
         self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from modelark_mcp.config.env import get_settings
+        from ark_mcp.config.env import get_settings
 
         tos_settings = get_settings().model_copy(
             update={
@@ -115,12 +115,12 @@ class TestMediaPresignTosBackend:
                 "object_storage_backend": "tos",
             }
         )
-        monkeypatch.setattr("modelark_mcp.tools.media_presign.get_settings", lambda: tos_settings)
+        monkeypatch.setattr("ark_mcp.tools.media_presign.get_settings", lambda: tos_settings)
 
         mock_gw = _mock_gateway()
 
         with patch(
-            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign(
@@ -138,7 +138,7 @@ class TestMediaPresignTosBackend:
         """End-to-end: upload then re-presign with the same gateway mock."""
         import base64
 
-        from modelark_mcp.tools.media_upload import MediaUploadInput, media_upload
+        from ark_mcp.tools.media_upload import MediaUploadInput, media_upload
 
         upload_gw = AsyncMock()
         upload_gw.upload_bytes = AsyncMock(return_value=None)
@@ -153,11 +153,11 @@ class TestMediaPresignTosBackend:
 
         with (
             patch(
-                "modelark_mcp.tools.media_upload.make_object_storage_gateway",
+                "ark_mcp.tools.media_upload.make_object_storage_gateway",
                 return_value=upload_gw,
             ),
             patch(
-                "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+                "ark_mcp.tools.media_presign.make_object_storage_gateway",
                 return_value=presign_gw,
             ),
         ):
@@ -181,7 +181,7 @@ class TestMediaPresignS3Backend:
     async def test_s3_backend_uses_s3_provider_slot(
         self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from modelark_mcp.config.env import get_settings
+        from ark_mcp.config.env import get_settings
 
         s3_settings = get_settings().model_copy(
             update={
@@ -194,12 +194,12 @@ class TestMediaPresignS3Backend:
                 "object_storage_backend": "s3",
             }
         )
-        monkeypatch.setattr("modelark_mcp.tools.media_presign.get_settings", lambda: s3_settings)
+        monkeypatch.setattr("ark_mcp.tools.media_presign.get_settings", lambda: s3_settings)
 
         mock_gw = _mock_gateway()
 
         with patch(
-            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign(
@@ -257,7 +257,7 @@ class TestMediaPresignErrors:
     async def test_no_object_storage_credentials_raises(
         self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from modelark_mcp.config.env import get_settings
+        from ark_mcp.config.env import get_settings
 
         no_storage = get_settings().model_copy(
             update={
@@ -269,7 +269,7 @@ class TestMediaPresignErrors:
                 "s3_bucket": "",
             }
         )
-        monkeypatch.setattr("modelark_mcp.tools.media_presign.get_settings", lambda: no_storage)
+        monkeypatch.setattr("ark_mcp.tools.media_presign.get_settings", lambda: no_storage)
 
         with pytest.raises(ValueError, match="Object storage is not configured"):
             await media_presign(
@@ -295,7 +295,7 @@ class TestMediaPresignErrors:
         )
 
         with patch(
-            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign(
@@ -334,7 +334,7 @@ class TestMediaPresignErrors:
         mock_gw.presign_get = _fail_then_succeed
 
         with patch(
-            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign.make_object_storage_gateway",
             return_value=mock_gw,
         ):
             result = await media_presign(
@@ -351,16 +351,16 @@ class TestMediaPresignOwnership:
     async def test_unknown_key_rejected_for_remote_principal(
         self, test_env: None, fake_ctx: FakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from modelark_mcp.security.auth_context import AuthContext
+        from ark_mcp.security.auth_context import AuthContext
 
         monkeypatch.setattr(
-            "modelark_mcp.tools.media_presign.get_principal",
+            "ark_mcp.tools.media_presign.get_principal",
             lambda _ctx: AuthContext(principal_id="alice", tenant_id="tenant-a", transport="http"),
         )
         mock_gw = _mock_gateway()
         with (
             patch(
-                "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+                "ark_mcp.tools.media_presign.make_object_storage_gateway",
                 return_value=mock_gw,
             ),
             pytest.raises(PermissionError, match="not owned"),
@@ -373,11 +373,11 @@ class TestMediaPresignOwnership:
     ) -> None:
         import base64
 
-        from modelark_mcp.security.auth_context import AuthContext
-        from modelark_mcp.tools.media_upload import MediaUploadInput, media_upload
+        from ark_mcp.security.auth_context import AuthContext
+        from ark_mcp.tools.media_upload import MediaUploadInput, media_upload
 
         monkeypatch.setattr(
-            "modelark_mcp.tools.media_upload.get_principal",
+            "ark_mcp.tools.media_upload.get_principal",
             lambda _ctx: AuthContext(principal_id="bob", tenant_id="tenant-a", transport="http"),
         )
         upload_gw = AsyncMock()
@@ -385,7 +385,7 @@ class TestMediaPresignOwnership:
         upload_gw.presign_get = AsyncMock(return_value="https://tos.example.com/original-url")
         upload_gw.close = AsyncMock()
         with patch(
-            "modelark_mcp.tools.media_upload.make_object_storage_gateway",
+            "ark_mcp.tools.media_upload.make_object_storage_gateway",
             return_value=upload_gw,
         ):
             uploaded = await media_upload(
@@ -398,13 +398,13 @@ class TestMediaPresignOwnership:
             )
 
         monkeypatch.setattr(
-            "modelark_mcp.tools.media_presign.get_principal",
+            "ark_mcp.tools.media_presign.get_principal",
             lambda _ctx: AuthContext(principal_id="alice", tenant_id="tenant-a", transport="http"),
         )
         presign_gw = _mock_gateway()
         with (
             patch(
-                "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+                "ark_mcp.tools.media_presign.make_object_storage_gateway",
                 return_value=presign_gw,
             ),
             pytest.raises(PermissionError, match="not owned"),
@@ -412,11 +412,11 @@ class TestMediaPresignOwnership:
             await media_presign(MediaPresignInput(object_key=uploaded.object_key), fake_ctx)
 
         monkeypatch.setattr(
-            "modelark_mcp.tools.media_presign.get_principal",
+            "ark_mcp.tools.media_presign.get_principal",
             lambda _ctx: AuthContext(principal_id="bob", tenant_id="tenant-a", transport="http"),
         )
         with patch(
-            "modelark_mcp.tools.media_presign.make_object_storage_gateway",
+            "ark_mcp.tools.media_presign.make_object_storage_gateway",
             return_value=presign_gw,
         ):
             ok = await media_presign(MediaPresignInput(object_key=uploaded.object_key), fake_ctx)

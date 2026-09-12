@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 from fastmcp import Client
 
-from modelark_mcp.config.env import get_settings
+from ark_mcp.config.env import get_settings
 
 SAMPLE_WAV = Path(__file__).resolve().parents[2] / "sample" / "mix_s01_v03.wav"
 
@@ -23,7 +23,7 @@ SAMPLE_WAV = Path(__file__).resolve().parents[2] / "sample" / "mix_s01_v03.wav"
 @pytest.fixture
 def live_server(monkeypatch: pytest.MonkeyPatch) -> object:
     """Create a server reading real .env credentials."""
-    from modelark_mcp.server import create_server
+    from ark_mcp.server import create_server
 
     get_settings.cache_clear()
     yield SimpleNamespace(mcp=create_server(get_settings()))

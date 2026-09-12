@@ -10,7 +10,7 @@ import httpx
 import pytest
 import respx
 
-from modelark_mcp.providers.seed_speech.client import SeedSpeechGateway
+from ark_mcp.providers.seed_speech.client import SeedSpeechGateway
 
 SPEECH_BASE = "https://voice.ap-southeast-1.bytepluses.com"
 

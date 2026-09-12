@@ -37,4 +37,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3).read()"]
 
-CMD ["/app/.venv/bin/python", "-m", "modelark_mcp"]
+CMD ["/app/.venv/bin/python", "-m", "ark_mcp"]

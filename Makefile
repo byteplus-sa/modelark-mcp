@@ -1,8 +1,8 @@
 # ============================================================================
-# ModelArk Seed Multimodal MCP Server — task runner
+# Ark Seed Multimodal MCP Server — task runner
 #
 # Wraps uv and fastmcp CLI commands for the Python MCP server.
-# See plans/PLAN_MODELARK_SEED_MULTIMODAL_MCP.md for the full design.
+# See plans/PLAN_ARK_SEED_MULTIMODAL_MCP.md for the full design.
 #
 # uv is the package manager and project runner.
 # FastMCP is the MCP framework (decorator-based tools, resources, transports).
@@ -15,7 +15,7 @@ SHELL := /bin/bash
 UV      := uv
 PYTHON  := python
 FASTMCP := fastmcp
-ENTRY   := src/modelark_mcp/server.py:mcp
+ENTRY   := src/ark_mcp/server.py:mcp
 
 .DEFAULT_GOAL := help
 
@@ -24,12 +24,12 @@ ENTRY   := src/modelark_mcp/server.py:mcp
         secrets-baseline audit inspect inspect-dev check-env clean setup
 
 help: ## Show available targets
-	@awk 'BEGIN {FS = ":.*##"; printf "ModelArk Seed MCP — task runner\n\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "Ark Seed MCP — task runner\n\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # --- Setup -----------------------------------------------------------------
 
 bootstrap: ## One-time scaffold: init uv project and add deps (Phase 1)
-	$(UV) init --lib modelark-mcp
+	$(UV) init --lib ark-mcp
 	$(UV) add fastmcp httpx pydantic
 	$(UV) add --dev ruff mypy pytest pytest-asyncio
 	@echo "Bootstrap complete. Copy .env.example to .env and fill in credentials."
@@ -51,12 +51,12 @@ start: ## Run the server over stdio
 	$(FASTMCP) run $(ENTRY)
 
 start-http: ## Run the server over Streamable HTTP (localhost:3000)
-	MCP_TRANSPORT=http MCP_HOST=127.0.0.1 MCP_PORT=3000 $(UV) run python -m modelark_mcp
+	MCP_TRANSPORT=http MCP_HOST=127.0.0.1 MCP_PORT=3000 $(UV) run python -m ark_mcp
 
 # --- Quality gates ---------------------------------------------------------
 
 test: ## Run the offline test suite with coverage enforcement
-	$(UV) run pytest --cov=modelark_mcp --cov-report=term-missing
+	$(UV) run pytest --cov=ark_mcp --cov-report=term-missing
 
 test-watch: ## Run tests in watch mode
 	$(UV) run pytest-watch
@@ -99,7 +99,7 @@ inspect-dev: ## Launch FastMCP inspector with auto-reload
 # --- Environment & maintenance --------------------------------------------
 
 check-env: ## Validate required environment variables are set
-	$(UV) run python -c "from modelark_mcp.config.env import validate; validate()"
+	$(UV) run python -c "from ark_mcp.config.env import validate; validate()"
 
 clean: ## Remove build artifacts and caches
 	rm -rf dist build .ruff_cache .mypy_cache .pytest_cache .pre-commit-cache *.egg-info

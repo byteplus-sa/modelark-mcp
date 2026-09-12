@@ -1,7 +1,7 @@
 # Runtime Services
 
 The server lifespan owns a single `RuntimeServices` object
-(`src/modelark_mcp/runtime.py`) that is built once at startup and closed at
+(`src/ark_mcp/runtime.py`) that is built once at startup and closed at
 shutdown. Every tool retrieves it via `get_runtime(ctx)`. This document
 describes its operational services, including concurrency limiting, the daily
 budget ledger, provider-task and object-key ownership, persistence caching,
@@ -119,7 +119,7 @@ Three-state lifecycle: `reserved` → `committed` (charged) **or**
 
 - `reserve(owner, estimate)` — sums the principal's spend for the current
   UTC date; if a configured limit exists and `current + amount` would exceed
-  it, increments `modelark_mcp_budget_rejections_total{product}` and raises
+  it, increments `ark_mcp_budget_rejections_total{product}` and raises
   `BudgetExceededError` **before** the provider is called. Otherwise inserts
   a `reserved` row and returns a `BudgetReservation`.
 - `commit(reservation)` — marks the row `committed`.
@@ -247,7 +247,7 @@ random_value=random.random)`:
     `base = min(base_delay * 2**(attempt-1), max_delay)`;
     `jitter = base * jitter_ratio * (random*2 - 1)`;
     `delay = max(0.0, base + jitter)`.
-- Each retry increments `modelark_mcp_retry_attempts_total{provider, operation}`.
+- Each retry increments `ark_mcp_retry_attempts_total{provider, operation}`.
 
 ## Billable call composition (`billed_provider_slot`)
 

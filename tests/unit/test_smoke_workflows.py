@@ -126,12 +126,12 @@ async def test_smoke_session_persists_video_through_real_server(tmp_path, monkey
 
     from _smoke_context import smoke_session
 
-    import modelark_mcp.runtime as runtime_module
-    from modelark_mcp.config.env import Settings
-    from modelark_mcp.providers.modelark.schemas import SeedanceTaskResponse
-    from modelark_mcp.providers.modelark.seedance import SeedanceService
-    from modelark_mcp.security.safe_downloader import DownloadedMedia, SafeDownloader
-    from modelark_mcp.tools.seedance_get_task import SeedanceGetTaskInput, SeedanceTaskOutput
+    import ark_mcp.runtime as runtime_module
+    from ark_mcp.config.env import Settings
+    from ark_mcp.providers.modelark.schemas import SeedanceTaskResponse
+    from ark_mcp.providers.modelark.seedance import SeedanceService
+    from ark_mcp.security.safe_downloader import DownloadedMedia, SafeDownloader
+    from ark_mcp.tools.seedance_get_task import SeedanceGetTaskInput, SeedanceTaskOutput
 
     create_runtime = AsyncMock(wraps=runtime_module.create_runtime_services)
     monkeypatch.setattr(runtime_module, "create_runtime_services", create_runtime)

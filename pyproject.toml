@@ -1,5 +1,5 @@
 [project]
-name = "modelark-mcp"
+name = "ark-mcp"
 version = "0.1.0"
 description = "Python MCP server (FastMCP on uv) exposing BytePlus multimodal generation: Seed Audio, Seedream, and Seedance."
 readme = "README.md"
@@ -71,9 +71,9 @@ ignore = [
 "tests/**" = ["B011", "TC001", "TC002", "TC003"]
 # Pydantic models need runtime access to type annotations, so imports used
 # in model fields cannot be moved to TYPE_CHECKING blocks.
-"src/modelark_mcp/tools/**" = ["TC001", "TC002", "TC003"]
-"src/modelark_mcp/domain/models.py" = ["TC001"]
-"src/modelark_mcp/artifacts/store.py" = ["TC001", "TC003"]
+"src/ark_mcp/tools/**" = ["TC001", "TC002", "TC003"]
+"src/ark_mcp/domain/models.py" = ["TC001"]
+"src/ark_mcp/artifacts/store.py" = ["TC001", "TC003"]
 
 # --- Mypy -------------------------------------------------------------------
 
@@ -94,11 +94,11 @@ warn_unreachable = true
 show_error_codes = true
 
 [[tool.mypy.overrides]]
-module = "modelark_mcp.tools.*"
+module = "ark_mcp.tools.*"
 disable_error_code = ["call-arg"]
 
 [[tool.mypy.overrides]]
-module = "modelark_mcp.domain.models"
+module = "ark_mcp.domain.models"
 disable_error_code = ["call-arg"]
 
 [[tool.mypy.overrides]]
@@ -119,7 +119,7 @@ pythonpath = ["src"]
 markers = ["live: requires live credentials and network"]
 
 [tool.coverage.run]
-source = ["modelark_mcp"]
+source = ["ark_mcp"]
 branch = true
 
 [tool.coverage.report]

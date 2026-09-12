@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.retry import RetryPolicy, call_with_retry
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.retry import RetryPolicy, call_with_retry
 
 
 def _error(

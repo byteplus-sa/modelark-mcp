@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from modelark_mcp.tools._parallel import gather_with_timeout, generate_seeds, resolve_prompts
+from ark_mcp.tools._parallel import gather_with_timeout, generate_seeds, resolve_prompts
 
 
 class TestGenerateSeeds:

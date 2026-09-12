@@ -7,18 +7,18 @@ from unittest.mock import AsyncMock
 import pytest
 from fastmcp.tools import ToolResult
 
-from modelark_mcp.artifacts.store import ArtifactPersistenceError
-from modelark_mcp.domain.artifacts import ArtifactRef
-from modelark_mcp.domain.errors import NormalizedProviderError, ProviderError
-from modelark_mcp.providers.vod_mediakit.schemas import TranscodeSubmission, TranscodeTask
-from modelark_mcp.providers.vod_mediakit.transcode import VodMediaKitTranscodeService
-from modelark_mcp.security.auth_context import AuthContext
-from modelark_mcp.tools.vod_get_transcode_task import (
+from ark_mcp.artifacts.store import ArtifactPersistenceError
+from ark_mcp.domain.artifacts import ArtifactRef
+from ark_mcp.domain.errors import NormalizedProviderError, ProviderError
+from ark_mcp.providers.vod_mediakit.schemas import TranscodeSubmission, TranscodeTask
+from ark_mcp.providers.vod_mediakit.transcode import VodMediaKitTranscodeService
+from ark_mcp.security.auth_context import AuthContext
+from ark_mcp.tools.vod_get_transcode_task import (
     VodGetTranscodeTaskInput,
     VodTranscodeTaskOutput,
     vod_get_transcode_task,
 )
-from modelark_mcp.tools.vod_transcode_video import (
+from ark_mcp.tools.vod_transcode_video import (
     VodTranscodeVideoInput,
     VodTranscodeVideoOutput,
     vod_transcode_video,
@@ -157,7 +157,7 @@ async def test_transcode_submit_missing_credential_raises(
     fake_ctx: FakeContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from modelark_mcp.config.env import Settings
+    from ark_mcp.config.env import Settings
 
     settings = Settings(_env_file=None, BYTEPLUS_VOD_MEDIAKIT_API_KEY="")
     assert settings.has_vod_mediakit is False
@@ -171,7 +171,7 @@ async def test_transcode_submit_missing_credential_raises(
 
 
 def test_transcode_video_options_validation() -> None:
-    from modelark_mcp.tools.vod_transcode_video import VodTranscodeVideoOptions
+    from ark_mcp.tools.vod_transcode_video import VodTranscodeVideoOptions
 
     # scale_type=2 with no dimensions auto-fills the verified 720 profile.
     opts = VodTranscodeVideoOptions(scale_type=2, scale_mode=2)
