@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastmcp import Client, FastMCP
+from fastmcp.exceptions import ToolError
 from fastmcp.tools import ToolResult
+from fastmcp.utilities.tasks import TaskConfig
 from fastmcp_tasks import TasksExtension, call_tool_task
+from mcp.shared.exceptions import MCPError
 
 from ark_mcp.observability import metrics
 
@@ -80,6 +83,77 @@ async def test_foreground_wrapper_preserves_single_measurement(instruments):
     instruments["TOOL_REQUESTS"].labels.assert_called_once_with(tool="measured", status="success")
     instruments["TOOL_DURATION"].labels.return_value.observe.assert_called_once()
     instruments["TOOL_ADMISSION_DURATION"].labels.assert_not_called()
+
+
+async def test_required_native_submission_rejection_is_recorded(instruments):
+    async def seed_understand(value: int = 1) -> int:
+        return value
+
+    server = FastMCP(middleware=[metrics.MetricsMiddleware()])
+    server.add_extension(TasksExtension())
+    server.tool(name="seed_understand", task=TaskConfig(mode="required"))(seed_understand)
+
+    async with Client(server, mode="legacy") as client:
+        with pytest.raises(MCPError, match="requires the tasks extension"):
+            await client.call_tool("seed_understand", {})
+
+    instruments["BACKGROUND_JOB_SUBMISSIONS"].labels.assert_called_once_with(
+        target="seed_understand",
+        status="rejected",
+        path="native",
+    )
+    instruments["BACKGROUND_JOB_SUBMISSIONS"].labels.return_value.inc.assert_called_once_with()
+    instruments["TOOL_ADMISSION_DURATION"].labels.return_value.observe.assert_called_once()
+    instruments["TOOL_DURATION"].labels.assert_not_called()
+
+
+async def test_optional_native_submission_rejection_is_recorded(instruments, monkeypatch):
+    async def seedance_get_task() -> str:
+        return "unused"
+
+    create_failure = AsyncMock(
+        side_effect=MCPError(code=-32603, message="task backend unavailable")
+    )
+    monkeypatch.setattr("fastmcp_tasks.extension.create_task", create_failure)
+    server = FastMCP(middleware=[metrics.MetricsMiddleware()])
+    server.add_extension(TasksExtension())
+    server.tool(name="seedance_get_task", task=TaskConfig(mode="optional"))(seedance_get_task)
+
+    async with Client(server) as client:
+        with pytest.raises(MCPError, match="task backend unavailable"):
+            await call_tool_task(client, "seedance_get_task", {})
+
+    create_failure.assert_awaited_once()
+    instruments["BACKGROUND_JOB_SUBMISSIONS"].labels.assert_called_once_with(
+        target="seedance_get_task",
+        status="rejected",
+        path="native",
+    )
+    instruments["BACKGROUND_JOB_SUBMISSIONS"].labels.return_value.inc.assert_called_once_with()
+    instruments["TOOL_ADMISSION_DURATION"].labels.return_value.observe.assert_called_once()
+    instruments["TOOL_DURATION"].labels.assert_not_called()
+
+
+async def test_native_argument_validation_rejection_is_recorded(instruments):
+    async def seed_understand(value: int) -> int:
+        return value
+
+    server = FastMCP(middleware=[metrics.MetricsMiddleware()])
+    server.add_extension(TasksExtension())
+    server.tool(name="seed_understand", task=TaskConfig(mode="required"))(seed_understand)
+
+    async with Client(server) as client:
+        with pytest.raises(ToolError, match="did not run as a task"):
+            await call_tool_task(client, "seed_understand", {"value": "invalid"})
+
+    instruments["BACKGROUND_JOB_SUBMISSIONS"].labels.assert_called_once_with(
+        target="seed_understand",
+        status="rejected",
+        path="native",
+    )
+    instruments["BACKGROUND_JOB_SUBMISSIONS"].labels.return_value.inc.assert_called_once_with()
+    instruments["TOOL_ADMISSION_DURATION"].labels.return_value.observe.assert_called_once()
+    instruments["TOOL_DURATION"].labels.assert_not_called()
 
 
 async def test_registered_server_worker_records_pre_provider_failure(

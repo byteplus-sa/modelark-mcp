@@ -10,6 +10,7 @@ from ark_mcp.background_jobs import (
     optional_background_tool_names,
     required_background_tool_names,
 )
+from ark_mcp.domain.background_jobs import BackgroundJobSnapshot
 
 
 def test_background_tool_registry_modes_partition_all_targets() -> None:
@@ -28,3 +29,11 @@ def test_fastmcp_task_adapter_contract_matches_pinned_minor() -> None:
     assert tuple(signature(create_task).parameters) == ("tool", "arguments", "context")
     assert tuple(signature(tasks_get).parameters) == ("server", "task_id")
     assert tuple(signature(tasks_cancel).parameters) == ("server", "task_id")
+
+
+def test_background_job_snapshot_describes_configured_ttl() -> None:
+    ttl_schema = BackgroundJobSnapshot.model_json_schema()["properties"]["ttl_ms"]
+
+    assert ttl_schema["description"] == (
+        "Configured result retention duration in milliseconds, or null when unlimited."
+    )

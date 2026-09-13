@@ -82,7 +82,7 @@ labels). All Histograms use the `prometheus_client` default buckets
 |---|---|---|---|---|
 | `ark_mcp_tool_requests_total` | Counter | `tool`, `status` | Foreground outcomes, background acceptance, and worker outcomes | `accepted`, `success`, `error`, `exception`, `cancelled` |
 | `ark_mcp_tool_duration_seconds` | Histogram | `tool` | Foreground execution or background worker execution duration, including failure and cancellation | — |
-| `ark_mcp_tool_admission_duration_seconds` | Histogram | `tool` | Accepted background task submission duration, excluding worker execution | — |
+| `ark_mcp_tool_admission_duration_seconds` | Histogram | `tool` | Background task admission duration, including rejected submissions and excluding worker execution | — |
 | `ark_mcp_background_job_submissions_total` | Counter | `target`, `status`, `path` | Allowlisted background-job admission by target and native or compatibility entry path | `status` = `accepted` / `rejected`; `path` = `native` / `compatibility` |
 | `ark_mcp_provider_requests_total` | Counter | `provider`, `operation`, `status` | outbound provider HTTP requests | `operation` = HTTP method lowercased; `status` = `success` (HTTP < 400) / `error` (HTTP ≥ 400) / `exception` |
 | `ark_mcp_provider_duration_seconds` | Histogram | `provider`, `operation` | provider HTTP request duration (observed in `finally`) | `operation` = HTTP method lowercased |
@@ -101,9 +101,10 @@ retryable failures such as HTTP 429.
 **Admission and execution are measured separately.** `MetricsMiddleware`
 intercepts `on_call_tool`; it does not intercept task polling, resource reads,
 list-tools, or HTTP routes. Foreground calls retain their existing outcome
-counter and execution histogram. Accepted background submissions increment
-`TOOL_REQUESTS{status="accepted"}` and observe `TOOL_ADMISSION_DURATION`,
-which covers admission only.
+counter and execution histogram. Native background submissions observe
+`TOOL_ADMISSION_DURATION`; accepted submissions increment
+`TOOL_REQUESTS{status="accepted"}`, while failed admission increments the
+submission counter with `status="rejected"`.
 
 Registered handlers use `instrument_tool_execution` to measure execution in
 real task workers. Each handler execution records its terminal outcome and

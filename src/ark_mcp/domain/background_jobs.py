@@ -110,7 +110,7 @@ class BackgroundJobSnapshot(BaseModel):
     ttl_ms: int | None = Field(
         ...,
         ge=0,
-        description="Remaining result retention duration in milliseconds, or null when unlimited.",
+        description="Configured result retention duration in milliseconds, or null when unlimited.",
     )
     poll_after_ms: int = Field(
         ...,
