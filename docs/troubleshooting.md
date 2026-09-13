@@ -110,6 +110,23 @@ operations so the original foreground request does not stay open.
   MCP task ID or provider task ID rather than resubmitting (see
   `ambiguous_completion`).
 
+### Client rejects task-augmented execution
+
+If Codex, Cursor, or another MCP client reports that the server requires
+task-augmented execution but its transport does not support it, do not call the
+required-task provider tool directly and do not switch it to foreground mode.
+
+1. Call `ark_job_capabilities` and confirm the target is listed.
+2. Call `ark_job_submit` with the target tool name and its original arguments.
+3. Retain the returned Ark `job_id` and poll `ark_job_get` at
+   `poll_after_ms` until terminal.
+4. Read the original tool output from `result.structured_content`.
+
+This remains a real background task on the same worker. For a Seedance, Seed 3D,
+or VOD submission, the provider task ID appears inside the completed original
+result and must be retained separately. A missing target usually means its
+provider credential, feature flag, or JWT scope is unavailable.
+
 ## Artifacts Not Persisting
 
 Check:

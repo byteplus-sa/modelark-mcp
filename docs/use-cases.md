@@ -5,9 +5,11 @@ Here are common scenarios and how to achieve them.
 
 The JSON blocks below show tool input payloads. Invoke generation, variation,
 transcription, upload, understanding, and provider-submission tools with MCP
-task augmentation. For Seedance, Seed 3D, and MediaKit retrieval, poll in
-foreground with `persist_output=false`, then use optional task augmentation
-with `persist_output=true` when downloading a completed output.
+task augmentation, or wrap the same payload in `ark_job_submit` when the client
+supports only ordinary MCP calls. For Seedance, Seed 3D, and MediaKit
+retrieval, poll in foreground with `persist_output=false`, then use optional
+task augmentation or the `ark_job_*` path with `persist_output=true` when
+downloading a completed output.
 
 ## 1. Text-to-Image Generation
 

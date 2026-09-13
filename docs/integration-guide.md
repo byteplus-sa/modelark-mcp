@@ -20,25 +20,85 @@ Use `python -m ark_mcp` in client configurations so transport security
 settings are applied consistently. The server module also injects `truststore`
 before provider clients are created.
 
-## Required Client Support
+## Background Task Compatibility
 
-**Generation requires the MCP `2026-07-28` protocol and the FastMCP tasks
-extension.** Tool discovery alone does not demonstrate task execution support.
-A client must submit task-augmented calls and retrieve terminal output through
-`tasks/get`; foreground calls to required-task tools are rejected before provider
-submission. Status-only polls use `persist_output=false`; clients that advertise
-tasks may automatically execute optional status tools as tasks too. Downloading
-and persisting completed media requires a background task.
+**Long-running work stays asynchronous for every client.** The server exposes
+two entry paths to the same FastMCP Docket worker:
 
-**Tested client:** the repository's locked FastMCP Python client **4.0.3**, with
-its tasks extension, using in-process and subprocess stdio transports. Legacy
-`Client(..., mode="legacy")` rejection is covered by protocol tests. These tests
-mock providers and do not make billable generation calls.
+| Client capability | Entry path | Result retrieval |
+|---|---|---|
+| MCP `2026-07-28` task extension | Call the original tool with task augmentation | `tasks/get` |
+| Ordinary MCP tools only | `ark_job_submit` with the original tool name and arguments | `ark_job_get` |
 
-**The Claude Desktop, Codex, Cursor, VS Code, and Inspector configuration examples
-are connection templates; task execution on those clients has not been verified.**
-Confirm protocol and extension support for your installed client version before
-starting a generation workflow. See the [official FastMCP task documentation](https://gofastmcp.com/servers/tasks).
+Task-capable clients should keep using the native path. A foreground call made
+directly to a required-task tool is still rejected before provider submission.
+Codex, Cursor, Claude Desktop, VS Code, or another client that reports that task
+augmentation is unsupported should use the ordinary `ark_job_*` tools instead.
+Those calls need no task-specific transport feature and preserve the original
+tool result inside `result.structured_content` when the job completes.
+
+The repository tests both paths with the locked FastMCP **4.0.x** runtime. The
+ordinary path is covered in-process, over a real subprocess stdio transport, and
+over authenticated Streamable HTTP without advertising the task extension.
+These tests use mocked providers and do not make billable generation calls.
+Exact desktop/IDE releases and their automatic tool-selection behavior can
+change, so the connection snippets below are templates; the standard
+`ark_job_*` protocol surface is the portable compatibility contract.
+
+### Ordinary-tool workflow
+
+1. Call `ark_job_capabilities` to discover targets enabled by server
+   configuration and visible to the current principal.
+2. Call `ark_job_submit` with `tool_name` and the exact `arguments` object the
+   original tool accepts.
+3. Store the returned Ark `job_id`. Do not confuse it with a Seedance, Seed 3D,
+   or VOD provider task ID returned later by the original tool.
+4. Poll `ark_job_get` no faster than `poll_after_ms` until `status` is terminal.
+5. Read the original MCP tool result from `result`. For provider-submission
+   tools, its `structured_content` contains the provider task ID.
+6. Use `ark_job_cancel` for a locally running job when needed. Cancellation is
+   cooperative and does not guarantee cancellation of provider work already
+   accepted upstream.
+
+```python
+import asyncio
+
+from fastmcp import Client
+
+
+async def run_without_task_extension(server):
+    async with Client(server, mode="legacy") as client:
+        submitted = await client.call_tool(
+            "ark_job_submit",
+            {
+                "input": {
+                    "tool_name": "seed_understand",
+                    "arguments": {
+                        "input": {
+                            "prompt": "Analyze this video",
+                            "videos": [
+                                {
+                                    "kind": "url",
+                                    "url": "https://example.com/video.mp4",
+                                }
+                            ],
+                        }
+                    },
+                }
+            },
+        )
+        job_id = submitted.structured_content["job_id"]
+        while True:
+            snapshot = await client.call_tool(
+                "ark_job_get", {"input": {"job_id": job_id}}
+            )
+            state = snapshot.structured_content
+            if state["status"] != "working":
+                return state["result"]
+            await asyncio.sleep(state["poll_after_ms"] / 1000)
+```
+
+The native path follows the official [FastMCP task documentation](https://gofastmcp.com/servers/tasks).
 
 ## Python Task Workflow
 

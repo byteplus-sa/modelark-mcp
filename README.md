@@ -23,6 +23,7 @@ products plus artifact access and an optional media upload helper:
 | **VOD Audio Separation** | `vod_separate_audio`, `vod_get_audio_separation` | Submit and poll voice + background (or voice + music + sfx) audio separation via the VOD AI MediaKit (`separate-voice`) |
 | **Artifacts** | `seed_media_get_artifact` | Retrieve persisted media inline by artifact ID |
 | **Object storage** (optional) | `media_upload`, `media_presign`, `media_presign_batch` | Background-task upload of Base64 or local-file media to TOS or S3; foreground URL renewal without re-uploading |
+| **Background-job compatibility** | `ark_job_capabilities`, `ark_job_submit`, `ark_job_get`, `ark_job_cancel` | Ordinary MCP tools that submit and manage the same background work for clients without task-augmented execution |
 
 Key features:
 
@@ -39,7 +40,8 @@ Key features:
 - **Timeout-safe long operations** — generation, transcription, large upload,
   and provider task-submission tools require MCP task-augmented execution;
   completed-output retrieval tools optionally support it when persistence may
-  require a large download
+  require a large download; clients without task augmentation use the
+  `ark_job_*` compatibility tools backed by the same worker
 - **Model capability registry** — logical model families map to
   operator-configured model IDs; validates resolutions, formats, and
   batch support per model
@@ -48,7 +50,7 @@ Key features:
 - **Runtime controls** — shared provider/principal concurrency, daily budget
   reservations, safe retries, task ownership, readiness with optional provider
   health checks, per-IP HTTP rate limiting, metrics, and tracing
-- **1,132 offline tests** — unit, contract, integration, HTTP security, E2E, and
+- **1,151 offline tests** — unit, contract, integration, HTTP security, E2E, and
   MCP conformance with 86% combined statement/branch coverage
 
 ## Supported Input Modalities
@@ -209,14 +211,20 @@ variable reference.
 
 ## Using with MCP Clients
 
-**Client requirement: MCP `2026-07-28` plus the FastMCP tasks extension.**
-Generation tools require task-augmented calls; completed output is retrieved
-through `tasks/get`. Provider status polls use `persist_output=false`, and output
-persistence runs as another task. Tool discovery alone does not prove support.
-The locked FastMCP Python client 4.0.3 is tested in-process and over subprocess
-stdio. The named desktop/IDE client snippets below are connection templates;
-their task execution compatibility has not been verified. See the
-[compatibility requirements and working Python workflow](docs/integration-guide.md#required-client-support).
+Long operations always run in the background. Clients with MCP task support can
+call the original tools as task-augmented requests and retrieve output through
+`tasks/get`. Clients without task support—including Codex or Cursor versions
+that reject `execution.taskSupport="required"`—can use ordinary calls to
+`ark_job_capabilities`, `ark_job_submit`, `ark_job_get`, and `ark_job_cancel`.
+Both paths enqueue the same FastMCP Docket worker and preserve the same typed
+tool result, ownership, scope, concurrency, and replay safeguards.
+
+The native and ordinary-tool paths are tested in-process, over subprocess
+stdio, and over authenticated Streamable HTTP with the locked FastMCP 4.0.x
+runtime. The ordinary path uses standard MCP tool calls and does not require a
+client-specific task transport. The named desktop/IDE snippets below remain
+connection templates because exact client releases and tool-selection behavior
+can change. See the [client compatibility workflows](docs/integration-guide.md#background-task-compatibility).
 
 The server runs as a `stdio` process. Configure it in your MCP client:
 

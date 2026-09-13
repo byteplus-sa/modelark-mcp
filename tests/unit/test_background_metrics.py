@@ -15,7 +15,13 @@ from ark_mcp.observability import metrics
 @pytest.fixture
 def instruments(monkeypatch):
     counters = {
-        name: Mock() for name in ("TOOL_REQUESTS", "TOOL_DURATION", "TOOL_ADMISSION_DURATION")
+        name: Mock()
+        for name in (
+            "TOOL_REQUESTS",
+            "TOOL_DURATION",
+            "TOOL_ADMISSION_DURATION",
+            "BACKGROUND_JOB_SUBMISSIONS",
+        )
     }
     for name, counter in counters.items():
         monkeypatch.setattr(metrics, name, counter)
@@ -115,6 +121,35 @@ async def test_registered_server_worker_records_pre_provider_failure(
         ]
         instruments["TOOL_DURATION"].labels.return_value.observe.assert_called_once()
         instruments["TOOL_ADMISSION_DURATION"].labels.return_value.observe.assert_called_once()
+        instruments["BACKGROUND_JOB_SUBMISSIONS"].labels.assert_called_once_with(
+            target="seed_understand",
+            status="accepted",
+            path="native",
+        )
+        instruments["BACKGROUND_JOB_SUBMISSIONS"].labels.return_value.inc.assert_called_once_with()
     finally:
         get_settings.cache_clear()
         refresh_capability_registry()
+
+
+def test_background_submission_metric_accepts_only_allowlisted_targets(monkeypatch):
+    counter = Mock()
+    monkeypatch.setattr(metrics, "BACKGROUND_JOB_SUBMISSIONS", counter)
+
+    metrics.record_background_job_submission(
+        target="seed_understand",
+        status="accepted",
+        path="compatibility",
+    )
+    metrics.record_background_job_submission(
+        target="ark_job_submit",
+        status="rejected",
+        path="compatibility",
+    )
+
+    counter.labels.assert_called_once_with(
+        target="seed_understand",
+        status="accepted",
+        path="compatibility",
+    )
+    counter.labels.return_value.inc.assert_called_once_with()

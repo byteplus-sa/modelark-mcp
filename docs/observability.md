@@ -73,7 +73,7 @@ returned persistence field in addition to MCP/provider success metrics.
 
 ## Prometheus metrics (`observability/metrics.py`)
 
-Eight metrics total — 5 Counters + 3 Histograms. **There are no Gauges.**
+Nine metrics total — 6 Counters + 3 Histograms. **There are no Gauges.**
 Label cardinality is intentionally bounded (no tenant, model, URL, or request
 labels). All Histograms use the `prometheus_client` default buckets
 `(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, +Inf)` seconds.
@@ -83,6 +83,7 @@ labels). All Histograms use the `prometheus_client` default buckets
 | `ark_mcp_tool_requests_total` | Counter | `tool`, `status` | Foreground outcomes, background acceptance, and worker outcomes | `accepted`, `success`, `error`, `exception`, `cancelled` |
 | `ark_mcp_tool_duration_seconds` | Histogram | `tool` | Foreground execution or background worker execution duration, including failure and cancellation | — |
 | `ark_mcp_tool_admission_duration_seconds` | Histogram | `tool` | Accepted background task submission duration, excluding worker execution | — |
+| `ark_mcp_background_job_submissions_total` | Counter | `target`, `status`, `path` | Allowlisted background-job admission by target and native or compatibility entry path | `status` = `accepted` / `rejected`; `path` = `native` / `compatibility` |
 | `ark_mcp_provider_requests_total` | Counter | `provider`, `operation`, `status` | outbound provider HTTP requests | `operation` = HTTP method lowercased; `status` = `success` (HTTP < 400) / `error` (HTTP ≥ 400) / `exception` |
 | `ark_mcp_provider_duration_seconds` | Histogram | `provider`, `operation` | provider HTTP request duration (observed in `finally`) | `operation` = HTTP method lowercased |
 | `ark_mcp_artifact_operations_total` | Counter | `operation`, `status`, `media_type` | artifact store put/get | `operation` = `put` / `get`; only `status="success"` is emitted in current call sites |
@@ -110,6 +111,11 @@ real task workers. Each handler execution records its terminal outcome and
 interrupts the handler. Foreground execution bypasses this wrapper's metrics
 so middleware counts it exactly once. Repeated `tasks/get` polling does not
 add execution measurements.
+
+`ark_mcp_background_job_submissions_total` separates native task admission from
+ordinary `ark_job_submit` admission without labeling job IDs, principals,
+prompts, or URLs. Its `target` values come only from the immutable background
+tool registry. Unknown target strings are deliberately not emitted as labels.
 
 `success` means a returned value without an MCP error, `error` means a returned
 `ToolResult` with `is_error=True`, `exception` means a raised Python exception,

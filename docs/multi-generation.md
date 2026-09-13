@@ -1,10 +1,12 @@
 # Multi-Generation
 
-The server supports two mechanisms for producing multiple outputs from a
-single task-augmented MCP request: **native provider batch** (one API call,
-many outputs) and **client-side parallel variation** (many independent API
-calls with bounded concurrency). The client receives an MCP task ID and polls
-`tasks/get` until terminal; that response contains the typed output.
+The server supports two mechanisms for producing multiple outputs from one
+background job: **native provider batch** (one API call, many outputs) and
+**client-side parallel variation** (many independent API calls with bounded
+concurrency). A task-capable client receives an MCP task ID and polls
+`tasks/get`; an ordinary-tool client receives an Ark job ID from
+`ark_job_submit` and polls `ark_job_get`. Either terminal response contains the
+same typed output.
 
 ## Native provider batch
 

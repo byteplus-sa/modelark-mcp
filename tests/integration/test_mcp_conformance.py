@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from ark_mcp.background_jobs import BACKGROUND_TOOL_SPECS
 from ark_mcp.config.env import Settings, get_settings
 from ark_mcp.server import create_server
 
@@ -106,6 +107,10 @@ class TestToolDiscovery:
         tools = await server.mcp.list_tools()
         tool_names = {t.name for t in tools}
         assert tool_names == {
+            "ark_job_cancel",
+            "ark_job_capabilities",
+            "ark_job_get",
+            "ark_job_submit",
             "seed_audio_generate",
             "seed_audio_generate_variations",
             "seed_media_get_artifact",
@@ -202,6 +207,10 @@ class TestToolDiscovery:
         tools = await server.mcp.list_tools()
         tools_by_name = {tool.name: tool for tool in tools}
         foreground_names = {
+            "ark_job_cancel",
+            "ark_job_capabilities",
+            "ark_job_get",
+            "ark_job_submit",
             "seed_media_get_artifact",
             "media_presign",
             "media_presign_batch",
@@ -237,6 +246,52 @@ class TestToolDiscovery:
             "hitem3d_cancel_or_delete_task",
         }:
             assert tools_by_name[name].task_config.mode == "forbidden"
+
+    async def test_compatibility_registry_covers_all_task_enabled_tools(
+        self,
+        configured_server: None,
+        seed3d_server: None,
+    ) -> None:
+        configured_tools = await configured_server.mcp.list_tools()
+        seed3d_tools = await seed3d_server.mcp.list_tools()
+        task_enabled_names = {
+            tool.name
+            for tool in [*configured_tools, *seed3d_tools]
+            if tool.task_config.mode in {"required", "optional"}
+        }
+
+        assert task_enabled_names == BACKGROUND_TOOL_SPECS.keys()
+
+    async def test_background_job_tool_schemas_describe_public_fields(
+        self,
+        configured_server: None,
+    ) -> None:
+        tools = {tool.name: tool.to_mcp_tool() for tool in await configured_server.mcp.list_tools()}
+        for tool_name in {
+            "ark_job_capabilities",
+            "ark_job_submit",
+            "ark_job_get",
+            "ark_job_cancel",
+        }:
+            tool = tools[tool_name]
+            assert tool.description
+            assert tool.output_schema is not None
+            assert all(
+                property_schema.get("description")
+                for property_schema in tool.output_schema["properties"].values()
+            )
+
+        for tool_name in {"ark_job_submit", "ark_job_get", "ark_job_cancel"}:
+            input_schema = tools[tool_name].input_schema
+            input_property = input_schema["properties"]["input"]
+            if reference := input_property.get("$ref"):
+                model_schema = input_schema["$defs"][reference.rsplit("/", 1)[-1]]
+            else:
+                model_schema = input_property
+            assert all(
+                property_schema.get("description")
+                for property_schema in model_schema["properties"].values()
+            )
 
     async def test_vod_mediakit_tool_not_registered_without_its_key(
         self, no_creds_server: None

@@ -6,12 +6,14 @@ import asyncio
 import inspect
 from functools import wraps
 from time import perf_counter
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp_tasks.context import get_task_context
 from fastmcp_tasks.models import CreateTaskResult
 from prometheus_client import Counter, Histogram
+
+from ark_mcp.background_jobs import background_tool_spec
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -33,6 +35,11 @@ TOOL_ADMISSION_DURATION = Histogram(
     "ark_mcp_tool_admission_duration_seconds",
     "MCP background task admission duration, excluding worker execution.",
     ("tool",),
+)
+BACKGROUND_JOB_SUBMISSIONS = Counter(
+    "ark_mcp_background_job_submissions_total",
+    "Background job submissions by allowlisted target, outcome, and entry path.",
+    ("target", "status", "path"),
 )
 PROVIDER_REQUESTS = Counter(
     "ark_mcp_provider_requests_total",
@@ -59,6 +66,18 @@ RETRY_ATTEMPTS = Counter(
     "Safe provider retry attempts.",
     ("provider", "operation"),
 )
+
+
+def record_background_job_submission(
+    *,
+    target: str,
+    status: Literal["accepted", "rejected"],
+    path: Literal["native", "compatibility"],
+) -> None:
+    """Record one bounded-cardinality background job admission outcome."""
+    if background_tool_spec(target) is None:
+        return
+    BACKGROUND_JOB_SUBMISSIONS.labels(target=target, status=status, path=path).inc()
 
 
 def instrument_tool_execution[**Parameters, ReturnValue](
@@ -113,6 +132,11 @@ class MetricsMiddleware(Middleware):
             if isinstance(result, CreateTaskResult):
                 accepted = True
                 status = "accepted"
+                record_background_job_submission(
+                    target=tool_name,
+                    status="accepted",
+                    path="native",
+                )
             else:
                 status = "error" if result.is_error else "success"
             TOOL_REQUESTS.labels(tool=tool_name, status=status).inc()

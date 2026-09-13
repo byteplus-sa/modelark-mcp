@@ -13,7 +13,7 @@ import base64
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
@@ -112,6 +112,30 @@ async def _call_background_tool(
     return await task.result()
 
 
+async def _call_compatibility_tool(
+    client: Client,
+    name: str,
+    arguments: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    submitted = await client.call_tool(
+        "ark_job_submit",
+        {"input": {"tool_name": name, "arguments": arguments}},
+    )
+    job_id = submitted.structured_content["job_id"]
+    async with asyncio.timeout(5):
+        while True:
+            snapshot = await client.call_tool(
+                "ark_job_get",
+                {"input": {"job_id": job_id}},
+            )
+            state = snapshot.structured_content
+            if state["status"] != "working":
+                assert state["status"] == "completed"
+                assert state["result"] is not None
+                return job_id, state["result"]
+            await asyncio.sleep(0.01)
+
+
 def _foreground_client(mcp: FastMCP) -> Client:
     return Client(mcp, mode="legacy")
 
@@ -125,6 +149,10 @@ class TestToolDiscovery:
             tools = await client.list_tools()
             tool_names = {t.name for t in tools}
             assert tool_names == {
+                "ark_job_cancel",
+                "ark_job_capabilities",
+                "ark_job_get",
+                "ark_job_submit",
                 "seed_audio_generate",
                 "seed_audio_generate_variations",
                 "seed_media_get_artifact",
@@ -247,6 +275,311 @@ class TestSeedUnderstandE2E:
         assert result.structured_content["choices"][0]["content"] == "done"
 
 
+class TestBackgroundJobCompatibility:
+    async def test_legacy_client_discovers_configured_background_targets(
+        self,
+        e2e_server: object,
+    ) -> None:
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with _foreground_client(mcp) as client:
+            result = await client.call_tool("ark_job_capabilities", {})
+
+        targets = {target["tool_name"]: target for target in result.structured_content["targets"]}
+        assert targets["seed_understand"]["task_mode"] == "required"
+        assert targets["seedance_get_task"]["task_mode"] == "optional"
+        assert "input" in targets["seed_understand"]["input_schema"]["properties"]
+        assert "hyper3d_create_task" not in targets
+
+    @pytest.mark.parametrize("tool_name", ["seedance_list_tasks", "ark_job_submit"])
+    async def test_legacy_client_rejects_non_background_target(
+        self,
+        e2e_server: object,
+        monkeypatch: pytest.MonkeyPatch,
+        tool_name: str,
+    ) -> None:
+        provider_call = AsyncMock()
+        submission_metric = Mock()
+        monkeypatch.setattr(SeedUnderstandingService, "generate", provider_call)
+        monkeypatch.setattr(
+            "ark_mcp.tools.background_jobs.record_background_job_submission",
+            submission_metric,
+        )
+
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with _foreground_client(mcp) as client:
+            with pytest.raises(ToolError, match="not supported"):
+                await client.call_tool(
+                    "ark_job_submit",
+                    {
+                        "input": {
+                            "tool_name": tool_name,
+                            "arguments": {"input": {}},
+                        }
+                    },
+                )
+
+        provider_call.assert_not_awaited()
+        submission_metric.assert_not_called()
+
+    async def test_legacy_client_rejects_unconfigured_background_target(
+        self,
+        e2e_server: object,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        submission_metric = Mock()
+        monkeypatch.setattr(
+            "ark_mcp.tools.background_jobs.record_background_job_submission",
+            submission_metric,
+        )
+
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with _foreground_client(mcp) as client:
+            with pytest.raises(ToolError, match="not available"):
+                await client.call_tool(
+                    "ark_job_submit",
+                    {
+                        "input": {
+                            "tool_name": "hyper3d_create_task",
+                            "arguments": {"input": {"image_url": "https://example.com/a.png"}},
+                        }
+                    },
+                )
+
+        submission_metric.assert_called_once_with(
+            target="hyper3d_create_task",
+            status="rejected",
+            path="compatibility",
+        )
+
+    @pytest.mark.parametrize("operation", ["ark_job_get", "ark_job_cancel"])
+    async def test_legacy_client_cannot_access_unknown_job(
+        self,
+        e2e_server: object,
+        operation: str,
+    ) -> None:
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with _foreground_client(mcp) as client:
+            with pytest.raises(ToolError, match="not available"):
+                await client.call_tool(
+                    operation,
+                    {"input": {"job_id": "a" * 43}},
+                )
+
+    @pytest.mark.parametrize(
+        ("arguments", "error_pattern"),
+        [
+            ({}, "Invalid arguments"),
+            ({"input": {"prompt": ""}}, "validation error"),
+        ],
+    )
+    async def test_legacy_client_rejects_invalid_arguments_before_job_creation(
+        self,
+        e2e_server: object,
+        monkeypatch: pytest.MonkeyPatch,
+        arguments: dict[str, object],
+        error_pattern: str,
+    ) -> None:
+        provider_call = AsyncMock()
+        submission_metric = Mock()
+        monkeypatch.setattr(SeedUnderstandingService, "generate", provider_call)
+        monkeypatch.setattr(
+            "ark_mcp.tools.background_jobs.record_background_job_submission",
+            submission_metric,
+        )
+
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with _foreground_client(mcp) as client:
+            with pytest.raises(ToolError, match=error_pattern):
+                await client.call_tool(
+                    "ark_job_submit",
+                    {
+                        "input": {
+                            "tool_name": "seed_understand",
+                            "arguments": arguments,
+                        }
+                    },
+                )
+
+        provider_call.assert_not_awaited()
+        submission_metric.assert_called_once_with(
+            target="seed_understand",
+            status="rejected",
+            path="compatibility",
+        )
+
+    async def test_legacy_client_runs_required_tool_without_task_extension(
+        self,
+        e2e_server: object,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        provider_started = asyncio.Event()
+        release_provider = asyncio.Event()
+        submission_metric = Mock()
+
+        async def delayed_generate(
+            self: SeedUnderstandingService, request: object
+        ) -> tuple[ChatCompletionProviderResponse, str | None]:
+            provider_started.set()
+            await release_provider.wait()
+            return (
+                ChatCompletionProviderResponse.model_validate(
+                    {
+                        "id": "chatcmpl-compatibility",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": {"role": "assistant", "content": "compatible"},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        "usage": {
+                            "prompt_tokens": 1,
+                            "completion_tokens": 1,
+                            "total_tokens": 2,
+                        },
+                    }
+                ),
+                "req-compatibility",
+            )
+
+        monkeypatch.setattr(SeedUnderstandingService, "generate", delayed_generate)
+        monkeypatch.setattr(
+            "ark_mcp.tools.background_jobs.record_background_job_submission",
+            submission_metric,
+        )
+
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with _foreground_client(mcp) as client:
+            submitted = await client.call_tool(
+                "ark_job_submit",
+                {
+                    "input": {
+                        "tool_name": "seed_understand",
+                        "arguments": {"input": {"prompt": "Analyze the video"}},
+                    }
+                },
+            )
+            job_id = submitted.structured_content["job_id"]
+            assert submitted.structured_content["status"] == "working"
+            await asyncio.wait_for(provider_started.wait(), timeout=5)
+
+            working = await client.call_tool(
+                "ark_job_get",
+                {"input": {"job_id": job_id}},
+            )
+            assert working.structured_content["status"] == "working"
+
+            release_provider.set()
+            async with asyncio.timeout(5):
+                while True:
+                    completed = await client.call_tool(
+                        "ark_job_get",
+                        {"input": {"job_id": job_id}},
+                    )
+                    if completed.structured_content["status"] != "working":
+                        break
+                    await asyncio.sleep(0.01)
+
+        assert completed.structured_content["status"] == "completed"
+        assert completed.structured_content["result"]["is_error"] is False
+        assert (
+            completed.structured_content["result"]["structured_content"]["choices"][0]["content"]
+            == "compatible"
+        )
+        submission_metric.assert_called_once_with(
+            target="seed_understand",
+            status="accepted",
+            path="compatibility",
+        )
+
+    async def test_legacy_client_cancels_owned_background_job(
+        self,
+        e2e_server: object,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        provider_started = asyncio.Event()
+        provider_cancelled = asyncio.Event()
+
+        async def delayed_generate(
+            self: SeedUnderstandingService, request: object
+        ) -> tuple[ChatCompletionProviderResponse, str | None]:
+            provider_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                provider_cancelled.set()
+            raise AssertionError("Cancelled provider unexpectedly resumed")
+
+        monkeypatch.setattr(SeedUnderstandingService, "generate", delayed_generate)
+
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with _foreground_client(mcp) as client:
+            submitted = await client.call_tool(
+                "ark_job_submit",
+                {
+                    "input": {
+                        "tool_name": "seed_understand",
+                        "arguments": {"input": {"prompt": "Analyze the video"}},
+                    }
+                },
+            )
+            job_id = submitted.structured_content["job_id"]
+            await asyncio.wait_for(provider_started.wait(), timeout=5)
+
+            cancelled = await client.call_tool(
+                "ark_job_cancel",
+                {"input": {"job_id": job_id}},
+            )
+            assert cancelled.structured_content == {
+                "job_id": job_id,
+                "status": "cancelled",
+            }
+            await asyncio.wait_for(provider_cancelled.wait(), timeout=5)
+
+            terminal = await client.call_tool(
+                "ark_job_get",
+                {"input": {"job_id": job_id}},
+            )
+
+        assert terminal.structured_content["status"] == "cancelled"
+
+    async def test_legacy_client_preserves_terminal_tool_error(
+        self,
+        e2e_server: object,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        async def failed_generate(
+            self: SeedUnderstandingService,
+            request: object,
+        ) -> tuple[ChatCompletionProviderResponse, str | None]:
+            raise ProviderError(
+                NormalizedProviderError(
+                    provider="modelark",
+                    operation="understanding",
+                    http_status=400,
+                    code="INVALID_ARGUMENT",
+                    message="invalid media",
+                    request_id="req-compatibility-error",
+                    retryable=False,
+                )
+            )
+
+        monkeypatch.setattr(SeedUnderstandingService, "generate", failed_generate)
+
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        async with _foreground_client(mcp) as client:
+            _, result = await _call_compatibility_tool(
+                client,
+                "seed_understand",
+                {"input": {"prompt": "Analyze invalid media"}},
+            )
+
+        assert result["is_error"] is True
+        assert result["structured_content"] is None
+        assert "INVALID_ARGUMENT" in result["content"][0]["text"]
+        assert "req-compatibility-error" in result["content"][0]["text"]
+
+
 class TestResourceTemplates:
     """Verify resource templates are registered and discoverable."""
 
@@ -292,6 +625,29 @@ class TestSeedreamGenerateImageE2E:
         assert artifact["mime_type"] == "image/png"
         assert artifact["id"] != "provider-url"
         assert data["usage"]["total_tokens"] == 20
+
+    async def test_legacy_client_preserves_seedream_artifact_result(
+        self,
+        e2e_server: object,
+    ) -> None:
+        mcp: FastMCP = e2e_server.mcp  # type: ignore[attr-defined]
+        img_b64 = base64.b64encode(b"compatibility-png-bytes").decode()
+
+        with respx.mock:
+            respx.post(f"{ARK_BASE}/images/generations").mock(
+                return_value=_mock_seedream_response(img_b64=img_b64, output_format="png")
+            )
+            async with _foreground_client(mcp) as client:
+                _, result = await _call_compatibility_tool(
+                    client,
+                    "seedream_generate_image",
+                    {"input": {"prompt": "a blue square"}},
+                )
+
+        assert result["is_error"] is False
+        artifact = result["structured_content"]["artifacts"][0]
+        assert artifact["uri"].startswith("seed-media://artifacts/")
+        assert artifact["mime_type"] == "image/png"
 
     async def test_generate_image_persist_false_returns_provider_url(
         self, e2e_server: object
@@ -628,6 +984,22 @@ class TestSeedanceLifecycleE2E:
                         "seedance_get_task",
                         {"input": {"task_id": task.id}},
                     )
+                compatibility_job_id, compatibility_created = await _call_compatibility_tool(
+                    foreground_client,
+                    "seedance_create_task",
+                    {
+                        "input": {
+                            "prompt": "A second cat walks through a garden",
+                            "resolution": "480p",
+                            "duration": 5,
+                        }
+                    },
+                )
+                _, compatibility_fetched = await _call_compatibility_tool(
+                    foreground_client,
+                    "seedance_get_task",
+                    {"input": {"task_id": task.id}},
+                )
             background_fetched = await _call_background_tool(
                 client,
                 "seedance_get_task",
@@ -648,8 +1020,11 @@ class TestSeedanceLifecycleE2E:
 
         assert not created.is_error
         assert created.structured_content["task_id"] == task.id
+        assert compatibility_job_id != task.id
+        assert compatibility_created["structured_content"]["task_id"] == task.id
         assert fetched.structured_content["status"] == "queued"
         assert background_fetched.structured_content["status"] == "queued"
+        assert compatibility_fetched["structured_content"]["status"] == "queued"
         assert listed.structured_content["total"] == 1
         assert listed.structured_content["tasks"][0]["task_id"] == task.id
         assert cancelled.structured_content["mode"] == "cancel"

@@ -320,6 +320,15 @@ client/subject namespace remains an additional check, not the application's
 source of tenant isolation. A token for a different tenant cannot retrieve a
 cached media URL even when its OAuth client and subject are identical.
 
+The ordinary `ark_job_*` compatibility tools reuse this boundary. Submission
+resolves only an immutable allowlist of task-enabled tools, requires the target
+tool's exact JWT scope before queueing, and claims the server-generated job ID
+for the current tenant and principal. Capability discovery returns only
+configured targets permitted by the caller. Get and cancel check ownership
+before consulting the task backend, and unknown or cross-principal IDs never
+return another caller's result. Arguments, prompts, URLs, and result bodies are
+not added to logs or metric labels.
+
 **Authenticated Redis task backends require snapshot encryption at startup.**
 Set `FASTMCP_TASKS_ENCRYPTION_KEY` from a secret manager with at least 32 random
 characters. FastMCP snapshots contain caller tokens and inbound HTTP headers;
