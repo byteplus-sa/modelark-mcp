@@ -43,6 +43,10 @@ surface.
 | 34 | `hitem3d_get_task` | Hitem3d (optional) | Optional background retrieval | ModelArk |
 | 35 | `hitem3d_list_tasks` | Hitem3d (optional) | Read-only | ModelArk |
 | 36 | `hitem3d_cancel_or_delete_task` | Hitem3d (optional) | Destructive | ModelArk |
+| 37 | `ark_job_capabilities` | Compatibility | Read-only ordinary tool | Local / JWT |
+| 38 | `ark_job_submit` | Compatibility | Background submission through ordinary tool | Dynamic target scope |
+| 39 | `ark_job_get` | Compatibility | Read-only ordinary tool | Owner only |
+| 40 | `ark_job_cancel` | Compatibility | Destructive ordinary tool | Owner only |
 
 ## Tool Annotations
 
@@ -84,6 +88,10 @@ surface.
 | `hitem3d_get_task` | true | false | true | false |
 | `hitem3d_list_tasks` | true | false | true | false |
 | `hitem3d_cancel_or_delete_task` | false | true | false | true |
+| `ark_job_capabilities` | true | false | true | false |
+| `ark_job_submit` | false | false | false | true |
+| `ark_job_get` | true | false | true | false |
+| `ark_job_cancel` | false | true | false | true |
 
 ## Background Execution
 
@@ -101,6 +109,22 @@ but a successful response with `persist_output=true` may download a large
 artifact. Use foreground execution with persistence disabled for quick polling,
 then task-augmented execution to retrieve and persist completed output. List,
 presign, artifact-read, and cancel/delete tools remain foreground operations.
+
+Clients without task-extension support use the ordinary compatibility tools:
+
+1. `ark_job_capabilities()` returns the configured, scope-filtered targets and
+   each target's original input schema.
+2. `ark_job_submit({"tool_name": name, "arguments": original_arguments})`
+   durably enqueues the same registered task-enabled tool and returns a
+   server-generated Ark `job_id`.
+3. `ark_job_get({"job_id": id})` returns `working` or a terminal snapshot. On
+   completion, `result` preserves the original MCP tool result.
+4. `ark_job_cancel({"job_id": id})` cooperatively cancels the local job.
+
+The compatibility path uses the same worker, target schema validation, JWT
+target scope, tenant/principal ownership, replay claim, budget, concurrency,
+metrics, and provider adapter as native task augmentation. Ark job IDs and
+provider task IDs are separate identifiers.
 
 ---
 

@@ -134,9 +134,9 @@ explicitly enabled.
 
 ### Background Task Execution
 
-Task execution requires MCP `2026-07-28` and the
-`io.modelcontextprotocol/tasks` extension. FastMCP 4.0.3 is tested; a desktop
-client discovering tools does not by itself prove task execution support.
+Native task execution uses MCP `2026-07-28` and the
+`io.modelcontextprotocol/tasks` extension. FastMCP 4.0.x is tested; a desktop
+client discovering tools does not by itself prove native task execution support.
 
 
 The following long-running calls require MCP task-augmented execution and
@@ -174,6 +174,28 @@ polling; once a task succeeds, use task-augmented execution with
 `persist_output=true` so completed-media download and persistence cannot exhaust
 the client deadline. List, presign, artifact-read, and cancel/delete tools
 remain foreground operations.
+
+Clients that reject task augmentation, including affected Codex or Cursor
+transports, must use the ordinary compatibility tools. This still runs the
+selected tool in the same background worker:
+
+1. Call `ark_job_capabilities` and select a listed target.
+2. Call `ark_job_submit` with `{"input": {"tool_name": name,
+   "arguments": original_arguments}}`; `original_arguments` is normally
+   `{"input": {...}}` for the selected target.
+3. Retain the returned Ark `job_id` and poll `ark_job_get` no faster than
+   `poll_after_ms`.
+4. At terminal status, read the original tool result from `result`; its
+   `structured_content` contains any Seedance, Seed 3D, or VOD provider task ID.
+5. Call `ark_job_cancel` only when cooperative local cancellation is intended.
+
+Never confuse the Ark job ID with a provider task ID, and never resubmit merely
+because a submit response was lost. Retry a direct required-tool call through
+`ark_job_submit` only after the explicit unsupported-task-capability rejection,
+which occurs before provider execution. Do not retry after a timeout,
+disconnect, or ambiguous provider error. `ark_job_capabilities` is filtered by
+configured providers and the caller's scopes. Unknown or unauthorized targets
+must be treated as unavailable.
 
 MCP task get/update/cancel calls enforce the same configured tenant and principal
 ownership as provider tasks. Required-task execution is claimed once in the

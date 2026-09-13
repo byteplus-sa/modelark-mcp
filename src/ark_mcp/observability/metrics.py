@@ -6,12 +6,16 @@ import asyncio
 import inspect
 from functools import wraps
 from time import perf_counter
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.utilities.tasks import TASKS_EXTENSION_ID
 from fastmcp_tasks.context import get_task_context
 from fastmcp_tasks.models import CreateTaskResult
+from mcp_types.version import MODERN_PROTOCOL_VERSIONS
 from prometheus_client import Counter, Histogram
+
+from ark_mcp.background_jobs import background_tool_spec
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -33,6 +37,11 @@ TOOL_ADMISSION_DURATION = Histogram(
     "ark_mcp_tool_admission_duration_seconds",
     "MCP background task admission duration, excluding worker execution.",
     ("tool",),
+)
+BACKGROUND_JOB_SUBMISSIONS = Counter(
+    "ark_mcp_background_job_submissions_total",
+    "Background job submissions by allowlisted target, outcome, and entry path.",
+    ("target", "status", "path"),
 )
 PROVIDER_REQUESTS = Counter(
     "ark_mcp_provider_requests_total",
@@ -59,6 +68,44 @@ RETRY_ATTEMPTS = Counter(
     "Safe provider retry attempts.",
     ("provider", "operation"),
 )
+
+
+def record_background_job_submission(
+    *,
+    target: str,
+    status: Literal["accepted", "rejected"],
+    path: Literal["native", "compatibility"],
+) -> None:
+    """Record one bounded-cardinality background job admission outcome."""
+    if background_tool_spec(target) is None:
+        return
+    BACKGROUND_JOB_SUBMISSIONS.labels(target=target, status=status, path=path).inc()
+
+
+def _is_native_background_submission(
+    context: MiddlewareContext[mt.CallToolRequestParams],
+) -> bool:
+    spec = background_tool_spec(context.message.name)
+    if spec is None:
+        return False
+    if spec.mode == "required":
+        return True
+    fastmcp_context = context.fastmcp_context
+    if fastmcp_context is None or fastmcp_context.request_context is None:
+        return False
+    return (
+        fastmcp_context.request_context.protocol_version in MODERN_PROTOCOL_VERSIONS
+        and fastmcp_context.client_extension_settings(TASKS_EXTENSION_ID) is not None
+    )
+
+
+def _record_native_submission_rejection(target: str, native_submission: bool) -> None:
+    if native_submission:
+        record_background_job_submission(
+            target=target,
+            status="rejected",
+            path="native",
+        )
 
 
 def instrument_tool_execution[**Parameters, ReturnValue](
@@ -101,22 +148,31 @@ class MetricsMiddleware(Middleware):
         tool_name = context.message.name
         started = perf_counter()
         accepted = False
+        native_submission = _is_native_background_submission(context)
         try:
             result = cast("ToolResult | CreateTaskResult", await call_next(context))
         except asyncio.CancelledError:
             TOOL_REQUESTS.labels(tool=tool_name, status="cancelled").inc()
+            _record_native_submission_rejection(tool_name, native_submission)
             raise
         except Exception:
             TOOL_REQUESTS.labels(tool=tool_name, status="exception").inc()
+            _record_native_submission_rejection(tool_name, native_submission)
             raise
         else:
             if isinstance(result, CreateTaskResult):
                 accepted = True
                 status = "accepted"
+                record_background_job_submission(
+                    target=tool_name,
+                    status="accepted",
+                    path="native",
+                )
             else:
                 status = "error" if result.is_error else "success"
+                _record_native_submission_rejection(tool_name, native_submission)
             TOOL_REQUESTS.labels(tool=tool_name, status=status).inc()
             return cast("ToolResult", result)
         finally:
-            duration = TOOL_ADMISSION_DURATION if accepted else TOOL_DURATION
+            duration = TOOL_ADMISSION_DURATION if accepted or native_submission else TOOL_DURATION
             duration.labels(tool=tool_name).observe(perf_counter() - started)

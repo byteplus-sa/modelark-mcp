@@ -1,8 +1,9 @@
 """FastMCP server factory and module-level deployment entrypoint.
 
-Implements ``plans/PLAN_CODEBASE_GAP_REMEDIATION.md``. Runtime resources are
-created once by the FastMCP lifespan; importing this module only assembles the
-declarative server surface.
+Implements ``plans/PLAN_CODEBASE_GAP_REMEDIATION.md`` and
+``plans/PLAN_MCP_TASK_COMPATIBILITY.md``. Runtime resources are created once by
+the FastMCP lifespan; importing this module only assembles the declarative
+server surface.
 """
 
 from __future__ import annotations
@@ -29,9 +30,13 @@ from starlette.responses import JSONResponse, Response  # noqa: E402
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from fastmcp.server.auth import AuthProvider
+    from fastmcp.server.auth import AuthCheck, AuthProvider
     from starlette.requests import Request
 
+from ark_mcp.background_jobs import (  # noqa: E402
+    background_tool_spec,
+    required_background_tool_names,
+)
 from ark_mcp.config.env import Settings, get_settings  # noqa: E402
 from ark_mcp.observability.logger import info as log_info  # noqa: E402
 from ark_mcp.observability.logger import set_level  # noqa: E402
@@ -57,50 +62,27 @@ from ark_mcp.security.http_middleware import (  # noqa: E402
 )
 from ark_mcp.security.tasks import TenantTasksExtension, guard_task_execution  # noqa: E402
 
-_REQUIRED_BACKGROUND_TASK_NAMES = frozenset(
-    {
-        "media_upload",
-        "seed_audio_generate",
-        "seed_audio_generate_variations",
-        "speech_to_text",
-        "seed_understand",
-        "seedream_generate_image",
-        "seedream_edit_image",
-        "seedream_generate_image_variations",
-        "seedance_create_task",
-        "seedance_create_task_variations",
-        "seedance_2_5_create_task",
-        "seedance_2_5_create_task_variations",
-        "hyper3d_create_task",
-        "hitem3d_create_task",
-        "vod_enhance_video",
-        "vod_transcode_video",
-        "vod_separate_audio",
-        "vod_add_subtitles",
-        "vod_remove_subtitles",
-    }
-)
-_OPTIONAL_BACKGROUND_TASK_NAMES = frozenset(
-    {
-        "seedance_get_task",
-        "hyper3d_get_task",
-        "hitem3d_get_task",
-        "vod_get_enhancement_task",
-        "vod_get_transcode_task",
-        "vod_get_audio_separation",
-        "vod_get_subtitle_addition_task",
-        "vod_get_subtitle_removal_task",
-    }
-)
+_REQUIRED_BACKGROUND_TASK_NAMES = required_background_tool_names()
 _BACKGROUND_TASK_POLL_INTERVAL = timedelta(seconds=2)
 
 
 def _task_config(tool_name: str) -> TaskConfig | None:
-    if tool_name in _REQUIRED_BACKGROUND_TASK_NAMES:
-        return TaskConfig(mode="required", poll_interval=_BACKGROUND_TASK_POLL_INTERVAL)
-    if tool_name in _OPTIONAL_BACKGROUND_TASK_NAMES:
-        return TaskConfig(mode="optional", poll_interval=_BACKGROUND_TASK_POLL_INTERVAL)
-    return None
+    spec = background_tool_spec(tool_name)
+    if spec is None:
+        return None
+    return TaskConfig(mode=spec.mode, poll_interval=_BACKGROUND_TASK_POLL_INTERVAL)
+
+
+def _tool_auth(
+    settings: Settings,
+    tool_name: str,
+    fallback_scope: str,
+) -> AuthCheck | None:
+    spec = background_tool_spec(tool_name)
+    return component_auth(
+        settings,
+        spec.required_scope if spec is not None else fallback_scope,
+    )
 
 
 def _task_handler[**P, R](
@@ -116,6 +98,22 @@ def _task_handler[**P, R](
 def register_tools(server: FastMCP, settings: Settings) -> None:
     """Register configured tools on one server instance."""
 
+    from ark_mcp.domain.background_jobs import (
+        BackgroundJobAccepted,
+        BackgroundJobCancelled,
+        BackgroundJobCapabilities,
+        BackgroundJobSnapshot,
+    )
+    from ark_mcp.tools.background_jobs import (
+        CANCEL_TOOL_ANNOTATIONS,
+        CAPABILITIES_TOOL_ANNOTATIONS,
+        GET_TOOL_ANNOTATIONS,
+        SUBMIT_TOOL_ANNOTATIONS,
+        ark_job_cancel,
+        ark_job_capabilities,
+        ark_job_get,
+        ark_job_submit,
+    )
     from ark_mcp.tools.seed_media_get_artifact import (
         TOOL_ANNOTATIONS as get_artifact_annotations,
     )
@@ -124,6 +122,30 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
         seed_media_get_artifact,
     )
 
+    server.tool(
+        name="ark_job_capabilities",
+        annotations={**CAPABILITIES_TOOL_ANNOTATIONS},
+        output_schema=BackgroundJobCapabilities.model_json_schema(),
+        auth=component_auth(settings),
+    )(ark_job_capabilities)
+    server.tool(
+        name="ark_job_submit",
+        annotations={**SUBMIT_TOOL_ANNOTATIONS},
+        output_schema=BackgroundJobAccepted.model_json_schema(),
+        auth=component_auth(settings),
+    )(ark_job_submit)
+    server.tool(
+        name="ark_job_get",
+        annotations={**GET_TOOL_ANNOTATIONS},
+        output_schema=BackgroundJobSnapshot.model_json_schema(),
+        auth=component_auth(settings),
+    )(ark_job_get)
+    server.tool(
+        name="ark_job_cancel",
+        annotations={**CANCEL_TOOL_ANNOTATIONS},
+        output_schema=BackgroundJobCancelled.model_json_schema(),
+        auth=component_auth(settings),
+    )(ark_job_cancel)
     server.tool(
         name="seed_media_get_artifact",
         annotations={**get_artifact_annotations},
@@ -152,14 +174,18 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             annotations={**audio_annotations},
             output_schema=SeedAudioGenerateOutput.model_json_schema(),
             task=_task_config("seed_audio_generate"),
-            auth=component_auth(settings, "seed:audio:generate"),
+            auth=_tool_auth(settings, "seed_audio_generate", "seed:audio:generate"),
         )(_task_handler("seed_audio_generate", seed_audio_generate))
         server.tool(
             name="seed_audio_generate_variations",
             annotations={**audio_var_annotations},
             output_schema=SeedAudioVariationsOutput.model_json_schema(),
             task=_task_config("seed_audio_generate_variations"),
-            auth=component_auth(settings, "seed:audio:generate"),
+            auth=_tool_auth(
+                settings,
+                "seed_audio_generate_variations",
+                "seed:audio:generate",
+            ),
         )(_task_handler("seed_audio_generate_variations", seed_audio_generate_variations))
 
     if settings.has_object_storage:
@@ -190,7 +216,7 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             annotations={**upload_annotations},
             output_schema=MediaUploadOutput.model_json_schema(),
             task=_task_config("media_upload"),
-            auth=component_auth(settings, "media:upload"),
+            auth=_tool_auth(settings, "media_upload", "media:upload"),
         )(_task_handler("media_upload", media_upload))
         server.tool(
             name="media_presign",
@@ -219,7 +245,7 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             annotations={**stt_annotations},
             output_schema=SpeechToTextOutput.model_json_schema(),
             task=_task_config("speech_to_text"),
-            auth=component_auth(settings, "seed:asr:transcribe"),
+            auth=_tool_auth(settings, "speech_to_text", "seed:asr:transcribe"),
         )(_task_handler("speech_to_text", speech_to_text))
 
     if settings.has_vod_mediakit:
@@ -299,70 +325,70 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             annotations={**vod_enhance_annotations},
             output_schema=VodEnhanceVideoOutput.model_json_schema(),
             task=_task_config("vod_enhance_video"),
-            auth=component_auth(settings, "vod:enhance"),
+            auth=_tool_auth(settings, "vod_enhance_video", "vod:enhance"),
         )(_task_handler("vod_enhance_video", vod_enhance_video))
         server.tool(
             name="vod_get_enhancement_task",
             annotations={**vod_get_enhancement_annotations},
             output_schema=VodEnhancementTaskOutput.model_json_schema(),
             task=_task_config("vod_get_enhancement_task"),
-            auth=component_auth(settings, "vod:read"),
+            auth=_tool_auth(settings, "vod_get_enhancement_task", "vod:read"),
         )(_task_handler("vod_get_enhancement_task", vod_get_enhancement_task))
         server.tool(
             name="vod_transcode_video",
             annotations={**vod_transcode_annotations},
             output_schema=VodTranscodeVideoOutput.model_json_schema(),
             task=_task_config("vod_transcode_video"),
-            auth=component_auth(settings, "vod:transcode"),
+            auth=_tool_auth(settings, "vod_transcode_video", "vod:transcode"),
         )(_task_handler("vod_transcode_video", vod_transcode_video))
         server.tool(
             name="vod_get_transcode_task",
             annotations={**vod_get_transcode_annotations},
             output_schema=VodTranscodeTaskOutput.model_json_schema(),
             task=_task_config("vod_get_transcode_task"),
-            auth=component_auth(settings, "vod:read"),
+            auth=_tool_auth(settings, "vod_get_transcode_task", "vod:read"),
         )(_task_handler("vod_get_transcode_task", vod_get_transcode_task))
         server.tool(
             name="vod_separate_audio",
             annotations={**vod_separate_audio_annotations},
             output_schema=VodSeparateAudioOutput.model_json_schema(),
             task=_task_config("vod_separate_audio"),
-            auth=component_auth(settings, "vod:extract"),
+            auth=_tool_auth(settings, "vod_separate_audio", "vod:extract"),
         )(_task_handler("vod_separate_audio", vod_separate_audio))
         server.tool(
             name="vod_get_audio_separation",
             annotations={**vod_get_audio_separation_annotations},
             output_schema=VodAudioSeparationTaskOutput.model_json_schema(),
             task=_task_config("vod_get_audio_separation"),
-            auth=component_auth(settings, "vod:read"),
+            auth=_tool_auth(settings, "vod_get_audio_separation", "vod:read"),
         )(_task_handler("vod_get_audio_separation", vod_get_audio_separation))
         server.tool(
             name="vod_add_subtitles",
             annotations={**vod_add_subtitles_annotations},
             output_schema=VodAddSubtitlesOutput.model_json_schema(),
             task=_task_config("vod_add_subtitles"),
-            auth=component_auth(settings, "vod:subtitle:add"),
+            auth=_tool_auth(settings, "vod_add_subtitles", "vod:subtitle:add"),
         )(_task_handler("vod_add_subtitles", vod_add_subtitles))
         server.tool(
             name="vod_get_subtitle_addition_task",
             annotations={**vod_get_subtitle_addition_annotations},
             output_schema=VodSubtitleAdditionTaskOutput.model_json_schema(),
             task=_task_config("vod_get_subtitle_addition_task"),
-            auth=component_auth(settings, "vod:read"),
+            auth=_tool_auth(settings, "vod_get_subtitle_addition_task", "vod:read"),
         )(_task_handler("vod_get_subtitle_addition_task", vod_get_subtitle_addition_task))
         server.tool(
             name="vod_remove_subtitles",
             annotations={**vod_remove_subtitles_annotations},
             output_schema=VodRemoveSubtitlesOutput.model_json_schema(),
             task=_task_config("vod_remove_subtitles"),
-            auth=component_auth(settings, "vod:subtitle:remove"),
+            auth=_tool_auth(settings, "vod_remove_subtitles", "vod:subtitle:remove"),
         )(_task_handler("vod_remove_subtitles", vod_remove_subtitles))
         server.tool(
             name="vod_get_subtitle_removal_task",
             annotations={**vod_get_subtitle_removal_annotations},
             output_schema=VodSubtitleRemovalTaskOutput.model_json_schema(),
             task=_task_config("vod_get_subtitle_removal_task"),
-            auth=component_auth(settings, "vod:read"),
+            auth=_tool_auth(settings, "vod_get_subtitle_removal_task", "vod:read"),
         )(_task_handler("vod_get_subtitle_removal_task", vod_get_subtitle_removal_task))
 
     if not settings.has_modelark:
@@ -522,7 +548,7 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
             annotations={**tool_annotations},
             output_schema=output_model.model_json_schema(),
             task=_task_config(name),
-            auth=component_auth(settings, scope),
+            auth=_tool_auth(settings, name, scope),
         )(_task_handler(name, handler))
 
     if settings.has_seed3d:
@@ -639,7 +665,7 @@ def register_tools(server: FastMCP, settings: Settings) -> None:
                 annotations={**seed3d_annotations},
                 output_schema=seed3d_output_model.model_json_schema(),
                 task=_task_config(seed3d_name),
-                auth=component_auth(settings, seed3d_scope),
+                auth=_tool_auth(settings, seed3d_name, seed3d_scope),
             )(_task_handler(seed3d_name, seed3d_handler))
 
 
@@ -697,7 +723,9 @@ def create_server(
             "BytePlus VOD AI MediaKit enhancement, video transcoding, subtitle burn-in, "
             "subtitle or text removal, and voice and background audio separation are "
             "available when the MediaKit API key is "
-            "configured. Generated media is persisted as durable MCP resources."
+            "configured. Generated media is persisted as durable MCP resources. Long-running "
+            "tools use native MCP tasks when the client supports them; otherwise use "
+            "ark_job_capabilities, ark_job_submit, ark_job_get, and ark_job_cancel."
         ),
         auth=auth_provider or build_auth_provider(resolved_settings),
         lifespan=build_lifespan(resolved_settings, runtime_factory, runtime_state),

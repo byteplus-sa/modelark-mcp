@@ -82,6 +82,55 @@ Use task-augmented execution when `persist_output=true` and a completed media
 file may need to be downloaded and copied into durable storage. Artifact reads,
 presigning, list operations, and cancel/delete operations remain foreground.
 
+## Background-job compatibility tools
+
+`ark_job_capabilities`, `ark_job_submit`, `ark_job_get`, and `ark_job_cancel`
+are ordinary MCP tools for clients that cannot send task-augmented tool calls.
+They do not make long operations synchronous: `ark_job_submit` validates the
+selected target, durably enqueues it on the same Docket worker used by native
+MCP tasks, and returns an Ark job ID. All four tools are always registered;
+capabilities include only provider tools enabled by configuration and permitted
+by the caller's JWT scopes.
+
+### ark_job_capabilities
+
+Takes no input. Returns a list of `targets`; each target contains `tool_name`,
+`task_mode`, `required_scope`, `description`, and the original tool's
+`input_schema`. This operation is read-only and idempotent.
+
+### ark_job_submit
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `tool_name` | string | Yes | A target returned by `ark_job_capabilities` |
+| `arguments` | object | Yes | Exact arguments object accepted by the original tool, normally `{"input": {...}}` |
+
+Returns `job_id`, `target_tool`, `status="working"`, `created_at`, `ttl_ms`, and
+`poll_after_ms`. Submission is non-idempotent. If the response is lost, do not
+blindly resubmit because the worker or provider may already have accepted the
+operation.
+
+### ark_job_get
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | string | Yes | Ark job ID returned by `ark_job_submit` |
+
+Returns job status and timestamps. A terminal response includes the original
+MCP tool result under `result`, preserving its `content`, `structured_content`,
+`is_error`, and `meta` fields. The Ark job ID is distinct from a provider task
+ID contained inside the original result.
+
+### ark_job_cancel
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | string | Yes | Ark job ID owned by the current principal |
+
+Returns `status="cancelled"` after cooperative local cancellation. It does not
+guarantee that provider-side work already accepted upstream was cancelled.
+Unknown and cross-principal IDs use the same unavailable response boundary.
+
 ## seed_media_get_artifact
 
 Retrieve persisted media inline by artifact ID.

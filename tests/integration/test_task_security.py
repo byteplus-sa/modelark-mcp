@@ -29,14 +29,19 @@ class TenantVerifier(TokenVerifier):
         return AccessToken(
             token=token,
             client_id="shared-client",
-            scopes=["vod:enhance"],
+            scopes=[] if token == "no-scope" else ["vod:enhance"],
             claims=claims,
             subject="alice" if self.principal_source == "subject" else None,
         )
 
 
 async def request_task(
-    client: httpx.AsyncClient, token: str, method: str, params: dict[str, Any]
+    client: httpx.AsyncClient,
+    token: str,
+    method: str,
+    params: dict[str, Any],
+    *,
+    task_capable: bool = True,
 ) -> dict[str, Any]:
     name = params.get("name", params.get("taskId", ""))
     response = await client.post(
@@ -56,9 +61,11 @@ async def request_task(
                 **params,
                 "_meta": {
                     "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-                    "io.modelcontextprotocol/clientCapabilities": {
-                        "extensions": {"io.modelcontextprotocol/tasks": {}}
-                    },
+                    "io.modelcontextprotocol/clientCapabilities": (
+                        {"extensions": {"io.modelcontextprotocol/tasks": {}}}
+                        if task_capable
+                        else {}
+                    ),
                 },
             },
         },
@@ -94,6 +101,39 @@ async def submit(client: httpx.AsyncClient, token: str = "tenant-a") -> dict[str
             },
         },
     )
+
+
+async def compatibility_call(
+    client: httpx.AsyncClient,
+    token: str,
+    name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    return await request_task(
+        client,
+        token,
+        "tools/call",
+        {"name": name, "arguments": arguments},
+        task_capable=False,
+    )
+
+
+async def compatibility_terminal(
+    client: httpx.AsyncClient,
+    token: str,
+    job_id: str,
+) -> dict[str, Any]:
+    async with asyncio.timeout(5):
+        while True:
+            result = await compatibility_call(
+                client,
+                token,
+                "ark_job_get",
+                {"input": {"job_id": job_id}},
+            )
+            if result.get("result", {}).get("structuredContent", {}).get("status") != "working":
+                return result
+            await asyncio.sleep(0.01)
 
 
 async def terminal(client: httpx.AsyncClient, task_id: str) -> dict[str, Any]:
@@ -206,3 +246,110 @@ async def test_owner_can_cancel_running_task(
             assert (await terminal(client, task_id))["result"]["status"] == "cancelled"
         finally:
             release.set()
+
+
+async def test_compatibility_jobs_enforce_scope_and_tenant_ownership(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = AsyncMock(
+        return_value=EnhancementSubmission(
+            status="succeeded", output_url="https://output.example.com/private.mp4"
+        )
+    )
+    monkeypatch.setattr(VodMediaKitEnhancementService, "enhance", provider)
+    monkeypatch.setattr(VodMediaKitEnhancementService, "close", AsyncMock())
+
+    async with task_client(tmp_path) as client:
+        no_scope_capabilities = await compatibility_call(
+            client,
+            "no-scope",
+            "ark_job_capabilities",
+            {},
+        )
+        assert no_scope_capabilities["result"]["structuredContent"]["targets"] == []
+
+        authorized_capabilities = await compatibility_call(
+            client,
+            "tenant-a",
+            "ark_job_capabilities",
+            {},
+        )
+        authorized_targets = {
+            target["tool_name"]
+            for target in authorized_capabilities["result"]["structuredContent"]["targets"]
+        }
+        assert "vod_enhance_video" in authorized_targets
+        assert "vod_get_enhancement_task" not in authorized_targets
+
+        missing_tenant = await compatibility_call(
+            client,
+            "missing-tenant",
+            "ark_job_submit",
+            {
+                "input": {
+                    "tool_name": "vod_enhance_video",
+                    "arguments": {
+                        "input": {
+                            "video_url": "https://example.com/input.mp4",
+                            "persist": False,
+                        }
+                    },
+                }
+            },
+        )
+        assert "error" in missing_tenant or missing_tenant["result"]["isError"] is True
+
+        denied_scope = await compatibility_call(
+            client,
+            "no-scope",
+            "ark_job_submit",
+            {
+                "input": {
+                    "tool_name": "vod_enhance_video",
+                    "arguments": {
+                        "input": {
+                            "video_url": "https://example.com/input.mp4",
+                            "persist": False,
+                        }
+                    },
+                }
+            },
+        )
+        assert denied_scope["result"]["isError"] is True
+
+        submitted = await compatibility_call(
+            client,
+            "tenant-a",
+            "ark_job_submit",
+            {
+                "input": {
+                    "tool_name": "vod_enhance_video",
+                    "arguments": {
+                        "input": {
+                            "video_url": "https://example.com/input.mp4",
+                            "persist": False,
+                        }
+                    },
+                }
+            },
+        )
+        job_id = submitted["result"]["structuredContent"]["job_id"]
+
+        for operation in ("ark_job_get", "ark_job_cancel"):
+            other_tenant = await compatibility_call(
+                client,
+                "tenant-b",
+                operation,
+                {"input": {"job_id": job_id}},
+            )
+            assert other_tenant["result"]["isError"] is True
+            assert "private.mp4" not in str(other_tenant)
+
+        completed = await compatibility_terminal(client, "tenant-a", job_id)
+
+    assert completed["result"]["structuredContent"]["status"] == "completed"
+    tool_result = completed["result"]["structuredContent"]["result"]
+    assert tool_result["is_error"] is False
+    assert tool_result["structured_content"]["source_url"].endswith("private.mp4")
+    provider.assert_awaited_once()

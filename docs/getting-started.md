@@ -87,12 +87,13 @@ syntactically valid without making any billable provider calls.
 
 ## Using with MCP Clients
 
-**Use a client supporting MCP `2026-07-28` and the FastMCP tasks extension.**
-Generation tools require task-augmented calls, and `persist_output=true`
-retrieval must also run as a background task. Discovery alone is insufficient.
-The locked FastMCP Python client 4.0.3 is tested; the desktop and Inspector
-configurations below are connection templates with unverified task execution.
-See [Required Client Support and the Python workflow](integration-guide.md#required-client-support)
+Long operations must run as background tasks. A client supporting MCP
+`2026-07-28` task augmentation can call the original tools and poll
+`tasks/get`. A client without that extension can call the ordinary
+`ark_job_submit` and `ark_job_get` tools, which use the same worker. The locked
+FastMCP 4.0.x runtime is tested across both paths; desktop and Inspector
+configurations below are connection templates because client behavior varies by
+release. See [Background Task Compatibility](integration-guide.md#background-task-compatibility)
 before submitting generation.
 
 ### Claude Desktop

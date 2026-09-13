@@ -108,6 +108,13 @@ interval. FastMCP's Docket worker runs the existing tool handler after returning
 the MCP task ID, while the handler retains the normal provider timeout, budget,
 concurrency, error, and usage accounting paths.
 
+Clients without task augmentation submit the same registered handlers through
+the ordinary `ark_job_submit` tool and poll `ark_job_get`. The compatibility
+adapter is intentionally thin: it resolves an allowlisted task-enabled tool,
+enforces the target's scope and ownership, and delegates creation, status, and
+cancellation to the pinned FastMCP task backend. It does not introduce a second
+queue or execute provider work inside the foreground request.
+
 Seedance, Seed 3D, and MediaKit get calls use optional task support: foreground
 execution remains available for short processing-status checks, while task
 augmentation protects the completed-output download and persistence path. List,
@@ -119,17 +126,26 @@ sequenceDiagram
     participant S as FastMCP server
     participant W as Docket worker
     participant A as BytePlus API or object storage
-    C->>S: tools/call + task metadata
-    S-->>C: MCP task ID (working)
+    alt Client supports task augmentation
+        C->>S: original tools/call + task metadata
+        S-->>C: MCP task ID (working)
+    else Ordinary-tool client
+        C->>S: ark_job_submit(target, arguments)
+        S-->>C: Ark job ID (working)
+    end
     S->>W: enqueue long-running tool
     W->>A: generation, transcription, upload, submission, or persistence
     loop recommended every 2 seconds until terminal
-        C->>S: tasks/get
+        alt Native task path
+            C->>S: tasks/get
+        else Compatibility path
+            C->>S: ark_job_get(job ID)
+        end
         S-->>C: working status or terminal result
     end
     A-->>W: completion
     W->>S: store final tool result
-    Note over C,S: terminal tasks/get response contains the typed tool output
+    Note over C,S: terminal response preserves the typed tool output
     opt Provider submission result
         Note over S,C: typed output includes provider task ID
         C->>S: product get tool(provider task ID)

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from mcp_types import CallToolRequestParams
 
     from ark_mcp.config.env import Settings
+    from ark_mcp.security.auth_context import AuthContext
 
 
 class TenantTasksExtension(TasksExtension):
@@ -54,10 +55,7 @@ class TenantTasksExtension(TasksExtension):
         async def guarded(request: Any, params: Any) -> Any:
             async with Context(self.server) as context:
                 try:
-                    owner = get_principal(context)
-                    await get_runtime(context).ownership_store.require_owner(
-                        "mcp", params.task_id, owner
-                    )
+                    await require_mcp_task_owner(context, params.task_id)
                 except PermissionError:
                     raise MCPError(
                         code=-32602, message="Task is not available to this principal."
@@ -75,10 +73,25 @@ class TenantTasksExtension(TasksExtension):
         owner = get_principal(context)
         result = await super().intercept_tool_call(params, context, call_next)
         if isinstance(result, CreateTaskResult):
-            store = get_runtime(context).ownership_store
-            await store.claim("mcp", result.task_id, owner)
-            await store.require_owner("mcp", result.task_id, owner)
+            await claim_mcp_task_owner(context, result.task_id, owner)
         return result
+
+
+async def claim_mcp_task_owner(
+    context: Context,
+    task_id: str,
+    owner: AuthContext | None = None,
+) -> None:
+    """Atomically claim and verify an MCP task for the application principal."""
+    resolved_owner = owner or get_principal(context)
+    store = get_runtime(context).ownership_store
+    await store.claim("mcp", task_id, resolved_owner)
+    await store.require_owner("mcp", task_id, resolved_owner)
+
+
+async def require_mcp_task_owner(context: Context, task_id: str) -> None:
+    """Require the application principal that owns an MCP task."""
+    await get_runtime(context).ownership_store.require_owner("mcp", task_id, get_principal(context))
 
 
 def guard_task_execution[**P, R](handler: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
